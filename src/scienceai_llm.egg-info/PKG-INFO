@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: scienceai-llm
-Version: 0.1.1
+Version: 0.1.3
 Summary: An AI powered scientific literature search engine
 Author-email: Elias Weston-Farber <elias@eliastechlabs.com>
 Project-URL: url, https://github.com/elias-jhsph/scienceai
@@ -9,14 +9,14 @@ Classifier: License :: OSI Approved :: GNU General Public License v3 (GPLv3)
 Classifier: Operating System :: OS Independent
 Description-Content-Type: text/markdown
 License-File: LICENSE
-Requires-Dist: PyMuPDF
-Requires-Dist: openai
-Requires-Dist: tiktoken
-Requires-Dist: habanero
-Requires-Dist: flask
-Requires-Dist: flask-sock
-Requires-Dist: dictdatabase
-Requires-Dist: pandas
+Requires-Dist: PyMuPDF>=1.24.5
+Requires-Dist: openai>=1.34.0
+Requires-Dist: tiktoken>=0.7.0
+Requires-Dist: habanero>=1.2.6
+Requires-Dist: flask>=3.0.3
+Requires-Dist: flask-sock>=0.7.0
+Requires-Dist: dictdatabase>=2.5.0
+Requires-Dist: pandas>=2.2.2
 
 ScienceAI
 =========
