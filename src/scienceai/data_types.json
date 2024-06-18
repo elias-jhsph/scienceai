@@ -1,0 +1,331 @@
+{
+  "number": {
+    "spec_description": "A number is a single numerical value.",
+    "spec": {
+      "name": {
+        "description": "The name of this field.",
+        "type": "string"
+      },
+      "description": {
+        "description": "A description of this field.",
+        "type": "string"
+      },
+      "required": {
+        "description": "Is this field required?",
+        "type": "boolean"
+      }
+    },
+    "tool": {
+      "mode": "prefix",
+      "value": {
+        "description": "DESCRIPTION. The value of the NAME must be a number.",
+        "type": "number"
+      },
+      "source": {
+        "description": "The location and a quotation of where the NAME was found.",
+        "type": "string"
+      },
+      "unit": {
+          "description": "The unit of NAME.",
+          "type": "string"
+      }
+    }
+  },
+  "number_list": {
+    "spec_description": "A number_list is a list of numbers.",
+    "spec": {
+      "name": {
+        "description": "The name of this field.",
+        "type": "string"
+      },
+      "description": {
+        "description": "A description of this field.",
+        "type": "string"
+      },
+      "required": {
+        "description": "Is this field required?",
+        "type": "boolean"
+      }
+    },
+    "tool": {
+      "mode": "array",
+      "description": "DESCRIPTION",
+      "keys": {
+        "value": {
+          "description": "The value of the NAME_list must be a number.",
+          "type": "number"
+        },
+        "source": {
+          "description": "The location and a quotation(s) of where this NAME_list value was found.",
+          "type": "string"
+        },
+        "unit": {
+          "description": "The unit of this value in NAME_list.",
+          "type": "string"
+        }
+      }
+    }
+  },
+  "unit_number": {
+    "spec_description": "A unit_number is a single number with a prescribed unit. Only use this type if the value is likely to have a known unit, conversions are not easy so select a unit that is most likely to be used.",
+    "spec": {
+      "name": {
+        "description": "The name of this field.",
+        "type": "string"
+      },
+      "description": {
+        "description": "A description of this field.",
+        "type": "string"
+      },
+      "unit": {
+        "description": "The unit that this number will likely have.",
+        "type": "string"
+      },
+      "required": {
+        "description": "Is this field required?",
+        "type": "boolean"
+      }
+    },
+    "tool": {
+      "mode": "array",
+      "description": "DESCRIPTION",
+      "keys": {
+        "value": {
+          "description": "The value of the NAME with the following description: DESCRIPTION and the unit: UNIT.",
+          "type": "number"
+        },
+        "source": {
+          "description": "The location and a quotation(s) of where this NAME value was found.",
+          "type": "string"
+        }
+      }
+    }
+  },
+  "unit_number_list": {
+    "spec_description": "A unit_number_list is a list of numbers with a prescribed unit. Only use this type if the value is likely to have a known unit, conversions are not easy so select a unit that is most likely to be used.",
+    "spec": {
+      "name": {
+        "description": "The name of this field.",
+        "type": "string"
+      },
+      "description": {
+        "description": "A description of this field.",
+        "type": "string"
+      },
+      "unit": {
+          "description": "The unit that this number will likely have.",
+          "type": "string"
+      },
+      "required": {
+          "description": "Is this field required?",
+          "type": "boolean"
+      }
+    },
+    "tool": {
+      "mode": "array",
+      "description": "DESCRIPTION",
+      "keys": {
+        "value": {
+          "description": "The value of the NAME_list with the following description: DESCRIPTION and the unit: UNIT.",
+          "type": "number"
+        },
+        "source": {
+          "description": "The location and a quotation(s) of where the NAME_list value was found.",
+          "type": "string"
+        }
+      }
+    }
+  },
+  "fraction": {
+    "spec_description": "A fraction is a numerator and a denominator.",
+    "spec": {
+      "name": {
+        "description": "The name of this field.",
+        "type": "string"
+      },
+      "description": {
+        "description": "A description of this field.",
+        "type": "string"
+      },
+      "numerator": {
+        "description": "The numerator of the fraction.",
+        "type": "number"
+      },
+      "denominator": {
+        "description": "The denominator of the fraction.",
+        "type": "number"
+      },
+      "required": {
+        "description": "Is this field required?",
+        "type": "boolean"
+      }
+    },
+    "tool": {
+      "mode": "prefix",
+      "numerator": {
+        "description": "NUMERATOR. The numerator of the NAME with the following description: DESCRIPTION.",
+        "type": "number"
+      },
+      "numerator_source": {
+        "description": "The location and a quotation of where the NAME_numerator was found.",
+        "type": "string"
+      },
+      "numerator_unit": {
+        "description": "The unit of NAME_numerator.",
+        "type": "string"
+      },
+      "denominator": {
+          "description": "DENOMINATOR. The denominator of the NAME with the following description: DESCRIPTION.",
+          "type": "number"
+      },
+      "denominator_source": {
+          "description": "The location and a quotation of where the NAME_denominator was found.",
+          "type": "string"
+      },
+      "denominator_unit": {
+          "description": "The unit of NAME_denominator.",
+          "type": "string"
+      }
+    }
+  },
+  "categorical_value": {
+    "spec_description": "A categorical value is used to extract data that falls into predefined categories, such as types of diseases, genres of literature, or classifications of artifacts.",
+    "spec": {
+      "name": {"type": "string", "description": "The name of this field."},
+      "description": {"type": "string", "description": "A description of the category."},
+      "categories": {"type": "array", "description": "A list of possible categories."},
+      "required": {"type": "boolean", "description": "Is this field required?"}
+    },
+    "tool": {
+      "mode": "prefix",
+      "value": {"type": "string", "description": "The category chosen from the NAME - DESCRIPTION with categories: CATEGORIES."},
+      "source": {"type": "string", "description": "The location and a quotation of where the categorical data was found for NAME with description: DESCRIPTION."}
+    }
+  },
+  "lat_lon_pair": {
+    "spec_description": "A coordinate pair extracts geographical or spatial data points, such as locations on a map or positions in a spatial experiment.",
+    "spec": {
+      "name": {"type": "string", "description": "The name of this field."},
+      "description": {"type": "string", "description": "A description of what the coordinates represent."},
+      "required": {"type": "boolean", "description": "Is this field required?"}
+    },
+    "tool": {
+      "mode": "prefix",
+      "latitude": {"type": "number", "description": "Latitude part of the coordinate NAME with description: DESCRIPTION."},
+      "longitude": {"type": "number", "description": "Longitude part of the coordinate NAME with description: DESCRIPTION."},
+      "source": {"type": "string", "description": "The location and a quotation of where the coordinates NAME were found with description: DESCRIPTION."}
+    }
+  },
+  "lat_lon_pair_list": {
+    "spec_description": "A list of coordinate pairs extracts geographical or spatial data points, such as locations on a map or positions in a spatial experiment.",
+    "spec": {
+      "name": {"type": "string", "description": "The name of this field."},
+      "description": {"type": "string", "description": "A description of what the coordinates represent."},
+      "required": {"type": "boolean", "description": "Is this field required?"}
+    },
+    "tool": {
+      "mode": "array",
+      "description": "A list of coordinate pairs.",
+      "keys": {
+        "latitude": {
+          "type": "number",
+          "description": "Latitude part of the coordinate NAME with description: DESCRIPTION."
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude part of the coordinate NAME with description: DESCRIPTION."
+        },
+        "source": {
+          "type": "string",
+          "description": "The location and a quotation of where the coordinates NAME were found with description: DESCRIPTION."
+        }
+      }
+    }
+  },
+  "date": {
+    "spec_description": "A date is a specific point in time, such as a birthday, a historical event, or a deadline.",
+    "spec": {
+      "name": {"type": "string", "description": "The name of this field."},
+      "description": {"type": "string", "description": "A description of the date."},
+      "required": {"type": "boolean", "description": "Is this field required?"}
+    },
+    "tool": {
+      "mode": "prefix",
+      "year": {"type": "number", "description": "The year of the date NAME with description: DESCRIPTION."},
+      "month": {"type": "number", "description": "The month of the date NAME with description: DESCRIPTION."},
+      "day": {"type": "number", "description": "The day of the date NAME with description: DESCRIPTION."},
+      "source": {"type": "string", "description": "The location and a quotation of where the date NAME was found with description: DESCRIPTION."}
+    }
+  },
+  "date_list": {
+    "spec_description": "A list of dates is a collection of specific points in time, such as birthdays, historical events, or deadlines.",
+    "spec": {
+      "name": {"type": "string", "description": "The name of this field."},
+      "description": {"type": "string", "description": "A description of the dates."},
+      "required": {"type": "boolean", "description": "Is this field required?"}
+    },
+    "tool": {
+      "mode": "array",
+      "description": "A list of dates.",
+      "keys": {
+        "year": {
+          "type": "number",
+          "description": "The year of the date with description: DESCRIPTION."
+        },
+        "month": {
+          "type": "number",
+          "description": "The month of the date with description: DESCRIPTION."
+        },
+        "day": {
+          "type": "number",
+          "description": "The day of the date with description: DESCRIPTION."
+        },
+        "source": {
+          "type": "string",
+          "description": "The location and a quotation of where the date NAME was found with description: DESCRIPTION."
+        }
+      }
+    }
+  },
+  "text_block": {
+    "spec_description": "A block of text, typically a paragraph or a set of paragraphs, used to extract larger narrative sections.",
+    "spec": {
+      "name": {"type": "string", "description": "The name of this field."},
+      "description": {"type": "string", "description": "A description of the content to be extracted."},
+      "required": {"type": "boolean", "description": "Is this field required?"}
+    },
+    "tool": {
+      "mode": "prefix",
+      "value": {"type": "string", "description": "The extracted block of text with description: DESCRIPTION."},
+      "source": {"type": "string", "description": "The location and a quotation of where the text NAME_value was found with description: DESCRIPTION."}
+    }
+  },
+  "boolean_value": {
+    "spec_description": "A true or false value often used to answer yes/no questions or confirm the presence or absence of a feature.",
+    "spec": {
+      "name": {"type": "string", "description": "The name of this field."},
+      "description": {"type": "string", "description": "A description of this field."},
+      "required": {"type": "boolean", "description": "Is this field required?"}
+    },
+    "tool": {
+      "mode": "prefix",
+      "value": {"type": "boolean", "description": "True or False value representing NAME with description: DESCRIPTION."},
+      "source": {"type": "string", "description": "The source of the NAME_value information with description: DESCRIPTION."}
+    }
+  },
+  "range_value": {
+    "spec_description": "A range value specifies a minimum and maximum of a measurable quantity, useful for extracting data where a span is significant, such as temperature ranges, age groups, or measurement tolerances.",
+    "spec": {
+      "name": {"type": "string", "description": "The name of this field."},
+      "description": {"type": "string", "description": "A description of what the range represents."},
+      "unit": {"type": "string", "description": "The unit of measurement for the range values."},
+      "required": {"type": "boolean", "description": "Is this field required?"}
+    },
+    "tool": {
+      "mode": "prefix",
+      "min_value": {"type": "number", "description": "The minimum value of the range with description: DESCRIPTION."},
+      "max_value": {"type": "number", "description": "The maximum value of the range with description: DESCRIPTION."},
+      "source": {"type": "string", "description": "The location and a quotation of where the range was found with description: DESCRIPTION."}
+    }
+  }
+}

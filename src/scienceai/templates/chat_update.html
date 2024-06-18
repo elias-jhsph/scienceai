@@ -1,0 +1,5 @@
+<form id="chat-form" class="chat-form" hx-post="/send_message"  hx-swap="outerHTML">
+    <div class="typing-indicator" id="typing-indicator"><span></span><span></span><span></span></div>
+    <textarea rows="1" id="chat-input" name="text" class="chat-input"  placeholder="Talk to ScienceAI..." style="display: none;"/></textarea>
+    <button id="send-message" style="display: none;">Send</button>
+</form>

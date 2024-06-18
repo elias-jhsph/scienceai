@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" type="text/css" href="/static/apps.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
+    <title>ScienceAI</title>
+</head>
+<body>
+    <h1 style="display: flex;justify-content: center;">ScienceAI</h1>
+    {% if error %}
+        <div class="alert">
+            <span class="closebtn" onclick="window.location.href = '/menu';">&times;</span>
+            {{ error }}
+        </div>
+    {% endif %}
+    <div class="open-project-menu">
+        <h2>Open or Create Project</h2>
+        <form action="/menu" method="post">
+            <label for="project">Project Name:</label><br>
+            <input type="text" id="project" name="project" list="projects" required>
+            <datalist id="projects">
+                {% for project in projects %}
+                    <option value="{{ project }}"></option>
+                {% endfor %}
+            </datalist>
+            <br><br>
+            <button type="submit">Start</button>
+        </form>
+    </div>
+    <div class="open-project-menu">
+        <h2>Load Checkpoint</h2>
+        <form action="/load_checkpoint" method="post" enctype="multipart/form-data">
+            <label for="project">Project Name:</label><br>
+            <input type="text" name="project" required>
+            <br>
+            <label for="overwrite">Overwrite If Project Exists:</label>
+            <input type="checkbox" id="overwrite" name="overwrite" value="F">
+            <br><br>
+            <label for="checkpoint">Checkpoint:</label><br>
+            <input id="checkpoint" type="file" name="checkpoint" accept=".zip" required>
+            <br><br>
+            <button type="submit">Load</button>
+        </form>
+    </div>
+    <div class="open-project-menu">
+        <h2>Delete Project</h2>
+        <form action="/delete_project" method="post">
+            <label for="project">Project Name:</label><br>
+            <input type="text" name="project" list="projects" required>
+            <br><br>
+            <button type="submit">Delete</button>
+        </form>
+    </div>
+</body>
+</html>

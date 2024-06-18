@@ -1,0 +1,107 @@
+Metadata-Version: 2.1
+Name: scienceai
+Version: 0.1.1
+Summary: An AI powered scientific literature search engine
+Author-email: Elias Weston-Farber <elias@eliastechlabs.com>
+Project-URL: url, https://github.com/elias-jhsph/scienceai
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: GNU General Public License v3 (GPLv3)
+Classifier: Operating System :: OS Independent
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: PyMuPDF
+Requires-Dist: openai
+Requires-Dist: tiktoken
+Requires-Dist: habanero
+Requires-Dist: flask
+Requires-Dist: flask-sock
+Requires-Dist: dictdatabase
+Requires-Dist: pandas
+
+# ScienceAI
+
+ScienceAI is a Python package designed to act as an AI-powered scientific literature search engine. It leverages the power of large language models (LLMs) to process and analyze research papers, enabling users to ask complex questions and receive insightful answers supported by evidence from the literature.
+
+## Main Features
+
+- **Automated Paper Processing:** ScienceAI can automatically extract text, figures, tables, and metadata from research papers (PDFs).
+- **AI-Driven Analysis:** The package utilizes LLMs to summarize papers, interpret figures and tables, and extract relevant data points based on user-defined schemas.
+- **Analyst Agents:** ScienceAI employs a unique concept of "Analyst Agents." These are AI personas that can be assigned specific research goals. They work autonomously, generating data extraction requests and providing answers to your questions with supporting evidence from the analyzed papers.
+- **Interactive Discussion:** Engage in a conversational interface with ScienceAI, asking questions and receiving responses that delve into the details of the research corpus.
+- **Data Management:** A robust database system stores all processed information, enabling efficient data retrieval and management.
+- **Visualization and Export:** Explore the analysis results in an interactive, tree-like structure. Download extracted data, analysis summaries, and individual papers for further investigation.
+
+## Installation
+
+ScienceAI requires Python 3.11 or higher. To install the package, you can use pip:
+
+```bash
+pip install science-ai
+```
+
+## Usage
+
+ScienceAI is designed to be used as a command-line application. After installation, navigate to the directory containing your PDF research papers and run:
+
+```bash
+scienceai "Project Name" "/Path/To/Storage/Folder"
+```
+
+This will start the ScienceAI application. The package will:
+1. Create a database to store all the data for this project.
+2. Process all PDF papers in the current directory. This may take some time depending on the number of papers.
+3. Once processing is complete, the AI will greet you and you will be able to ask questions about the papers.
+
+## Detailed Documentation
+
+### Database Management
+
+The `database_manager` module is the backbone of ScienceAI's data handling. It's responsible for:
+
+- **Ingesting Papers:** Adding research papers (PDFs) to the database.
+- **Processing Papers:** Extracting text, figures, tables, metadata, and generating summaries.
+- **Storing Data:** Persisting processed information in a structured format.
+- **Retrieving Data:** Providing access to papers, data extractions, and analysis results.
+- **Managing Analyst Agents:** Creating, storing, and retrieving Analyst Agent data.
+
+### Principal Investigator (PI)
+
+The `principle_investigator` module represents the main AI persona you interact with. The PI:
+
+- **Delegates Research:** Creates and manages Analyst Agents to address specific research questions.
+- **Interacts with User:** Conducts the conversation with the user, understanding their goals and relaying information from the Analyst Agents.
+- **Oversees Analysis:** Monitors the progress of Analyst Agents and ensures the research process is effective.
+
+### Analyst Agents
+
+The `analyst` module defines Analyst Agents, the AI workforce that conducts in-depth analysis. Each Analyst:
+
+- **Has a Goal:** Is assigned a specific research question or objective.
+- **Requests Data:** Directs the creation of data extraction schemas to gather relevant information from the papers.
+- **Analyzes Data:** Processes the extracted data to form answers to their assigned goal.
+- **Provides Evidence:** Presents the answer to their goal with supporting evidence from the research papers.
+
+### Data Extraction
+
+The `data_extractor` module handles the process of extracting structured data from papers based on user-defined schemas:
+
+- **Data Types:** Offers various data types (number, date, text_block, etc.) for flexible data extraction.
+- **Schema Generation:** Assists in generating a schema that outlines the data to be extracted.
+- **Data Extraction:** Uses LLMs to extract the specified data from research papers.
+
+### Language Model Interaction
+
+The `llm` module manages interactions with the OpenAI API:
+
+- **API Calls:** Handles requests to the OpenAI API for tasks such as text generation and function calling.
+- **Token Management:** Tracks token usage to stay within API limits.
+- **Error Handling:** Provides error handling for API requests.
+
+## Contributing
+
+We welcome contributions to ScienceAI! Here's how you can get involved:
+
+- **Report Bugs:** If you find any issues or bugs, please open an issue on our GitHub repository.
+- **Feature Requests:** Have an idea for a new feature? Submit a feature request on GitHub.
+- **Pull Requests:** Want to contribute code? Fork the repository, make your changes, and submit a pull request.
+

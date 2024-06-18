@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" type="text/css" href="/static/apps.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
+    <title>ScienceAI</title>
+</head>
+<body>
+    <h1 style="display: flex;justify-content: center;">ScienceAI</h1>
+    <div class="open-project-menu">
+        <form action="/create" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="project" value="{{ project }}">
+            <p>
+                You are about to start a new project. Please upload the PDFs you would like to analyze.
+            </p>
+            <p>
+                You can either upload individual PDFs and or a zip folder of PDFs.
+            </p>
+            <label for="files">Upload individual PDFs to new project '{{ project }}':</label><br>
+            <input type="file" id="files" name="files" accept=".pdf" multiple><br><br>
+            <label for="zips">Upload zip folder(s) of PDFs to new project '{{ project }}':</label><br>
+            <input type="file" id="zips" name="zips" accept=".zip" multiple><br><br>
+            <button type="submit">Create Project</button>
+        </form>
+    </div>
+</body>
+</html>

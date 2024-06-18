@@ -1,0 +1,339 @@
+{
+  "number": {
+    "description": "Data Type: number\nDescription: A number is a single numerical value.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of this field.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "description": "A number is a single numerical value.",
+        "name": "ParticleCount",
+        "required": true,
+        "type": "number"
+      },
+      {
+        "name": "Gravitational Constant Precision",
+        "description": "A precise measurement of the gravitational constant in a new study.",
+        "required": true,
+        "type": "number"
+      },
+      {
+        "name": "ParticleCount",
+        "description": "The total number of detected particles in a given volume of air, measured in a cleanroom environment during a controlled experiment.",
+        "required": true,
+        "type": "number"
+      }
+    ]
+  },
+  "number_list": {
+    "description": "Data Type: number_list\nDescription: A number_list is a list of numbers.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of this field.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "description": "A number_list is a list of numbers representing the varying temperature readings (in Celsius) from a week-long environmental study on a remote island.",
+        "name": "Temperature Readings",
+        "required": true,
+        "type": "number_list"
+      },
+      {
+        "name": "SeismicWaveFrequencies",
+        "description": "List of frequencies, in Hertz, detected by seismographs during an earthquake event.",
+        "required": true,
+        "type": "number_list"
+      },
+      {
+        "name": "Sample Sizes in Clinical Trials",
+        "description": "A list of sample sizes for each arm of a multi-arm clinical trial studying the effects of three new treatments compared to a placebo.",
+        "required": true,
+        "type": "number_list"
+      }
+    ]
+  },
+  "unit_number": {
+    "description": "Data Type: unit_number\nDescription: A unit_number is a single number with a prescribed unit. Only use this type if the value is likely to have a known unit, conversions are not easy so select a unit that is most likely to be used.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of this field.\n  - unit (string): The unit that this number will likely have.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "light_intensity",
+        "description": "The intensity of light at a particular location measured in lumens.",
+        "unit": "lumens",
+        "required": true,
+        "type": "unit_number"
+      },
+      {
+        "name": "stellar_luminosity",
+        "description": "The total amount of energy emitted by a star per unit time",
+        "unit": "solar luminosities",
+        "required": true,
+        "type": "unit_number"
+      },
+      {
+        "name": "atmospheric_pressure",
+        "description": "The pressure of the atmosphere at a specific location measured in hectopascals.",
+        "unit": "hPa",
+        "required": true,
+        "type": "unit_number"
+      }
+    ]
+  },
+  "unit_number_list": {
+    "description": "Data Type: unit_number_list\nDescription: A unit_number_list is a list of numbers with a prescribed unit. Only use this type if the value is likely to have a known unit, conversions are not easy so select a unit that is most likely to be used.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of this field.\n  - unit (string): The unit that this number will likely have.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "description": "List of heights of newly discovered species of trees in a tropical forest.",
+        "name": "Tropical Tree Heights",
+        "required": true,
+        "unit": "meters",
+        "type": "unit_number_list"
+      },
+      {
+        "name": "Average Molecular Weights",
+        "description": "List of average molecular weights of different proteins identified in a study.",
+        "unit": "Da",
+        "required": true,
+        "type": "unit_number_list"
+      },
+      {
+        "name": "Atmospheric CO2 Concentrations",
+        "description": "List of atmospheric CO2 concentrations over the last decade, measured annually.",
+        "unit": "ppm",
+        "required": true,
+        "type": "unit_number_list"
+      }
+    ]
+  },
+  "fraction": {
+    "description": "Data Type: fraction\nDescription: A fraction is a numerator and a denominator.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of this field.\n  - numerator (number): The numerator of the fraction.\n  - denominator (number): The denominator of the fraction.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "photosynthesis efficiency",
+        "description": "Represents the efficiency of photosynthesis as the ration of consumed CO2 to produced O2 in plants.",
+        "numerator": 6,
+        "denominator": 24,
+        "required": true,
+        "type": "fraction"
+      },
+      {
+        "name": "ConcentrationRatio",
+        "description": "The fraction representing the concentration of a substance in a solution.",
+        "numerator": 3,
+        "denominator": 100,
+        "required": true,
+        "type": "fraction"
+      },
+      {
+        "name": "GeneExpressionRatio",
+        "description": "Represents the ratio of gene expression under treatment compared to control conditions.",
+        "numerator": 3,
+        "denominator": 2,
+        "required": true,
+        "type": "fraction"
+      }
+    ]
+  },
+  "categorical_value": {
+    "description": "Data Type: categorical_value\nDescription: A categorical value is used to extract data that falls into predefined categories, such as types of diseases, genres of literature, or classifications of artifacts.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of the category.\n  - categories (array): A list of possible categories.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "categories": [
+          "Alkaline earth metal",
+          "Transition metal",
+          "Lanthanide",
+          "Actinide",
+          "Post-transition metal",
+          "Metalloid",
+          "Nonmetal",
+          "Halogen",
+          "Noble gas"
+        ],
+        "description": "The category of the element based on its group in the periodic table.",
+        "name": "Element Category",
+        "required": true,
+        "type": "categorical_value"
+      },
+      {
+        "categories": [
+          "Planetary",
+          "Stellar",
+          "Galactic",
+          "Intergalactic"
+        ],
+        "description": "Classification of astronomical objects based on their predominant location and nature.",
+        "name": "Astronomical Object Classification",
+        "required": true,
+        "type": "categorical_value"
+      },
+      {
+        "name": "Planet Classification",
+        "description": "The classification of a celestial body based on its characteristics, such as composition and orbit.",
+        "categories": [
+          "Terrestrial planet",
+          "Gas giant",
+          "Ice giant",
+          "Dwarf planet"
+        ],
+        "required": true,
+        "type": "categorical_value"
+      }
+    ]
+  },
+  "lat_lon_pair": {
+    "description": "Data Type: lat_lon_pair\nDescription: A coordinate pair extracts geographical or spatial data points, such as locations on a map or positions in a spatial experiment.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of what the coordinates represent.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "description": "The exact geographic location of the discovered underwater volcano near the Mariana Trench.",
+        "name": "Underwater Volcano Coordination",
+        "required": true,
+        "type": "lat_lon_pair"
+      },
+      {
+        "name": "Experimental Site Location",
+        "description": "The exact geographic location of the experimental site where a novel, sustainable crop cultivation practice is being tested.",
+        "required": true,
+        "type": "lat_lon_pair"
+      },
+      {
+        "name": "ResearchSiteLocation",
+        "description": "Coordinates marking the primary site of a conservation research study in the Amazon rainforest.",
+        "required": true,
+        "type": "lat_lon_pair"
+      }
+    ]
+  },
+  "lat_lon_pair_list": {
+    "description": "Data Type: lat_lon_pair_list\nDescription: A list of coordinate pairs extracts geographical or spatial data points, such as locations on a map or positions in a spatial experiment.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of what the coordinates represent.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "experimental_sites",
+        "description": "Coordinates for the locations of a series of experimental agricultural sites designed to test various climate adaptation strategies in crops.",
+        "required": true,
+        "type": "lat_lon_pair_list"
+      },
+      {
+        "name": "MigrationPath",
+        "description": "Coordinates representing the annual migration path of the Arctic tern, the longest known annual migration in the animal kingdom.",
+        "required": true,
+        "type": "lat_lon_pair_list"
+      },
+      {
+        "name": "MigrationRoutes",
+        "description": "The migratory paths of the monarch butterfly across North America, highlighting key stopover locations.",
+        "required": true,
+        "type": "lat_lon_pair_list"
+      }
+    ]
+  },
+  "date": {
+    "description": "Data Type: date\nDescription: A date is a specific point in time, such as a birthday, a historical event, or a deadline.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of the date.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "description": "Launch date of the first manned mission to Mars, marking a monumental step in space exploration and human history.",
+        "name": "MarsMissionLaunchDate",
+        "required": true,
+        "type": "date"
+      },
+      {
+        "name": "DiscoveryDate",
+        "description": "The date when the Higgs boson particle was first observed at CERN.",
+        "required": true,
+        "type": "date"
+      },
+      {
+        "name": "Discovery of Penicillin Date",
+        "description": "The date when Alexander Fleming discovered penicillin, marking a major advancement in medical science.",
+        "required": true,
+        "type": "date"
+      }
+    ]
+  },
+  "date_list": {
+    "description": "Data Type: date_list\nDescription: A list of dates is a collection of specific points in time, such as birthdays, historical events, or deadlines.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of the dates.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "description": "A list of significant milestones in the development of quantum computing, marking notable discoveries and the introduction of groundbreaking algorithms.",
+        "name": "Quantum Computing Milestones",
+        "required": true,
+        "type": "date_list"
+      },
+      {
+        "description": "Important dates in the discovery of DNA structure including the publication of Watson and Crick's paper and the award of the Nobel Prize.",
+        "name": "DNA_Discovery_Important_Dates",
+        "required": true,
+        "type": "date_list"
+      },
+      {
+        "name": "Discovery Milestones",
+        "description": "Key dates marking significant discoveries in the field of quantum computing",
+        "required": true,
+        "type": "date_list"
+      }
+    ]
+  },
+  "text_block": {
+    "description": "Data Type: text_block\nDescription: A block of text, typically a paragraph or a set of paragraphs, used to extract larger narrative sections.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of the content to be extracted.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "Research Findings",
+        "description": "A detailed description of the scientific findings, including key observations, results, and conclusions drawn from the research study.",
+        "required": true,
+        "type": "text_block"
+      },
+      {
+        "name": "Discovery Summary",
+        "description": "A detailed summary of the scientific discovery, including the hypothesis, research method, key findings, and conclusions. This text block should encapsulate the essence of the discovery in a narrative form, suitable for a lay audience while retaining scientific accuracy.",
+        "required": true,
+        "type": "text_block"
+      },
+      {
+        "name": "Study Summary",
+        "description": "A comprehensive summary of the research findings, methodologies, and implications. This may include key data points, the significance of the research, and future directions for study.",
+        "required": true,
+        "type": "text_block"
+      }
+    ]
+  },
+  "boolean_value": {
+    "description": "Data Type: boolean_value\nDescription: A true or false value often used to answer yes/no questions or confirm the presence or absence of a feature.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of this field.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "description": "Indicates if the research study was conducted in a controlled laboratory environment.",
+        "name": "IsLabEnvironment",
+        "required": true,
+        "type": "boolean_value"
+      },
+      {
+        "name": "IsGeneticallyModified",
+        "description": "Indicates if the organism has undergone genetic modifications.",
+        "required": true,
+        "type": "boolean_value"
+      },
+      {
+        "name": "hasAntiGravityMaterial",
+        "description": "Indicates whether the material under study exhibits anti-gravity properties under specific conditions.",
+        "required": true,
+        "type": "boolean_value"
+      }
+    ]
+  },
+  "range_value": {
+    "description": "Data Type: range_value\nDescription: A range value specifies a minimum and maximum of a measurable quantity, useful for extracting data where a span is significant, such as temperature ranges, age groups, or measurement tolerances.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of what the range represents.\n  - unit (string): The unit of measurement for the range values.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "description": "Temperature range at which the chemical reaction becomes most efficient",
+        "name": "Optimal Reaction Temperature",
+        "required": true,
+        "unit": "\u00b0C",
+        "type": "range_value"
+      },
+      {
+        "name": "Optimal Growth Temperature",
+        "description": "The temperature range within which a specific microorganism exhibits optimal growth.",
+        "unit": "\u00b0C",
+        "required": true,
+        "type": "range_value"
+      },
+      {
+        "name": "Optimal Growth Temperature",
+        "description": "The optimal temperature range for the growth of a newly discovered extremophile microorganism.",
+        "unit": "Celsius",
+        "required": true,
+        "type": "range_value"
+      }
+    ]
+  }
+}

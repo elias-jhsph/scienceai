@@ -1,0 +1,61 @@
+<div class="nested" hx-get="{{ basepath }}" hx-trigger="click from:#button-{{ basepath | sanitize_for_id }}" hx-swap="outerHTML" hx-disinherit="hx-trigger">
+<details open>
+    <summary>{{ basepath.split('/')[-1] }}</summary>
+    <div class="db-load-info">
+        <button class="load-button" id="button-{{ basepath | sanitize_for_id }}" onclick="event.stopPropagation()">
+            <span class=reload>&#x21bb;</span>&nbsp;Reload
+        </button>&nbsp;
+        <i><div><style scoped="scoped" onload="updateTimeForElement(this.parentElement);" ></style></div></i>
+    </div>
+    {% for key, value in data_dict.items() %}
+        {% if value is mapping %}
+            <div class="nested" hx-get="{{ basepath }}/{{ key }}" hx-trigger="click from:#button-{{ basepath | sanitize_for_id }}-{{ key  | sanitize_for_id }}" hx-swap="outerHTML" hx-disinherit="hx-trigger">
+                <details open>
+                    <summary>{{ key }}</summary>
+                    <div class="db-load-info">
+                        <button class="load-button" id="button-{{ basepath | sanitize_for_id }}-{{ key | sanitize_for_id }}" onclick="event.stopPropagation()"><span class=reload>&#x21bb;</span>&nbsp;Load</button>
+                    </div>
+                </details>
+            </div>
+        {% elif value is iterable and value is not string %}
+            <div class="nested" hx-get="{{ basepath }}/{{ key }}" hx-trigger="click from:#button-list-{{ basepath | sanitize_for_id }}-{{ key  | sanitize_for_id }}" hx-swap="outerHTML" hx-disinherit="hx-trigger">
+                <details open>
+                    <summary>{{ key }}</summary>
+                    <div class="db-load-info">
+                        <button class="load-button" id="button-list-{{ basepath | sanitize_for_id }}-{{ key | sanitize_for_id }}" onclick="event.stopPropagation()"><span class=reload>&#x21bb;</span>&nbsp;Load</button>
+                    </div>
+                </details>
+            </div>
+        {% elif key == 'json_path' %}
+            <div class="nested">
+                <details>
+                    <summary>JSON Data</summary>
+                    <div class="db-load-info">
+                        <button class="icon-button" onclick="viewJSON('/download/{{ value }}', 'json-viewer-{{ loop.index }}')"><i class="fa fa-eye"></i></button>
+                        <a href="{{ url_for('download', filepath=value) }}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>
+                    </div><i>(&#x21bb; each time you view it)</i>
+                </details>
+            </div>
+        {% elif key == 'csv_path' %}
+            <div class="nested">
+                <details>
+                    <summary>CSV Data</summary>
+                    <div class="db-load-info">
+                        <button class="icon-button" onclick="viewCSV('/download/{{ value }}', 'json-viewer-{{ loop.index }}')"><i class="fa fa-eye"></i></button>
+                        <a href="{{ url_for('download', filepath=value) }}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>
+                    </div><i>(&#x21bb; each time you view it)</i>
+                </details>
+            </div>
+        {% else %}
+            <div class="nested">
+                <details hx-disinherit="hx-trigger" onclick="event.stopPropagation()">
+                    <summary>{{ key }}</summary>
+                    <div class="{{ key.lower() }}">
+                        {{ value }}
+                    </div>
+                </details>
+            </div>
+        {% endif %}
+    {% endfor %}
+</details>
+</div>

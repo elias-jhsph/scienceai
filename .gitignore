@@ -1,0 +1,11 @@
+venv/*
+test_wd/*
+__pycache__/*
+__pycache__/
+.idea/*
+.DS_Store
+*/.DS_Store
+PAPERS
+scienceai-keys.json
+build/*
+build

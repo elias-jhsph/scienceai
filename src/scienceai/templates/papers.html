@@ -1,0 +1,279 @@
+<div class="grid" id="papers-grid">
+    {% for paper in papers %}
+    <div class="card" style="display: none;">
+        <p style="margin: 3px;"><b>Paper ID:</b> {{ paper.paper_id[:10] }}</p>
+        <!-- Display additional keys -->
+        {% for key, value in paper.items() %}
+            {% if key not in ['paper_id', 'pdf_path', 'json_path'] %}
+                {% if value is mapping %}
+                     <p style="margin: 3px;"><b>{{ key }}:</b> {{ (value | join(', ')) }}</p>
+                {% else %}
+                    <p style="margin: 3px;"><b>{{ key }}:</b> {{ value }}</p>
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+        <div class="icon-container-box">
+            {% if paper.pdf_path %}
+                <div class="icon-container-box-image">
+                    <div class="icon-container-pdf-image"></div>
+                    <div class="button-icon-menu">
+                        <button class="icon-button" onclick="viewPDF('/download/{{ paper.pdf_path }}')"><i class="fa fa-eye"></i></button>
+                        <a href="{{ url_for('download', filepath=paper.pdf_path) }}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>
+                    </div>
+                </div>
+            {% endif %}
+            {% if paper.json_path %}
+                <div class="icon-container-box-image">
+                    <div class="icon-container-json-image"></div>
+                    <div class="button-icon-menu">
+                        <button class="icon-button" onclick="viewJSON('/download/{{ paper.json_path }}', 'json-viewer-{{ loop.index }}')"><i class="fa fa-eye"></i></button>
+                        <a href="{{ url_for('download', filepath=paper.json_path) }}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>
+                        <div id="json-viewer-{{ loop.index }}" class="json-viewer" style="display:none;"></div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    <script>
+    async function viewCSV(url) {
+        // Create overlay div
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        overlay.style.zIndex = '999';
+        overlay.style.display = 'flex';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+
+        // Create container for the grid
+        const gridDiv = document.createElement('div');
+        gridDiv.style.height = '80%';
+        gridDiv.style.width = '90%';
+        gridDiv.classList.add('ag-theme-alpine');
+
+        // Append gridDiv to the overlay
+        overlay.appendChild(gridDiv);
+
+        // Create an exit button
+        const exitButton = document.createElement('button');
+        exitButton.textContent = 'X';
+        exitButton.style.position = 'absolute';
+        exitButton.style.top = '20px';
+        exitButton.style.right = '20px';
+        exitButton.style.zIndex = '1000';
+        overlay.appendChild(exitButton);
+
+        // Append overlay to body
+        document.body.appendChild(overlay);
+
+        // Fetch and parse CSV, then display in ag-Grid
+        const response = await fetch(url);
+        const csvText = await response.text();
+        Papa.parse(csvText, {
+            header: true,
+            complete: function(results) {
+                const columnDefs = Object.keys(results.data[0]).map(key => ({ headerName: key, field: key }));
+                const gridOptions = {
+                    columnDefs: columnDefs,
+                    rowData: results.data,
+                    defaultColDef: {
+                        resizable: true,
+                        sortable: true,
+                        filter: true
+                    }
+                };
+
+                // Create the grid
+                const gridApi = agGrid.createGrid(gridDiv, gridOptions);
+            }
+        });
+
+        // Event listener to remove the overlay
+        exitButton.addEventListener('click', () => {
+            document.body.removeChild(overlay);
+        });
+    }
+
+
+
+    async function viewPDF(url) {
+        // Create overlay div
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        overlay.style.zIndex = '999';
+        overlay.style.display = 'flex';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+
+        // Create iframe for the PDF
+        const iframe = document.createElement('iframe');
+        iframe.src = url;
+        iframe.style.width = '90%';
+        iframe.style.height = '90%';
+        iframe.style.border = 'none';
+
+        // Create an exit button
+        const exitButton = document.createElement('button');
+        exitButton.textContent = 'X';
+        exitButton.style.position = 'absolute';
+        exitButton.style.top = '20px';
+        exitButton.style.right = '20px';
+        exitButton.style.zIndex = '1000';
+
+        // Append iframe and exit button to the overlay
+        overlay.appendChild(iframe);
+        overlay.appendChild(exitButton);
+
+        // Append overlay to body
+        document.body.appendChild(overlay);
+
+        // Event listener to remove the overlay
+        exitButton.addEventListener('click', () => {
+            document.body.removeChild(overlay);
+        });
+    }
+
+    async function viewJSON(url) {
+        // Create overlay
+        const overlay = $('<div>').css({
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 999,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+        }).appendTo('body');
+
+        // Create container for JSON viewer
+        const viewer = $('<div>').css({
+            width: '90%',
+            height: '90%',
+            backgroundColor: '#fff',
+            overflow: 'auto'
+        }).appendTo(overlay);
+
+        // Fetch and display JSON
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            viewer.jsonViewer(data, {collapsed: true, rootCollapsable: false});
+        } catch (error) {
+            console.error("Error processing JSON data: ", error);
+            viewer.text("Error displaying JSON data.");
+        }
+
+        // Create refresh button
+        $('<button>').html('&#x21bb;').css({
+            position: 'absolute',
+            top: '1vh',  // Using viewport height units for vertical positioning
+            right: '5vw',  // Using viewport width units for right positioning
+            fontSize: '1.5vw', // Font size that adapts based on viewport width
+            padding: '0.5vw 1vw', // Padding that scales with the viewport width
+            zIndex: 1000
+        }).click(async function() {
+            viewer.empty();
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                viewer.jsonViewer(data, {collapsed: true, rootCollapsable: false});
+            } catch (error) {
+                console.error("Error processing JSON data: ", error);
+                viewer.text("Error displaying JSON data.");
+            }
+        }).appendTo(overlay);
+
+        // Create exit button
+        $('<button>').text('X').css({
+            position: 'absolute',
+            top: '1vh',  // Consistent vertical positioning with the refresh button
+            right: '1vw',  // Minimal right positioning to keep it on the edge
+            fontSize: '1.5vw', // Font size that adapts based on viewport width
+            padding: '0.5vw 1vw', // Padding that scales with the viewport width
+            zIndex: 1000
+        }).click(function() {
+            overlay.remove();
+        }).appendTo(overlay);
+    }
+
+
+
+    document.getElementById('searchInput').addEventListener('keyup', function(event) {
+        if (event.key === 'Enter') {
+            addSearchTag(this.value.trim());
+            this.value = ''; // Clear input after adding tag
+        }
+    });
+
+    document.getElementById('searchButton').addEventListener('click', function() {
+        const input = document.getElementById('searchInput');
+        addSearchTag(input.value.trim());
+        input.value = ''; // Clear input after adding tag
+    });
+
+    function addSearchTag(tagText) {
+        if (tagText === '') return;
+
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = tagText;
+        tag.onclick = function() {
+            this.parentNode.removeChild(this);
+            filterPapers();
+        };
+
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-times';
+        tag.appendChild(icon);
+
+        document.getElementById('tagsContainer').appendChild(tag);
+
+        filterPapers();
+    }
+
+    function filterPapers() {
+        const tags = document.querySelectorAll('#tagsContainer .tag');
+        const papers = document.querySelectorAll('.card');
+        const searchTexts = Array.from(tags).map(tag => tag.textContent.slice(0, -1).toLowerCase());
+
+        papers.forEach(paper => {
+            const text = paper.textContent.toLowerCase();
+            const match = searchTexts.every(searchText => text.includes(searchText));
+            paper.style.display = match ? '' : 'none';
+        });
+
+        if (searchTexts.length === 0) {
+            papers.forEach(paper => {
+                paper.style.display = '';
+            });
+        }
+    }
+
+    function handleSearch(event) {
+        if (event.key === "Enter") {
+            addSearchTag(event.target.value);
+            event.target.value = ''; // Clear the search box after adding the tag
+        }
+    }
+    filterPapers();
+
+    // update #papers-heading to be Papers with the super script of the reload icon then set a timeout to remove the super script after 1.5 seconds
+    document.getElementById('papers-heading').innerHTML = '&#x21bb; Papers &#x21bb;';
+    setTimeout(() => {
+        document.getElementById('papers-heading').innerHTML = 'Papers';
+    }, 500);
+    </script>
+</div>

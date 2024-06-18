@@ -1,0 +1,125 @@
+<div id="chat" class="panel">
+    <div id="chat-panel-messages" class="panel-messages">
+    {% for message in messages %}
+        {% if message.role == 'user' %}
+            <div class="chat-bubble-area-user">
+                <div class="chat-bubble-user">
+                    <span><pre>{{ message.content }}</pre></span>
+                </div>
+                    <div class="chat-bubble-timestamp"> Created: {{ message.time }} Status: {{ message.status }}</div>
+            </div>
+        {% else %}
+            <div class="chat-bubble-area-ai">
+                <div class="chat-bubble-ai">
+                    <span><pre>{{ message.content }}</pre></span>
+                </div>
+                    <div class="chat-bubble-timestamp"> Created: {{ message.time }} Status: {{ message.status }}</div>
+            </div>
+        {% endif %}
+    {% endfor %}
+    </div>
+    {% set last = messages|last %}
+    {% if last.status == 'Pending' %}
+        <script>
+            document.getElementById('typing-indicator').style.display = 'flex';
+            document.getElementById('chat-input').style.display = 'none';
+            document.getElementById('send-message').style.display = 'none';
+        </script>
+    {% else %}
+        <script>
+            document.getElementById('typing-indicator').style.display = 'none';
+            document.getElementById('chat-input').style.display = 'flex';
+            document.getElementById('send-message').style.display = 'flex';
+        </script>
+    {% endif %}
+    <script>
+        var messageInput = document.getElementById('chat-input');
+
+        messageInput.addEventListener('keydown', function(event) {
+            // Check if the Enter key was pressed without the Shift key
+            if (event.key === 'Enter') {
+                // Prevent the form from being submitted
+                event.preventDefault();
+                // Insert a newline at the current cursor position
+                var start = this.selectionStart;
+                var end = this.selectionEnd;
+
+                // Set textarea value to: text before caret + newline + text after caret
+                this.value = this.value.substring(0, start) + "\n" + this.value.substring(end);
+
+                // Move the caret to right after the inserted newline
+                this.selectionStart = this.selectionEnd = start + 1;
+
+                // expand the chat box by a line height
+                this.rows = this.rows + 1;
+
+                var chat = document.getElementById('chat-panel-messages');
+                var duration = 300;
+                var start = chat.scrollTop;
+                var end = chat.scrollHeight;
+                var change = end - start;
+                var start = change*0.95;
+                var end = chat.scrollHeight;
+                var change = end - start;
+                var increment = 5;
+                function easeInOut(currentTime, start, change, duration) {
+                    currentTime /= duration / 2;
+                    if (currentTime < 1) {
+                      return change / 2 * currentTime * currentTime + start;
+                    }
+                    currentTime -= 1;
+                    return -change / 2 * (currentTime * (currentTime - 2) - 1) + start;
+                    }
+                    function animate(elapsedTime) {
+                    elapsedTime += increment;
+                    var position = easeInOut(elapsedTime, start, change, duration);
+                    chat.scrollTop = position;
+                    if (elapsedTime < duration) {
+                      setTimeout(function() {
+                        animate(elapsedTime);
+                      }, increment)
+                    }
+                }
+                animate(0);
+
+            }
+        });
+
+    </script>
+    <script>
+        var chat = document.getElementById('chat-panel-messages');
+        var duration = 300;
+        var start = chat.scrollTop;
+        var end = chat.scrollHeight;
+        var change = end - start;
+        var start = change*0.95;
+        var end = chat.scrollHeight;
+        var change = end - start;
+        var increment = 5;
+        function easeInOut(currentTime, start, change, duration) {
+            currentTime /= duration / 2;
+            if (currentTime < 1) {
+              return change / 2 * currentTime * currentTime + start;
+            }
+            currentTime -= 1;
+            return -change / 2 * (currentTime * (currentTime - 2) - 1) + start;
+            }
+            function animate(elapsedTime) {
+            elapsedTime += increment;
+            var position = easeInOut(elapsedTime, start, change, duration);
+            chat.scrollTop = position;
+            if (elapsedTime < duration) {
+              setTimeout(function() {
+                animate(elapsedTime);
+              }, increment)
+            }
+        }
+        animate(0);
+
+        document.getElementById('chat-heading').innerHTML = '&#x21bb; Science Discussion &#x21bb;';
+        setTimeout(() => {
+            document.getElementById('chat-heading').innerHTML = 'Science Discussion';
+        }, 500);
+    </script>
+</div>
+

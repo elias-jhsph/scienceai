@@ -1,0 +1,70 @@
+name: Create Release on Version Change
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: macos-latest
+    outputs:
+      tag_name: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.11.4'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+          pip install toml
+          pip install .
+#      - name: Test package
+#        timeout-minutes: 7
+#        env:
+#          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+#        run: python -m unittest
+      - name: Build package
+        run: python -m build
+   
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Get new version from pyproject.toml
+        id: get_version
+        run: |
+          VERSION=$(python -c "import toml; print(toml.load('pyproject.toml')['project']['version'])")
+          echo "New version is $VERSION"
+          echo "::set-output name=version::$VERSION"
+
+      - name: Get latest release
+        id: get_latest_release
+        uses: actions/github-script@v2
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const response = await github.repos.getLatestRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            return response.data.tag_name
+
+      - name: Create Release
+        if: steps.get_version.outputs.version != steps.get_latest_release.outputs.result
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: ${{ steps.get_version.outputs.version }}
+          body: |
+            New release!
+          draft: false
+          prerelease: false
+
+
+        

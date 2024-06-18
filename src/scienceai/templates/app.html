@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScienceAI</title>
+    <link rel="stylesheet" type="text/css" href="/static/apps.css" />
+    <script src="/static/main.js"></script>
+    <script src="https://unpkg.com/htmx.org"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/ws.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="/static/json-viewer/jquery.json-viewer.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ag-grid/31.3.2/ag-grid-community.min.js" integrity="sha512-e+7R705ihsDLzL0wd0VcqCH6K008RSA55CFpcaGtcpHBFSu1SK/sdkNoI9ZjqcBBau8mvq4TT9r2PudMXydKJQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link href="/static/json-viewer/jquery.json-viewer.css" rel="stylesheet" type="text/css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
+</head>
+<body>
+<div id="container">
+    <div class="resize-section" id="left-section">
+        <div class="resize-section-internal" id="left-section-internal">
+            <h2 style="text-align: center;"  id="papers-heading">Papers</h2>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Filter...">
+                <button id="searchButton">Search</button>
+            </div>
+            <div id="tagsContainer" style="margin-top: 10px;"></div>
+            <div class="papers-container" hx-ext="ws" ws-connect="/papers" style="height: 100%;">
+                <div id="papers-grid" class="grid">
+                    Loading...
+                    <div id="refresh-message" style="display: none;"></div>
+                    <script>
+                        setTimeout(function() {
+                            if (document.getElementById('refresh-message') == undefined) {
+                                return;
+                            }
+                            location.reload();
+                        }, 5000);
+                    </script>
+                </div>
+            </div>
+        </div>
+        <div class="resize-title">Papers</div>
+        <div class="resize-handle"></div>
+    </div>
+    <div class="resize-section" id="middle-section">
+        <div class="resize-section-internal" id="middle-section-internal">
+            <h2 style="text-align: center;" xmlns="http://www.w3.org/1999/html" id="chat-heading">Science Discussion</h2>
+            <div hx-ext="ws" ws-connect="/discussion">
+                <div id="chat" class="panel">
+                    Loading...
+                    <div id="refresh-message-chat" style="display: none;"></div>
+                    <script>
+                        setTimeout(function() {
+                            if (document.getElementById('refresh-message-chat') == undefined) {
+                                return;
+                            }
+                            location.reload();
+                        }, 5000);
+                    </script>
+                </div>
+            </div>
+            <div class="chat-input-container">
+                <form id="chat-form" class="chat-form" hx-post="/send_message"  hx-swap="outerHTML">
+                    <div class="typing-indicator" id="typing-indicator"><span></span><span></span><span></span></div>
+                    <textarea rows="1" id="chat-input" name="text" class="chat-input"  placeholder="Talk to ScienceAI..." /></textarea>
+                    <button id="send-message">Send</button>
+                </form>
+            </div>
+        </div>
+        <div class="resize-title">Discussion</div>
+        <div class="resize-handle"></div>
+    </div>
+    <div class="resize-section" id="right-section">
+        <div class="resize-title">Analysis</div>
+        <div class="resize-section-internal" id="right-section-internal">
+            <div hx-get="/start-database" hx-trigger="load" hx-target="#right-section-internal">
+                Loading...
+                <div id="refresh-message-db" style="display: none;"></div>
+                <script>
+                    setTimeout(function() {
+                        if (document.getElementById('refresh-message-db') == undefined) {
+                            return;
+                        }
+                        location.reload();
+                    }, 5000);
+                </script>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="project-menu">
+    <button id="save-button" class="menu-toggle" hx-get="/save_project" hx-trigger="click" hx-swap="innerHTML" hx-target="#last-checkpoint-save">
+        <span>💾 Checkpoints</span>
+    </button>&nbsp
+    <button id="export-button" class="menu-toggle">
+        <span>📦 Papers</span>
+    </button>&nbsp
+    <button id="analysis-button" class="menu-toggle" onclick="window.location.href = '/download_analysis'">
+        <span>📊 Extracted Data</span>
+    </button>&nbsp
+    <button id="close-button" class="menu-toggle" hx-get="/close_project" hx-trigger="click" hx-swap="innerHTML" hx-target="#last-checkpoint-close">
+        <span>❌ Close</span>
+    </button>
+</div>
+
+<!-- Save Modal -->
+<div id="save-modal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('save-modal')">&times;</span>
+        <h2>Last Save Checkpoint</h2>
+        <div id="last-checkpoint-save">
+        </div>
+    </div>
+</div>
+
+<!-- Papers Modal -->
+<div id="papers-modal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('papers-modal')">&times;</span>
+        <h2>Export Papers</h2>
+        <form id="papers-form">
+            <div>
+                <h3>List:</h3>
+                <label><input type="checkbox" id="list-select-mode" name="list" checked> All</label><br>
+                <label id="analystName" style="display: none;"><input type="text" name="analystName" placeholder="Enter Analyst Name"></label>
+                <label id="listName" style="display: none;"><input type="text" name="listName" placeholder="Enter List Name"></label><br>
+                <script>
+                    document.getElementById('list-select-mode').addEventListener('change', function() {
+                        if (this.checked) {
+                            document.getElementById('analystName').style.display = 'none';
+                            document.getElementById('listName').style.display = 'none';
+                            document.getElementById('scienceAIList').style.display = 'none';
+                        } else {
+                            document.getElementById('analystName').style.display = 'block';
+                            document.getElementById('listName').style.display = 'block';
+                            document.getElementById('scienceAIList').style.display = 'block';
+                        }
+                    });
+                </script>
+            </div>
+            <div id="papers-form-options">
+                <h3>Fields:</h3>
+                <label><input type="checkbox" name="tag"> User Defined Tag</label>
+                <input type="text" id="user-defined-tag" name="userDefinedTag" placeholder="Enter user-defined tag"><br>
+                <label id="scienceAIList" style="display: none;"><input type="checkbox" name="scienceAIList"> ScienceAI List</label><br>
+                <label><input type="checkbox" name="doi"> DOI</label><br>
+                <label><input type="checkbox" name="dateOfPublication"> Date of Publication</label><br>
+                <label><input type="checkbox" name="firstAuthor"> First Author</label><br>
+                <label><input type="checkbox" name="title"> Title</label><br>
+                <label><input type="checkbox" name="journal"> Journal</label><br>
+            </div>
+            <h3>Order:</h3>
+            <p>This determines the file name from start to finish.</p>
+            <ul id="order-list" class="draggable-list">
+                <!-- Draggable list items will be added here dynamically -->
+            </ul>
+            <label for="separator">Separator:</label>
+            <input type="text" id="separator" name="separator" value="_"><br>
+            <button type="button" onclick="exportPapers()">Export</button>
+        </form>
+    </div>
+</div>
+
+<!-- Close Modal -->
+<div id="close-modal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('close-modal')">&times;</span>
+        <h2>Close</h2>
+        <div id="last-checkpoint-close">
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+<script>
+    document.getElementById('save-button').onclick = function() {
+        openModal('save-modal');
+    };
+
+    document.getElementById('export-button').onclick = function() {
+        openModal('papers-modal');
+    };
+
+    document.getElementById('close-button').onclick = function() {
+        openModal('close-modal');
+    };
+
+    function openModal(modalId) {
+        document.getElementById(modalId).style.display = 'block';
+    }
+
+    function closeModal(modalId) {
+        document.getElementById(modalId).style.display = 'none';
+    }
+
+
+    function exportPapers() {
+        let selectedFields = [];
+        $('#papers-form-options input:checked').each(function() {
+            selectedFields.push($(this).siblings('label').text());
+        });
+
+        let orderedFields = [];
+        $('#order-list .draggable-item').each(function() {
+            orderedFields.push($(this).text());
+        });
+
+        let separator = $('#separator').val();
+        let userDefinedTag = $('#user-defined-tag').val();
+
+        alert('Papers exported: ' + orderedFields.join(separator).replace('User Defined Tag', userDefinedTag).replaceAll(" ","_")+'.pdf');
+        window.location.href = '/export_papers?fields=' + orderedFields.join(',') + '&separator=' + separator + '&userDefinedTag=' + userDefinedTag + '&analystName=' + $('#analystName input').val() + '&listName=' + $('#listName input').val();
+    }
+
+    // Initialize draggable list
+    $(function() {
+        $('#order-list').sortable();
+        $('#order-list').disableSelection();
+
+        $('#papers-form-options input[type="checkbox"]').change(function() {
+            let fieldName = $(this).closest('label').text().trim();
+            if ($(this).is(':checked')) {
+                $('#order-list').append('<li class="draggable-item">' + fieldName + '</li>');
+            } else {
+                $('#order-list .draggable-item').filter(function() {
+                    return $(this).text().trim() === fieldName;
+                }).remove();
+            }
+        });
+    });
+
+    // Close the modal when the user clicks anywhere outside of the modal
+    window.onclick = function(event) {
+        if (event.target.classList.contains('modal')) {
+            event.target.style.display = 'none';
+        }
+    }
+</script>
+
+<script>
+
+    const collapseThreshold = 50; // Minimum width in pixels before section collapses
+
+    // load the window width and height from local storage
+    var windowWidth = localStorage.getItem('windowWidth');
+    var windowHeight = localStorage.getItem('windowHeight');
+    // see if the window width and height match the current window width and height
+    if (windowWidth && windowHeight) {
+        if (window.innerWidth === parseInt(windowWidth) && window.innerHeight === parseInt(windowHeight)) {
+            // Load the section locations from local storage if they exist
+            var sectionLocations = localStorage.getItem('sectionLocations');
+            if (sectionLocations) {
+                sectionLocations = JSON.parse(sectionLocations);
+                var sections = document.querySelectorAll('.resize-section');
+                sections.forEach((section, index) => {
+                    // set the width of the section
+                    section.style.width = sectionLocations[index];
+                });
+            }
+        }
+    }
+
+    interact('.resize-section:not(:last-child)')
+    .resizable({
+        edges: { right: '.resize-handle' }, // Resize from the right edge
+        modifiers: [
+            interact.modifiers.restrictSize({
+                min: { width: collapseThreshold },
+            }),
+        ],
+        inertia: true,
+    })
+    .on('resizemove', resizeMoveHandler);
+
+    // Handler for resizing movement
+    function resizeMoveHandler(event) {
+        // if 1.1x collapseThreshold is met then show the resize title otherwise hide it
+        var resizeTitle = event.target.querySelector('.resize-title');
+        if (event.rect.width > 1.05 * collapseThreshold) {
+            resizeTitle.style.display = 'none';
+        } else {
+            resizeTitle.style.display = 'block';
+        }
+
+        var target = event.target;
+        var nextSibling = target.nextElementSibling;
+
+        if (nextSibling && nextSibling.classList.contains('resize-section')) {
+            var resizeTitleSibling = nextSibling.querySelector('.resize-title');
+            var totalAvailableWidth = target.parentNode.getBoundingClientRect().width;
+            var otherSectionsWidth = 0;
+            Array.from(target.parentNode.children).forEach(child => {
+                if (child !== target && child !== nextSibling) {
+                    otherSectionsWidth += child.getBoundingClientRect().width;
+                }
+            });
+
+            var spaceForNextSibling = totalAvailableWidth - event.rect.width - otherSectionsWidth;
+            if (spaceForNextSibling < collapseThreshold) {
+                // Adjust current section width to ensure next sibling respects its minimum width
+                var correctedWidth = totalAvailableWidth - collapseThreshold - otherSectionsWidth;
+                target.style.width = `${correctedWidth}px`;
+                nextSibling.style.width = `${collapseThreshold}px`;
+                resizeTitleSibling.style.display = 'block';
+            } else {
+                // Apply the original logic if the next sibling can maintain its minimum width
+                target.style.width = event.rect.width + 'px';
+                nextSibling.style.width = `${spaceForNextSibling}px`;
+                resizeTitleSibling.style.display = 'none';
+            }
+        } else {
+            // If there's no next sibling to worry about (for future-proofing)
+            target.style.width = event.rect.width + 'px';
+        }
+        // Adjust for margins if necessary by subtracting the total margins from the calculated widths
+        // store the locations of the sections in local storage
+        var sections = document.querySelectorAll('.resize-section');
+        var sectionLocations = [];
+        sections.forEach(section => {
+            sectionLocations.push(section.style.width);
+        });
+        localStorage.setItem('sectionLocations', JSON.stringify(sectionLocations));
+        // save the window width and height in local storage
+        localStorage.setItem('windowWidth', window.innerWidth);
+        localStorage.setItem('windowHeight', window.innerHeight);
+    }
+
+    // Adjust sections on window resize to fill new space
+    window.addEventListener('resize', function() {
+        const containerWidth = document.getElementById('container').getBoundingClientRect().width;
+        const sections = document.querySelectorAll('.resize-section');
+        const newSectionWidth = containerWidth / sections.length;
+
+        sections.forEach(section => {
+            section.style.width = `${newSectionWidth}px`;
+        });
+    });
+</script>
+
+</body>
+</html>

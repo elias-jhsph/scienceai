@@ -1,0 +1,600 @@
+
+/* Color Palette */
+ :root {
+     --sea-salt: #F9F8F8;
+     --baby-powder: #fffffaff;
+     --slate-gray: #7a8b99ff;
+     --black: #000103ff;
+     --jet: #333138ff;
+     --blue-munsell: #5296a5ff;
+}
+/* Basic Reset */
+ *, *::before, *::after {
+     box-sizing: border-box !important;
+}
+/* Typography */
+ body {
+     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+     background-color: var(--baby-powder);
+     color: var(--jet);
+     margin: 0;
+     line-height: 1.5;
+     font-size: 16px;
+}
+
+/* Container */
+ .container {
+     display: flex;
+     flex-wrap: wrap;
+     justify-content: space-around;
+     max-width: 1200px;
+     margin: 20px auto;
+}
+/* Column Styling */
+ .column {
+     margin: 10px;
+     background: var(--baby-powder);
+     border-radius: 8px;
+     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+     flex: 0 0 calc(33.333% - 20px);
+     display: flex;
+     flex-direction: column;
+     overflow: hidden;
+}
+
+/* Header Styling */
+ .column-header {
+     background: var(--blue-munsell);
+     color: var(--baby-powder);
+     padding: 20px;
+     text-align: center;
+     font-weight: bold;
+     font-size: 1.2em;
+}
+ input[type="text"] {
+     margin: 20px;
+     padding: 10px;
+     width: calc(100% - 60px);
+     box-sizing: border-box;
+}
+/* Search Box */
+ .search-box {
+     padding: 10px;
+     display: flex;
+     align-items: center;
+     gap: 10px;
+     background: var(--slate-gray);
+     border-bottom: 1px solid var(--jet);
+     border-radius: 4px;
+}
+ .search-box input[type="text"] {
+     flex-grow: 1;
+     padding: 10px;
+     border: 1px solid var(--black);
+     border-radius: 4px;
+     color: var(--black);
+     background: var(--baby-powder);
+}
+
+/* Dynamic height and scrolling for papers-grid */
+.papers-container {
+    flex-grow: 1; /* Takes all available space left by other elements */
+    overflow-y: auto; /* Enables vertical scrolling when needed */
+    margin-top: 10px; /* Adjusted spacing */
+    margin-bottom: 10px; /* Adjusted spacing */
+    height: 100%; /* Takes full height of parent */
+    border-top: 2px solid #ccc;
+}
+
+ .grid {
+     display: flex;
+     flex-wrap: wrap;
+     justify-content: space-around;
+     align-content: center;
+}
+ .card {
+     display: flex;
+     flex-direction: column;
+     padding: 20px;
+     border: 1px solid #ccc;
+     max-width: 550px;
+     min-width: 300px;
+     width: 90%;
+     box-sizing: border-box;
+     background-color: var(--sea-salt);
+     border-radius: 4px;
+     margin: 10px;
+     box-shadow: 5px 5px 15px -4px rgba(0,0,0,0.83);
+     height: auto;
+}
+ .icon-button, .icon-container > a {
+     border: none;
+     background: none;
+     cursor: pointer;
+     padding: 5px;
+     color: #000;
+}
+ .json-viewer, .pdf-viewer {
+     margin-top: 10px;
+     border: 1px solid #ddd;
+     padding: 10px;
+     max-height: 200px;
+     overflow: auto;
+}
+ .icon-container-box {
+     display: flex;
+}
+ .icon-container-box-image {
+     display: flex;
+     width: 100px;
+     height: 100px;
+     justify-content: center;
+     align-content: center;
+     align-items: center;
+     flex-wrap: nowrap;
+     flex-direction: column;
+}
+ .icon-container-json-image {
+     width: 75px;
+     height: 75px;
+     background-size: contain;
+     background-repeat: no-repeat;
+     background-image: url('https://cdn-icons-png.flaticon.com/512/136/136443.png');
+}
+ .icon-container-pdf-image {
+     width: 75px;
+     height: 75px;
+     background-size: contain;
+     background-repeat: no-repeat;
+     background-image: url('https://www.svgrepo.com/show/152004/pdf.svg');
+}
+ .tag {
+     display: inline-block;
+     background-color: var(--blue-munsell);
+     color: white;
+     padding: 5px 8px;
+     margin-right: 5px;
+     border-radius: 15px;
+     cursor: pointer;
+}
+ .tag i {
+     margin-left: 5px;
+}
+/* Button Styling */
+ button {
+     padding: 10px 15px;
+     border: none;
+     background-color: var(--black);
+     color: var(--baby-powder);
+     cursor: pointer;
+     border-radius: 4px;
+     transition: background-color 0.3s;
+}
+ button:hover {
+     background-color: var(--jet);
+}
+/* Content Styling */
+ .input-field, .chat-bubble, .record {
+     margin: 10px;
+     padding: 15px;
+     background: var(--baby-powder);
+     border-radius: 4px;
+     border: 1px solid var(--slate-gray);
+     color: var(--black);
+}
+ .chat-bubble {
+     background: var(--slate-gray);
+     position: relative;
+     border-radius: 15px;
+     color: var(--baby-powder);
+}
+ .record {
+     font-family: monospace;
+     color: var(--jet);
+}
+/* Responsive Design */
+ @media screen and (max-width: 1024px) {
+     .column {
+         flex: 0 0 calc(50% - 20px);
+    }
+}
+ @media screen and (max-width: 768px) {
+     .container {
+         flex-direction: column;
+    }
+     .column {
+         flex: 0 0 100%;
+    }
+}
+ #layout {
+     display: flex;
+     height: 100vh;
+}
+ .panel {
+    margin: -10px;
+    scroll-snap-align: end;
+    height: 70vh;
+    overflow: hidden;
+    border-top: 2px solid #ccc;
+}
+.panel-messages {
+     padding-top: 10px;
+     height: 70vh;
+     overflow-y: scroll;
+}
+
+.chat-input-container{
+  margin: 20px;
+  border-top: 2px solid #ccc;
+}
+
+ #chat-messages {
+     height: calc(100% - 60px);
+     overflow-y: auto;
+}
+
+ .nested {
+     padding-left: 20px;
+}
+ .db-load-info {
+     padding-bottom: 10px;
+     padding-left: 10px;
+     font-size: 70%;
+     display: inline-flex;
+     justify-content: space-between;
+     align-items: center;
+}
+ .load-button {
+     font-size: 70%;
+     padding: 2px 4px;
+    /* Minimal padding for a smaller button */
+     background-color: #f0f0f0;
+    /* Light grey background for subtlety */
+     color: #333;
+    /* Dark grey text for readability */
+     border: 1px solid #dcdcdc;
+    /* Slight border to define the button */
+     cursor: pointer;
+    /* Cursor changes to pointer to indicate it's clickable */
+     border-radius: 2px;
+    /* Small border radius for a slightly rounded look */
+     transition: background-color 0.2s, border-color 0.2s;
+    /* Smooth transition for a subtle hover effect */
+     display: inline-flex;
+    /* Make the button only as wide as its content */
+}
+ .load-button:hover {
+     background-color: #e0e0e0;
+    /* Slightly darker background on hover */
+     border-color: #cacaca;
+    /* Darker border on hover for contrast */
+}
+ .reload {
+     font-family: Lucida Sans Unicode
+}
+ .loader {
+     border: 6px solid #f3f3f3;
+    /* Light grey */
+     border-top: 6px solid gray;
+    /* Blue */
+     border-radius: 50%;
+     width: 12px;
+     height: 12px;
+     animation: spin 2s linear infinite;
+}
+ @keyframes spin {
+     0% {
+         transform: rotate(0deg);
+    }
+     100% {
+         transform: rotate(360deg);
+    }
+}
+
+/* Base styles for the body and html to reset margins and set font */
+html {
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* Ensure all elements include padding and border in the element's total width and height */
+*, *::before, *::after {
+    box-sizing: inherit;
+}
+
+/* Flex container to hold the sections */
+#container {
+    display: flex;
+    height: 100vh; /* Use the full viewport height */
+}
+
+/* Style for the titles of the sections, rotated and positioned */
+.resize-title {
+    transform: rotate(180deg);
+    white-space: nowrap;
+    writing-mode: vertical-rl;
+    position: absolute;
+    top: 5%; /* Positioned at the center-top of the section */
+    left: 5px; /* Left offset */
+    transform: translate(0, -50%) rotate(180deg); /* Center the element, then rotate */
+    background: #ccc; /* Dark background for contrast */
+    padding: 5px;
+    font-size: 14px;
+    border-radius: 8px; /* Rounded corners */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Subtle shadow */
+    z-index: 5; /* Ensure it's above the section background, but below the handle */
+    display: none; /* Initially hidden */
+}
+
+/* Styles for the sections */
+.resize-section {
+    flex-grow: 1; /* Allows sections to grow to fill available space */
+    background: #f0f0f0; /* Light grey background */
+    position: relative; /* Needed for absolute positioning of children */
+    overflow: hidden; /* Prevents content from spilling out */
+    margin: 0 0px; /* Spacing between sections; adjust as needed */
+}
+
+#right-section {
+    height: 100vh;
+    overflow-y: scroll;
+}
+
+/* Ensure that the first section doesn't have left margin */
+#left-section {
+    margin-left: 0;
+}
+
+/* Ensure that the last section doesn't have right margin */
+#right-section {
+    margin-right: 0;
+}
+
+/* Internal content of sections */
+.resize-section-internal {
+    padding: 10px; /* Space inside the section */
+    margin: 20px;
+}
+
+/* Styles for the resize handles */
+.resize-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 100%;
+    background: #ccc; /* Light grey */
+    cursor: ew-resize;
+    z-index: 10; /* Above other elements but below overlays, popups, etc. */
+    border-radius: 4px;
+}
+
+/* Hover effect for the resize handles */
+.resize-handle:hover {
+    background: #bbb; /* Darker shade on hover */
+}
+
+/* The content of the resize handle, which is the resizable icon */
+.resize-handle::before {
+    content: "⇆";
+    color: #333; /* Visible against the handle background */
+    font-size: 20px; /* Large enough to be easily seen and clicked on */
+    display: block;
+}
+
+/* Handle visibility when hovering over the section */
+.resize-section:hover .resize-handle {
+    background: #bbb; /* Slightly darker to highlight the handle */
+}
+
+summary {
+    color: var(--blue-munsell);
+}
+
+::-webkit-scrollbar {
+    border-radius: 25px;
+  }
+::-webkit-scrollbar-track {
+    background: transparent;
+  }
+::-webkit-scrollbar-thumb {
+    background: #6c88a1;
+    border-radius: 8px;
+  }
+::-webkit-scrollbar-thumb:hover {
+    background: var(--blue-munsell);
+  }
+
+.chat-bubble-area-user {
+    display: flex;
+    flex-direction: column;
+    align-items: right;
+    margin: 0 5% 15px 30%;
+}
+.chat-bubble-area-ai {
+    display: flex;
+    flex-direction: column;
+    align-items: left;
+    margin: 0 30% 15px 5%;
+}
+.chat-bubble-user {
+    background-color: #6C757D;
+    color: white;
+    border-radius: 16px;
+    padding: 10px 14px;
+    display: inline-block;
+    max-width: 100%;
+    text-align: left;
+    word-wrap: break-word;
+    border-top-right-radius: 4px;
+}
+.chat-bubble-ai {
+    background-color: #6c88a1;
+    color: white;
+    border-radius: 16px;
+    padding: 10px 14px;
+    display: inline-block;
+    max-width: 100%;
+    text-align: left;
+    word-wrap: break-word;
+    border-top-left-radius: 4px;
+}
+.chat-bubble-timestamp {
+    display: inline-block;
+    margin: 5px 0;
+    font-size: 10px;
+    color: #999;
+}
+.chat-form{
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 10px;
+    border-top: 1px solid #ccc;
+}
+.chat-form textarea {
+    width: 100%;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    margin-right: 10px;
+    padding: 10px;
+    border-top: 1px solid #ccc;
+}
+.chat-form button {
+    margin: 0;
+}
+
+.chat-input {
+    resize: vertical;
+}
+
+pre {
+    white-space: pre-wrap;
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+
+.typing-indicator {
+    height: 40px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
+.typing-indicator span {
+    height: 10px;
+    width: 10px;
+    background-color: #ccc;
+    border-radius: 50%;
+    display: inline-block;
+    margin: 0 3px;
+    animation: bounce 1.4s infinite both;
+    animation: typingBlink 1.4s infinite;
+}
+
+
+.open-project-menu {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    max-width: 500px;
+    padding: 10px;
+    background-color: #f1f1f1;
+    border-radius: 8px;
+    margin: 30px;
+    margin-left: 10%;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+
+/* Additional styles for the #left-section-internal to ensure full height usage and column layout */
+#left-section-internal {
+    display: flex;
+    flex-direction: column;
+    height: 100%; /* Ensures it takes full height of its parent */
+    overflow: hidden; /* Ensures no spillover from child elements */
+}
+
+/* Ensure h2 and search-box only take necessary space */
+#left-section-internal > h2,
+#left-section-internal > .search-box {
+    flex-shrink: 0; /* These elements won't shrink */
+}
+
+.alert {
+    padding: 20px;
+    background-color: #f44336;
+    color: white;
+    margin-bottom: 15px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.project-menu {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 10px;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.project-menu button {
+    padding-left: 10px;
+}
+
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 100;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100vh;
+    overflow: auto;
+    background-color: rgb(0,0,0);
+    background-color: rgba(0,0,0,0.4);
+}
+.modal-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 600px;
+}
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.draggable-list {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+}
+.draggable-item {
+    margin: 2px 0;
+    padding: 8px;
+    border: 1px solid #ddd;
+    background-color: #f9f9f9;
+    cursor: move;
+}

@@ -1,0 +1,13 @@
+{% if last_save %}
+    <p>Last save checkpoint: {{last_save}}</p>
+    <br>
+    <p>Download this Checkpoint as a zip: <a href="/download_save" class="icon-button"><i class="fas fa-download"></i></a></p>
+{% else %}
+    <p>This project has not reached a save checkpoint yet.</p>
+    {% if option %}
+        <p>Would you like to save the current progress?</p>
+        <button onclick="window.location.href='/save'">Save</button>
+    {% else %}
+    <p>This doesn't necessarily mean that processing won't continue near where you left off after closing the project at this point.</p>
+    {% endif %}
+{% endif %}
