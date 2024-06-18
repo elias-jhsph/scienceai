@@ -20,7 +20,7 @@ Installation
 ScienceAI requires Python 3.11 or higher and an OpenAI API key. To install the package, you can use pip:
 
 ```bash
-pip install science-ai
+pip install scienceai-llm
 ```
 
 Usage
