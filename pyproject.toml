@@ -1,6 +1,6 @@
 [project]
 name = "scienceai-llm"
-version = "0.1.2"
+version = "0.1.3"
 authors = [{name="Elias Weston-Farber", email="elias@eliastechlabs.com"}]
 description = "An AI powered scientific literature search engine"
 readme = "README.md"
@@ -10,9 +10,10 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = ["PyMuPDF", "openai", "tiktoken", "habanero", "flask", "flask-sock", "dictdatabase", "pandas"]
-[project.entry-points.console_scripts]
+[project.scripts]
 scienceai = "scienceai.__main__:main"
 [tool.setuptools.packages.find]
+namespaces = true
 where = ["src"]
 [tool.setuptools.package-data]
 scienceai = ["static/*", "static/json-viewer/*", "templates/*", "io/*", "*.json", "*.txt"]
