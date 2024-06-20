@@ -203,7 +203,7 @@ def update_data(path):
 def download(filepath):
     from flask import send_from_directory, request
     filepath = urllib.parse.unquote(filepath)
-    if filepath[0] != '/':
+    if filepath[0] != '/' and not sys.platform.startswith("win"):
         filepath = "/"+filepath
     target = os.path.join(path_to_app, "io", os.path.basename(filepath))
     shutil.copyfile(filepath, target)
