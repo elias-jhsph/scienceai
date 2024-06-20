@@ -580,7 +580,10 @@ def main():
     log.setLevel(logging.ERROR)
     # print a clickable link to the user to open the app by navigating to the link
     print("ScienceAI is running. Please open the following link in your browser to access the application:")
-    print("\033]8;;http://localhost:4242\ahttp://localhost:4242\033]8;;\a")
+    if sys.platform.startswith("win"):
+        print("http://localhost:4242")
+    else:
+        print("\033]8;;http://localhost:4242\ahttp://localhost:4242\033]8;;\a")
     app.run(host='localhost', port=4242, debug=False)
 
 
