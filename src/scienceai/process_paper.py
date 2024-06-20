@@ -1,6 +1,7 @@
 import base64
 import os
 import tempfile
+import shutil
 
 import fitz
 from math import atan2, degrees
