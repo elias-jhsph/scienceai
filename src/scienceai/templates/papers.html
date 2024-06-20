@@ -17,8 +17,8 @@
                 <div class="icon-container-box-image">
                     <div class="icon-container-pdf-image"></div>
                     <div class="button-icon-menu">
-                        <button class="icon-button" onclick="viewPDF('/download/{{ paper.pdf_path }}')"><i class="fa fa-eye"></i></button>
-                        <a href="{{ url_for('download', filepath=paper.pdf_path) }}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>
+                        <button class="icon-button" onclick="viewPDF('/download/{{ paper.pdf_path|quote_url }}')"><i class="fa fa-eye"></i></button>
+                        <a href="{{ url_for('download', filepath=paper.pdf_path|quote_url) }}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>
                     </div>
                 </div>
             {% endif %}
@@ -26,8 +26,8 @@
                 <div class="icon-container-box-image">
                     <div class="icon-container-json-image"></div>
                     <div class="button-icon-menu">
-                        <button class="icon-button" onclick="viewJSON('/download/{{ paper.json_path }}', 'json-viewer-{{ loop.index }}')"><i class="fa fa-eye"></i></button>
-                        <a href="{{ url_for('download', filepath=paper.json_path) }}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>
+                        <button class="icon-button" onclick="viewJSON('/download/{{ paper.json_path|quote_url }}', 'json-viewer-{{ loop.index }}')"><i class="fa fa-eye"></i></button>
+                        <a href="{{ url_for('download', filepath=paper.json_path|quote_url) }}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>
                         <div id="json-viewer-{{ loop.index }}" class="json-viewer" style="display:none;"></div>
                     </div>
                 </div>

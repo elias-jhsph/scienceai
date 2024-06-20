@@ -571,6 +571,8 @@ class DatabaseManager:
         if len(path_parts) > 2 and path_parts[2] == "evidence_files":
             results = self.get_all_tool_trackers_for_analyst(path_parts[1])
             if len(path_parts) == 3:
+                if not results:
+                    return {}
                 return {os.path.basename(tool)[:-25]: {} for tool in results.keys()}
             if len(path_parts) == 4:
                 for json_path, csv_path in results.items():

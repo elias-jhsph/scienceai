@@ -62,6 +62,7 @@ def sanitize_for_id(value):
 
 
 app.jinja_env.filters['sanitize_for_id'] = sanitize_for_id
+app.jinja_env.filters['quote_url'] = lambda u: urllib.parse.quote(u)
 
 
 def load_project(project):
@@ -201,6 +202,7 @@ def update_data(path):
 @app.route('/download/<path:filepath>')
 def download(filepath):
     from flask import send_from_directory, request
+    filepath = urllib.parse.unquote(filepath)
     if filepath[0] != '/':
         filepath = "/"+filepath
     target = os.path.join(path_to_app, "io", os.path.basename(filepath))
