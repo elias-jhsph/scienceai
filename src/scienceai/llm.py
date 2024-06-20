@@ -32,6 +32,10 @@ base_key_path = os.path.join(os.path.expanduser("~"), "Documents", "ScienceAI")
 target_key = os.path.join(base_key_path, "scienceai-keys.json")
 if not os.path.exists(target_key):
     new_key = input("Please enter OpenAI key: ")
+    if not os.path.exists(os.path.dirname(os.path.dirname(target_key))):
+        os.mkdir(os.path.dirname(os.path.dirname(target_key)))
+    if not os.path.exists(os.path.dirname(target_key)):
+        os.mkdir(os.path.dirname(target_key))
     with open(target_key, "w") as file:
         json.dump({"openai": new_key}, file)
 with open(target_key, "r") as file:
