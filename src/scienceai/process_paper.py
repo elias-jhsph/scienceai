@@ -444,6 +444,8 @@ def gather_metadata(pages):
         raise Exception("DOI not found")
 
     metadata = crossref_data["message"]
+    if "given" not in metadata["author"][0]:
+        metadata["author"][0] = {"given": "", "family": metadata["author"][0]["name"]}
 
     dois = []
     for ref in metadata["reference"]:
@@ -459,8 +461,13 @@ def gather_metadata(pages):
             ref_number += 1
             data = item['message']
             # Format the reference string based on available fields
-            author_str = ', '.join([author['given'] + ' ' + author['family'] for author in data.get('author', []) if
-                                    'given' in author and 'family' in author])
+            if 'given' in data['author'][0] and 'family' in data['author'][0]:
+                author_str = ', '.join([author['given'] + ' ' + author['family'] for author in data.get('author', []) if
+                                        'given' in author and 'family' in author])
+            elif 'name' in data['author'][0]:
+                author_str = ', '.join([author['name'] for author in data.get('author', []) if 'name' in author])
+            else:
+                author_str = ''
             title_str = data.get('title', [''])[0] if data.get('title', None) else ''
             journal_str = data.get('container-title', [''])[0] if data.get('container-title', None) else ''
             volume_str = data.get('volume', '')
