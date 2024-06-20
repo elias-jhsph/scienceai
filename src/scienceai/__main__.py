@@ -354,8 +354,8 @@ def export_papers():
                 else:
                     name += "NA" + sep
             elif field == 'First Author':
-                if "authors" in metadata:
-                    name += metadata["authors"][0]["given"] + "-" + metadata["authors"][0]["family"] + sep
+                if "author" in metadata:
+                    name += metadata["author"][0]["given"] + "-" + metadata["author"][0]["family"] + sep
                 else:
                     name += "NA" + sep
             elif field == 'Title':
