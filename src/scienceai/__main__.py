@@ -150,9 +150,9 @@ def create_project():
                     for file in files:
                         if file.endswith(".pdf"):
                             if len(dirs) == 0:
-                                os.rename(os.path.join(root, file), os.path.join(ingest_folder, file))
+                                shutil.move(os.path.join(root, file), os.path.join(ingest_folder, file))
                             else:
-                                os.rename(os.path.join(root, os.path.join(*dirs), file), os.path.join(ingest_folder, file))
+                                shutil.move(os.path.join(root, os.path.join(*dirs), file), os.path.join(ingest_folder, file))
                             atleast_one_file = True
                 shutil.rmtree(os.path.join(ingest_folder, "zip"))
             if not atleast_one_file:
@@ -496,7 +496,7 @@ def download_analysis():
     analysis_path = database.combine_analyst_tool_trackers()
     project = os.path.basename(database.project_path)
     destination = os.path.join(path_to_app, "io", project.replace(" ", "_")+"_scienceai_analysis_"+datetime.now().strftime('%Y-%m-%d_%H-%M-%S')+".csv")
-    os.rename(analysis_path, destination)
+    shutil.move(analysis_path, destination)
     dir_path = os.path.dirname(destination)
     path = os.path.basename(destination)
 
@@ -526,7 +526,7 @@ def load_save():
     for dir in os.listdir(temp_dir):
         found_project_name = os.path.basename(dir)
     unzip_folder_path = os.path.join(unzip_folder_path, found_project_name)
-    os.rename(unzip_folder_path, folder_path)
+    shutil.move(unzip_folder_path, folder_path)
     projects_folder = os.path.join(db_folder, "scienceai_db")
     if not os.path.exists(projects_folder):
         os.makedirs(projects_folder)

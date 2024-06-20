@@ -414,7 +414,7 @@ def rotate_pdf_pages(pdf_path):
     modified_pdf_path = pdf_path.replace(".pdf", "_rotated.pdf")
     doc.save(modified_pdf_path)
     doc.close()
-    os.rename(modified_pdf_path, pdf_path)
+    shutil.move(modified_pdf_path, pdf_path)
     return
 
 
