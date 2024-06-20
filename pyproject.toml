@@ -1,6 +1,6 @@
 [project]
 name = "scienceai-llm"
-version = "0.1.4"
+version = "0.1.5"
 authors = [{name="Elias Weston-Farber", email="elias@eliastechlabs.com"}]
 description = "An AI powered scientific literature search engine"
 readme = "README.md"
