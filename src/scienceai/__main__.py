@@ -53,6 +53,8 @@ def close():
     message_queue = None
     database = None
     original_save = None
+    for file in os.listdir(os.path.join(path_to_app, "io")):
+        os.remove(os.path.join(path_to_app, "io", file))
 
 
 def sanitize_for_id(value):
@@ -71,6 +73,8 @@ def load_project(project):
     global message_queue
     global thread
     global original_save
+    for file in os.listdir(os.path.join(path_to_app, "io")):
+        os.remove(os.path.join(path_to_app, "io", file))
     if database:
         close()
         return False
@@ -210,7 +214,8 @@ def download(filepath):
 
     @after_this_request
     def remove_file(response):
-        os.remove(target)
+        if not sys.platform.startswith("win"):
+            os.remove(target)
         return response
     dir_path = os.path.dirname(target)
     path = os.path.basename(filepath)
@@ -422,7 +427,8 @@ def export_papers():
 
     @after_this_request
     def remove_file(response):
-        os.remove(destination)
+        if not sys.platform.startswith("win"):
+            os.remove(destination)
         return response
     return send_from_directory(directory=dir_path, path=path, as_attachment=True)
 
@@ -485,7 +491,8 @@ def download_save():
 
     @after_this_request
     def remove_file(response):
-        os.remove(destination)
+        if not sys.platform.startswith("win"):
+            os.remove(destination)
         return response
     return send_from_directory(directory=dir_path, path=path, as_attachment=True)
 
@@ -504,7 +511,8 @@ def download_analysis():
 
     @after_this_request
     def remove_file(response):
-        os.remove(destination)
+        if not sys.platform.startswith("win"):
+            os.remove(destination)
         return response
     return send_from_directory(directory=dir_path, path=path, as_attachment=True)
 
