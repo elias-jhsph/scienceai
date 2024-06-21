@@ -77,11 +77,16 @@ class PrincipalInvestigator:
                         "properties": {
                             "name": {
                                 "type": "string",
-                                "description": "Provide a name for this new analyst"
+                                "description": "Assign a meaningful name to each Analyst Agent that reflects their "
+                                               "specific task or research focus in title case."
                             },
                             "question": {
                                 "type": "string",
-                                "description": "The specific sub-research question to be answered by the analyst"
+                                "description": "The specific sub-research question to be answered by the analyst. Make "
+                                               "sure to include any relevant context or details that may be helpful to "
+                                               "the analyst in performing their data collections and analysis, as well "
+                                               "as specific forms and types of data evidence that may be required to "
+                                               "support their conclusions when answering the question."
                             }
                         }
                     },

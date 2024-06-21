@@ -62,10 +62,13 @@ class DatabaseManager:
         if not os.path.exists(self.papers_pdf_path):
             os.makedirs(self.papers_pdf_path)
         self.db_path = os.path.join(self.project_path, "scienceai_ddb")
-        self.db_path_update = os.path.join(self.project_path, project_name + "_update_time.txt")
+        DDB.config.storage_directory = self.db_path
         self.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(self.db_path_update, "w") as f:
-            f.write(self.update_time)
+        if not DDB.at("update_time").exists():
+            DDB.at("update_time").create({})
+        with DDB.at("update_time").session() as (session, update_time):
+            update_time[project_name] = self.update_time
+            session.write()
         self.default_schema = ["metadata", "papers", "pi_context"]
         self.project_name = project_name
         if not read_only_mode:
@@ -76,26 +79,34 @@ class DatabaseManager:
             if self.read_only_mode:
                 raise ValueError("Database is in read only mode")
             self.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with open(self.db_path_update, "w") as f:
-                f.write(self.update_time)
+            if not DDB.at("update_time").exists():
+                DDB.at("update_time").create({self.project_name: self.update_time})
+            else:
+                with DDB.at("update_time").session() as (session, update_time):
+                    update_time[self.project_name] = self.update_time
+                    session.write()
             result = func(self, *args, **kwargs)
             return result
         return wrapper
 
     async def await_update(self, timeout=None):
+        DDB.config.storage_directory = self.db_path
         start = time.time()
+        original_update_time = self.update_time
         while timeout is None or time.time() - start < timeout:
-            await asyncio.sleep(1)
-            with open(self.db_path_update, "r") as f:
-                update_time = f.read()
+            await asyncio.sleep(.3)
+            if not DDB.at("update_time").exists():
+                DDB.at("update_time").create({self.project_name: original_update_time})
+                update_time = original_update_time
+            else:
+                update_time = DDB.at("update_time").read().get(self.project_name, "")
             if len(update_time) > 11:
-                if update_time != self.update_time:
+                if update_time != original_update_time:
                     self.update_time = update_time
                     break
 
     def update_update_time(self):
-        with open(self.db_path_update, "r") as f:
-            temp_update_time = f.read()
+        temp_update_time = DDB.at("update_time").read().get(self.project_name, "")
         if len(temp_update_time) > 11:
             self.update_time = temp_update_time
 

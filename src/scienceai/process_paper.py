@@ -110,7 +110,7 @@ def extract_doi(images, incorrect_doi_list=None):
 
         retry = 0
         valid_calls = []
-        while valid_calls == [] and retry < 3:
+        while valid_calls == [] and retry < 5 :
             if retry > 0:
                 print("Retrying...")
             chat_response = client.chat.completions.create(**arguments)

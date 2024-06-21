@@ -274,11 +274,17 @@ class Analyst:
                         "properties": {
                             "answer": {
                                 "type": "string",
-                                "description": "The answer to the question."
+                                "description": "This should be a detailed answer to the research question. All "
+                                               "evidence needed to support the answer should be included in the "
+                                               "evidence section."
                             },
                             "evidence": {
                                 "type": "string",
-                                "description": "The evidence you used to answer the question."
+                                "description": "This should be specific data points or findings from the data "
+                                               "collection that support your answer, DO NOT reference data you do not "
+                                               "directly provide as evidence. For example, if you are asked to provide "
+                                               "the top 5 genes from each paper, you should provide the list of genes "
+                                               "by paper as evidence."
                             }
                         },
                     },
