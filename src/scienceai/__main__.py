@@ -9,6 +9,8 @@ import urllib
 import uuid
 import zipfile
 import tempfile
+import markdown2
+
 
 from flask_sock import Sock
 from flask import Flask, render_template, abort, after_this_request
@@ -24,7 +26,7 @@ app = Flask(__name__,
             static_folder='static')
 sock = Sock(app)
 
-
+own_pid = os.getpid()
 database = None
 stop_event = None
 message_queue = None
@@ -65,6 +67,18 @@ def sanitize_for_id(value):
 
 app.jinja_env.filters['sanitize_for_id'] = sanitize_for_id
 app.jinja_env.filters['quote_url'] = lambda u: urllib.parse.quote(u)
+
+
+def convert_markdown(messages):
+    # messages is a list of dictionaries with keys one of which is content - convert content from markdown to html
+    cp_text_dict = []
+    for message in messages:
+        try:
+            message["content"] = markdown2.markdown(message["content"])
+        except Exception as e:
+            pass
+        cp_text_dict.append(message)
+    return cp_text_dict
 
 
 def load_project(project):
@@ -234,14 +248,14 @@ def discussion(ws):
         current = str(uuid.uuid4())
     else:
         current = str(hash(str(database.get_database_chat())))
-        ws.send(render_template('chat.html', messages=messages))
+        ws.send(render_template('chat.html', messages=convert_markdown(messages)))
     while True:
         asyncio.run(database.await_update(timeout=60))
         messages = database.get_database_chat()
         new = str(hash(str(database.get_database_chat())))
         if new != current:
             current = new
-            ws.send(render_template('chat.html', messages=messages))
+            ws.send(render_template('chat.html', messages=convert_markdown(messages)))
 
 
 @app.route('/send_message', methods=['POST'])
@@ -569,6 +583,15 @@ def delete_project():
         shutil.rmtree(checkpoint)
     shutil.rmtree(os.path.join(project_path, project))
     return redirect('/menu')
+
+
+@app.route('/shutdown', methods=['GET', 'POST'])
+def shutdown():
+    from flask import redirect
+    if database:
+        return redirect('/app')
+    global own_pid  # Make sure to use the global variable
+    os.kill(own_pid, 9)
 
 
 atexit.register(close)

@@ -136,6 +136,7 @@ def use_tools(chat_response, arguments, function_dict={}, call_functions=True, p
             if isinstance(tool_call, dict):
                 tool_calls_list.append({
                     "function": {
+                        "strict": True,
                         "arguments": tool_call['function']['arguments'],
                         "name": tool_call['function']['name'],
                     },

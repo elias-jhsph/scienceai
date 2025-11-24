@@ -2,6 +2,7 @@ from datetime import datetime
 from scienceai.analyst import Analyst
 from .database_manager import DatabaseManager
 from .llm import client, use_tools
+from .reasoning import add_reasoning_to_context
 import os
 
 
@@ -21,9 +22,11 @@ class PrincipalInvestigator:
             self.analysts.append(Analyst(dbr, analyst_dict=analyst_dict))
         chat_db = self.db.get_database_chat()
         self.tool_callables = {
-            "delegate_research": self.delegate_research
+            "delegate_research": self.delegate_research,
+            "reflect_on_delegations": self.reflect_on_delegations,
+            "create_arbitrary_csv": self.create_arbitrary_csv
         }
-        self.tools = [self.delegate_research(None, None, return_tool=True)]
+        self.tools = [self.delegate_research(None, None, return_tool=True), self.create_arbitrary_csv(None, None, return_tool=True)]
         self.system_message = system_message
         first_message = ("Hello, I am ScienceAI. I first need to make sure all your papers are loaded into the system "
                          "before I can help you. I will let you know when I am ready to answer your questions. "
@@ -69,6 +72,7 @@ class PrincipalInvestigator:
             return {
                 "type": "function",
                 "function": {
+                    "strict": True,
                     "name": "delegate_research",
                     "description": "Delegates a specific research question pertaining to the "
                                    "uploaded database of research papers to a new Analyst Agent",
@@ -88,9 +92,9 @@ class PrincipalInvestigator:
                                                "as specific forms and types of data evidence that may be required to "
                                                "support their conclusions when answering the question."
                             }
-                        }
-                    },
-                    "required": ["name", "question"],
+                        },
+                        "additionalProperties": False, "required": ["name", "question"]
+                    }
                 }
             }
 
@@ -119,6 +123,53 @@ class PrincipalInvestigator:
         new_analyst.pursue_goal()
         return ("Response from " + name + ":\n" + new_analyst.answer +
                 "\nEvidence provided by " + name + ":\n" + new_analyst.evidence)
+    
+
+    def create_arbitrary_csv(self, csv_name, csv_str, return_tool=False):
+        if return_tool:
+            return {
+                "type": "function",
+                "function": {
+                    "name": "create_arbitrary_csv",
+                    "description": "Creates a CSV file with the given name and data",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "csv_name": {"type": "string", "description": "The name of the CSV file"},
+                            "csv_str": {"type": "string", "description": "The data to be written to the CSV file"}
+                        },
+                        "additionalProperties": False,
+                        "required": ["csv_name", "csv_str"]
+                    }
+                }
+            }
+        self.db.create_pi_arbitrary_csv(csv_name, csv_str)
+        csv_path = self.db.get_pi_arbitrary_csv(csv_name)
+        return f"CSV file {csv_name} created successfully.  <button type='submit' onclick='window.open(\"download/{csv_path}\")'>Download CSV</button>"
+
+
+
+    def reflect_on_delegations(self, return_tool=False):
+        if return_tool:
+            return {
+                "type": "function",
+                "function": {
+                    "name": "reflect_on_delegations",
+                    "description": "Reflect on the current status of all delegated research questions. "
+                                   "This function has 0 parameters/arguments and it will automatically reflect on "
+                                   "the last message.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": False,
+                        "required": []
+                    }
+                }
+            }
+        result = add_reasoning_to_context(self.db.get_database_chat())
+        if result:
+            return result
+        return "Delegation reflected upon."
 
     def tool_callback(self, response, function_name=None):
         self.messages.append(response)
@@ -145,7 +196,7 @@ class PrincipalInvestigator:
         while called_tools:
             called_tools = False
             temp_messages = [{"content": self.system_message, "role": "system"}] + self.db.get_database_chat()
-            arguments = {"messages": temp_messages, "model": "gpt-4o", "tools": self.tools, "temperature": 0.2}
+            arguments = {"messages": temp_messages, "model": "o3-mini", 'reasoning_effort': 'medium', "tools": self.tools}
             chat_response = client.chat.completions.create(**arguments)
             if chat_response.choices[0].message.tool_calls:
                 called_tools = True
@@ -156,26 +207,66 @@ class PrincipalInvestigator:
                 self.db.add_chat(chat_message)
             if called_tools:
                 call_new_history = use_tools(chat_response, arguments, function_dict=self.tool_callables, pre_tool_call=True)
+                added_csv = False
+                called_tools = False
                 for call in call_new_history:
                     if call["role"] == "assistant":
                         self.db.update_last_chat("Processed")
                         call["status"] = "Pending"
                         call["time"] = datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')
+                        
+                        if call["tool_calls"][0]["function"]["name"] == "create_arbitrary_csv":
+                            added_csv = True
                         if not call["content"]:
                             call["content"] = "Working on that now..."
                         self.db.add_chat(call)
+
                 new_history = use_tools(chat_response, arguments, function_dict=self.tool_callables)
+
+                last_csv = None
+
                 for call in new_history:
-                    if call["role"] != "assistant":
+                    if call["role"] != "assistant" and not added_csv:
                         self.db.update_last_chat("Processed")
                         call["status"] = "Pending"
                         call["time"] = datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')
                         self.db.add_chat(call)
+                        # this section is where we call o1 to reflect on the delegations
+                        temp_messages = [{"content": self.system_message,
+                                        "role": "system"}] + self.db.get_database_chat()
+                        arguments = {"messages": temp_messages, "model": "o3-mini", 'reasoning_effort': 'medium',
+                                        "tools": [self.reflect_on_delegations(return_tool=True)],
+                                        "tool_choice": {"type": "function", "function": {"name": "reflect_on_delegations"}}}
+                        chat_response = client.chat.completions.create(**arguments)
+                        if chat_response.choices[0].message.tool_calls:
+                            print("Reflecting on delegations")
+                            call_new_history = use_tools(chat_response, arguments, function_dict=self.tool_callables)
+                            for call in call_new_history:
+                                if call["role"] == "assistant":
+                                    self.db.update_last_chat("Processed")
+                                    call["status"] = "Pending"
+                                    call["time"] = datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')
+                                    if not call["content"]:
+                                        call["content"] = "Reflecting on work now..."
+                                    self.db.add_chat(call)
+                                else:
+                                    self.db.update_last_chat("Processed")
+                                    call["status"] = "Pending"
+                                    call["time"] = datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')
+                                self.db.add_chat(call)
+
+                    if call["role"] != "assistant" and added_csv:
+                        last_csv = call["content"]
+                        new_message = {"content": last_csv, "role": "assistant", "status": "Processed", "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')}
+                        self.db.update_last_chat("Processed")
+                        self.db.add_chat(call)
+                        self.db.update_last_chat("Processed")
+                        self.db.add_chat(new_message)
         self.db.update_last_chat("Processed")
 
     def finish_tool_calls(self, last_chat):
-        new_history = use_tools(last_chat, {"messages": self.db.get_database_chat(), "model": "gpt-4o",
-                                            "tools": self.tools, "temperature": 0.2}, function_dict=self.tool_callables)
+        new_history = use_tools(last_chat, {"messages": self.db.get_database_chat(), "model": "o3-mini", 'reasoning_effort': 'medium',
+                                            "tools": self.tools}, function_dict=self.tool_callables)
         for call in new_history:
             if call["role"] != "assistant":
                 self.db.update_last_chat("Processed")

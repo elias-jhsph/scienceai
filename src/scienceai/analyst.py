@@ -1,3 +1,6 @@
+import time
+from datetime import datetime
+
 from .llm import client, use_tools
 from .database_manager import DatabaseManager
 from .data_extractor import generate_schema, extract_data, schema_to_tool
@@ -28,7 +31,7 @@ def reflect_on_evidence(goal, answer, evidence, retries=3):
         }
     ]
 
-    arguments = {"messages": messages, "model": "gpt-4o", }
+    arguments = {"messages": messages, "model": "o3-mini", 'reasoning_effort': 'medium'}
 
     chat_response = client.chat.completions.create(**arguments)
 
@@ -40,6 +43,7 @@ def reflect_on_evidence(goal, answer, evidence, retries=3):
         {
             "type": "function",
             "function": {
+                "strict": True,
                 "name": "check_completed_goal",
                 "description": "Checks if the goal has been completed or the question has "
                                "been answered and the evidence is sufficient.",
@@ -51,8 +55,9 @@ def reflect_on_evidence(goal, answer, evidence, retries=3):
                             "description": "Whether the goal has been completed or the question has been answered."
                         }
                     },
-                },
-                "required": ["resolved"]
+                    "required": ["resolved"],
+                    "additionalProperties": False
+                }
             }
         }
     ]
@@ -129,6 +134,7 @@ class Analyst:
             return {
                 "type": "function",
                 "function": {
+                    "strict": True,
                     "name": "get_all_papers",
                     "description": "Prints all papers in the database.",
                     "parameters": {
@@ -139,8 +145,9 @@ class Analyst:
                                 "description": "Whether to return all papers."
                             }
                         },
-                    },
-                    "required": ["all"],
+                        "required": ["all"],
+                        "additionalProperties": False
+                    }
                 }
             }
         output = {}
@@ -155,6 +162,7 @@ class Analyst:
             return {
                 "type": "function",
                 "function": {
+                    "strict": True,
                     "name": "create_named_paper_list",
                     "description": "Creates a permanent list of papers (this can not me mutate later).",
                     "parameters": {
@@ -173,10 +181,13 @@ class Analyst:
                                 }
                             }
                         },
-                    },
-                    "required": ["name", "paper_ids"],
+                        "required": ["name", "paper_ids"],
+                        "additionalProperties": False
+                    }
                 }
             }
+        if name.lower().replace(" ", "") == "allpapers":
+            return "List named 'ALL PAPERS' already exists by default and can be used to reference all papers."
         if self.db.get_all_papers(analyst=self.name, named_list=name):
             raise ValueError("List '" + name + "' already exists.")
         for paper_id in paper_ids:
@@ -188,6 +199,7 @@ class Analyst:
             return {
                 "type": "function",
                 "function": {
+                    "strict": True,
                     "name": "get_named_paper_list",
                     "description": "Gets the papers in a list.",
                     "parameters": {
@@ -198,10 +210,13 @@ class Analyst:
                                 "description": "The name of the list."
                             }
                         },
-                    },
-                    "required": ["name"],
+                        "additionalProperties": False,
+                        "required": ["name"]
+                    }
                 }
             }
+        if name == "ALL PAPERS":
+            name = None
         papers = self.db.get_all_papers_data(analyst=self.name, named_list=name)
         output = {}
         for paper in papers:
@@ -215,6 +230,7 @@ class Analyst:
             return {
                 "type": "function",
                 "function": {
+                    "strict": True,
                     "name": "create_data_collection_request",
                     "description": "Creates a schema for a data collection request.",
                     "parameters": {
@@ -230,16 +246,20 @@ class Analyst:
                             },
                             "target_list": {
                                 "type": "string",
-                                "description": "The name of the list of papers to collect data from."
+                                "description": "The name of the list of papers to collect data from. "
+                                               "or 'ALL PAPERS' to collect data from all papers."
                             }
                         },
-                    },
-                    "required": ["collection_name", "collection_goal"],
+                        "additionalProperties": False,
+                        "required": ["collection_name", "collection_goal", "target_list"]
+                    }
                 }
             }
 
         if target_list:
             try:
+                if target_list == "ALL PAPERS":
+                    target_list = None
                 papers = self.db.get_all_papers_data(analyst=self.name, named_list=target_list)
             except ValueError:
                 raise ValueError("List not found.")
@@ -250,11 +270,15 @@ class Analyst:
         for paper in papers:
             summaries += paper["metadata"]["title"][0] + "\n\nSummary: " + paper["summary"] + "\n\n\n"
         schema = generate_schema(summaries, goal=collection_name+" - "+collection_goal)
+        if not schema:
+            raise ValueError("Could not generate schema for data collection, be more specific in your goal.")
         tool = schema_to_tool(schema)
-
+        print("Tool:", tool)
         results = {}
-        tracker = self.db.add_analyst_tool_tracker(self.name, collection_name)
+        tracker = self.db.add_analyst_tool_tracker(self.name, collection_name, datetime.now().strftime("%Y-%m-%d_%H_%M_%S"))
+        time.sleep(3)
         for paper in papers:
+            print("*** Extracting from Paper:", paper["database"]["paper_id"][:10])
             result = extract_data(tool, paper["cleaned_text"])
             self.db.update_analyst_tool_tracker(tracker, paper["database"]["paper_id"], result)
             short_id[paper["database"]["paper_id"][:10]] = paper["database"]["paper_id"]
@@ -267,6 +291,7 @@ class Analyst:
             return {
                 "type": "function",
                 "function": {
+                    "strict": True,
                     "name": "complete_goal_by_answering_question_with_evidence",
                     "description": "Completes the analyst's goal by answering a question with evidence.",
                     "parameters": {
@@ -287,8 +312,9 @@ class Analyst:
                                                "by paper as evidence."
                             }
                         },
-                    },
-                    "required": ["answer", "evidence"],
+                        "additionalProperties": False,
+                        "required": ["answer", "evidence"]
+                    }
                 }
             }
         thoughts = reflect_on_evidence(self.goal, answer, evidence)
@@ -297,13 +323,15 @@ class Analyst:
             self.answer = answer
             self.evidence = evidence
             return "Goal achieved:\n" + answer + "\n\nEvidence:\n" + evidence
-        return "Goal not achieved. Here are some thoughts on why: " + thoughts
+        return ("Goal not achieved. Here are some thoughts on why: " + thoughts + "\n\n" +
+                "Consider refining your data collection request with this in mind, and trying again.")
 
     def answer_followup_question(self, answer="", evidence="", return_tool=False):
         if return_tool:
             return {
                 "type": "function",
                 "function": {
+                    "strict": True,
                     "name": "answer_followup_question",
                     "description": "Answers a follow-up question with evidence.",
                     "parameters": {
@@ -318,8 +346,9 @@ class Analyst:
                                 "description": "The evidence to answer the question."
                             }
                         },
-                    },
-                    "required": ["answer", "evidence"],
+                        "additionalProperties": False,
+                        "required": ["answer", "evidence"]
+                    }
                 }
             }
         thoughts = reflect_on_evidence(self.goal, answer, evidence)
@@ -347,13 +376,16 @@ class Analyst:
                 self.db.add_analyst_context(self.name, message)
         while not self.answer:
             messages = self.db.get_analyst_context(self.name)
-            arguments = {"messages": messages, "model": "gpt-4o", "tools": self.tools, "temperature": 0.2}
+            arguments = {"messages": messages, "model": "o3-mini", 'reasoning_effort': 'medium', "tools": self.tools}
             chat_response = client.chat.completions.create(**arguments)
             new_history = use_tools(chat_response, arguments, function_dict=self.tool_callables)
             for call in new_history:
                 self.db.add_analyst_context(self.name, call)
                 messages.append(call)
-            if self.answer_attempts > self.attempts and not self.answer:
+            last_three_messages_exist_and_are_identical = len(messages) > 3 and messages[-1]["content"] == messages[-2]["content"] == messages[-3]["content"]
+            last_three_messages_no_tools = messages[-1].get("tool_calls",None) is None and messages[-2].get("tool_calls",None) is None and messages[-3].get("tool_calls",None) is None
+            if (self.answer_attempts > self.attempts and not self.answer or
+                    len(messages) > 100 or last_three_messages_exist_and_are_identical or last_three_messages_no_tools):
                 self.answer = ("The analyst has not been able to answer the question in the allotted attempts. "
                                "Refine the goal and make sure it is specific and longer to help the next analyst "
                                "succeed where this one failed. You should remind it that when it creates its "
@@ -361,5 +393,11 @@ class Analyst:
                 reasons = [message["content"] for message in messages if message["role"] == "tool" and message["name"] == "complete_goal_by_answering_question_with_evidence"]
                 self.evidence = ("Here are the reasons the analyst failed to reach its goal "
                                  "after ") + str(self.attempts) + " attempts:" + "\n\n" + "\n\n".join(reasons)
+            last_two_messages_no_tools = messages[-1].get("tool_calls", None) is None and messages[-2].get("tool_calls",None) is None
+            if last_two_messages_no_tools:
+                messages += [{
+                    "role": "system",
+                    "content": "Make sure to use tool calls to attempt to collect data or complete your goal, do not just talk to yourself."
+                }]
         self.db.add_analyst_metadata(self.name,
                                      {"goal_achieved": True, "answer": self.answer, "evidence": self.evidence})

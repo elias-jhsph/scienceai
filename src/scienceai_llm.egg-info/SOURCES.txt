@@ -16,6 +16,7 @@ src/scienceai/llm.py
 src/scienceai/principle_investigator.py
 src/scienceai/principle_investigator_base_prompt.txt
 src/scienceai/process_paper.py
+src/scienceai/reasoning.py
 src/scienceai/io/placeholder.txt
 src/scienceai/static/apps.css
 src/scienceai/static/main.js

@@ -301,8 +301,7 @@ class DatabaseManager:
         return True
 
     @log_update
-    def add_analyst_tool_tracker(self, analyst_name, tool_name, json_data={}):
-        tool_time = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+    def add_analyst_tool_tracker(self, analyst_name, tool_name, tool_time, json_data={}):
         tool_fullname = analyst_name+"_/"+tool_name + "_" + tool_time
         if not DDB.at(tool_fullname).exists():
             DDB.at(tool_fullname).create(json_data)
@@ -310,6 +309,7 @@ class DatabaseManager:
             with DDB.at(tool_fullname).session() as (session, tool):
                 tool.update(json_data)
                 session.write()
+        time.sleep(3)
         with DDB.at("Analysts").session() as (session, analysts):
             if analyst_name not in analysts:
                 raise ValueError(f"Analyst {analyst_name} not found")
@@ -318,6 +318,30 @@ class DatabaseManager:
             analysts[analyst_name]["tools"].append({"tool_name": tool_name, "json_path": tool_fullname + ".json", "hidden": True})
             session.write()
         return tool_fullname
+
+
+    @log_update
+    def create_pi_arbitrary_csv(self, csv_name, csv_str):
+        # write the csv_data to the pi_arbitrary_csv folder
+        csv_path = os.path.join(self.project_path, "pi_arbitrary_csv", csv_name.replace(".csv", "") + ".csv")
+        if not os.path.exists(os.path.dirname(csv_path)):
+            os.makedirs(os.path.dirname(csv_path))
+        with open(csv_path, "w") as f:
+            f.write(csv_str)
+        # then store a link to the csv in the database
+        if not DDB.at("pi_arbitrary_csv").exists():
+            DDB.at("pi_arbitrary_csv").create({}) 
+        with DDB.at("pi_arbitrary_csv").session() as (session, pi_arbitrary_csv):
+            pi_arbitrary_csv[csv_name] = csv_path
+            session.write()
+        return True
+
+
+    def get_pi_arbitrary_csv(self, csv_name):
+        if not DDB.at("pi_arbitrary_csv", key=csv_name).exists():
+            raise ValueError(f"CSV {csv_name} not found")
+        return DDB.at("pi_arbitrary_csv", key=csv_name).read()
+
 
     @log_update
     def convert_analyst_tool_tracker(self, analyst_name, tool_name):
@@ -329,7 +353,7 @@ class DatabaseManager:
                 if tool["tool_name"] == tool_name:
                     data_path = tool["json_path"]
                     data = DDB.at(data_path.replace(".json", "")).read()
-                    data = list({k: {**{"id": k[10:]}, **v} for k, v in data.items()}.values())
+                    data = list({k: {**{"id": k[:10]}, **v} for k, v in data.items()}.values())
                     flat_data = json_normalize(data)
                     csv_path = data_path.replace(".json", ".csv")
                     csv_folder = os.path.join(self.project_path, "csv_files")
@@ -367,8 +391,14 @@ class DatabaseManager:
         columns = []
         double_columns = {}
         triple_columns = []
+        bad_paths = []
         for csv in csv_paths.keys():
-            df = pd.read_csv(csv)
+            try:
+                df = pd.read_csv(csv)
+            except Exception as e:
+                print(f"Error reading csv {csv}: {e}")
+                bad_paths.append(csv)
+                continue
             for col in df.columns:
                 if col == "id":
                     continue
@@ -380,6 +410,9 @@ class DatabaseManager:
                     else:
                         triple_columns.append(col)
         double_columns = list(double_columns.values())
+
+        for bad_path in bad_paths:
+            del csv_paths[bad_path]
 
         merged_df = pd.DataFrame()
 
@@ -396,6 +429,15 @@ class DatabaseManager:
                 merged_df = df
             else:
                 merged_df = pd.merge(merged_df, df, how="outer", on="id")
+
+        papers = self.get_database_papers()
+        papers = [{k: v for k, v in paper.items() if "_path" not in k} for paper in papers]
+        papers = [{k if k != "paper_id" else "id": v for k, v in paper.items()} for paper in papers]
+        papers = [{k: (v[:10] if k == 'id' else v) for k, v in paper.items()} for paper in papers]
+
+        papers_df = pd.DataFrame(papers)
+
+        merged_df = pd.merge(papers_df, merged_df, how="outer", on="id")
 
         merged_df.to_csv(os.path.join(self.project_path, "merged_analyst_tools.csv"), index=False)
         return os.path.join(self.project_path, "merged_analyst_tools.csv")
@@ -519,10 +561,10 @@ class DatabaseManager:
             return all
 
     def get_all_papers(self, analyst=None, named_list=None):
-        if (analyst or named_list) and not (analyst and named_list):
-            raise ValueError("Both analyst and named_list must be provided")
+        if (named_list and not analyst):
+            raise ValueError("If named_list is provided, analyst must also be provided")
         papers = DDB.at("papers").read()
-        if analyst:
+        if analyst and named_list:
             result = [paper for paper in papers.values() if analyst in paper and named_list in paper[analyst]]
             return result
         return list(papers.values())

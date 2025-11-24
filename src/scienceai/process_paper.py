@@ -2,8 +2,13 @@ import base64
 import os
 import tempfile
 import shutil
+import warnings
+import io
+import re
 
 import fitz
+from PIL import Image
+import pytesseract
 from math import atan2, degrees
 
 from .llm import client, use_tools
@@ -44,6 +49,7 @@ def extract_doi(images, incorrect_doi_list=None):
             "function": {
                 "name": "store_doi",
                 "description": "Store the DOI in the database",
+                "strict": True,
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -52,19 +58,20 @@ def extract_doi(images, incorrect_doi_list=None):
                             "description": "The DOI to store",
                         },
                     },
-                    "required": ["doi"],
+                    "additionalProperties": False, "required": ["doi"],
                 },
             }
         },
         {
             "type": "function",
             "function": {
+                "strict": True,
                 "name": "keep_searching_for_doi",
                 "description": "Keep searching for the DOI",
                 "parameters": {
                     "type": "object",
                     "properties": {},
-                    "required": [],
+                    "additionalProperties": False, "required": [],
                 },
             }
         }
@@ -110,9 +117,9 @@ def extract_doi(images, incorrect_doi_list=None):
 
         retry = 0
         valid_calls = []
-        while valid_calls == [] and retry < 5 :
+        while valid_calls == [] and retry < 4:
             if retry > 0:
-                print("Retrying...")
+                print("Retrying DOI Extraction("+str(retry)+")...")
             chat_response = client.chat.completions.create(**arguments)
             if chat_response.choices[0].message.tool_calls:
                 valid_calls = use_tools(chat_response, arguments, call_functions=False)
@@ -135,6 +142,7 @@ def create_cleaned_text(images):
             "function": {
                 "name": "store_figure_table_count",
                 "description": "Store the count of figures and tables",
+                "strict": True,
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -147,7 +155,7 @@ def create_cleaned_text(images):
                             "description": "The number of tables on the page",
                         }
                     },
-                    "required": ["figure_count", "table_count"],
+                    "additionalProperties": False, "required": ["figure_count", "table_count"],
                 },
             }
         }
@@ -234,7 +242,7 @@ def create_cleaned_text(images):
         table_figure_count = -1
         while table_figure_count < 0 and retry < 3:
             if retry > 0:
-                print("Retrying...")
+                print("Retrying Creating Cleaned Text...")
             chat_response = client.chat.completions.create(**arguments)
             if chat_response.choices[0].message.tool_calls:
                 valid_calls = use_tools(chat_response, arguments, call_functions=False)
@@ -285,6 +293,7 @@ def confirm_doi(title, images):
         {
             "type": "function",
             "function": {
+                "strict": True,
                 "name": "store_title",
                 "description": "Store the title in the database",
                 "parameters": {
@@ -295,7 +304,7 @@ def confirm_doi(title, images):
                             "description": "The title to store",
                         },
                     },
-                    "required": ["title"],
+                    "additionalProperties": False, "required": ["title"],
                 },
             }
         },
@@ -341,6 +350,7 @@ def confirm_doi(title, images):
         {
             "type": "function",
             "function": {
+                "strict": True,
                 "name": "store_title_similar",
                 "description": "Store the title similarity in the database",
                 "parameters": {
@@ -351,7 +361,7 @@ def confirm_doi(title, images):
                             "description": "Are the titles similar?",
                         },
                     },
-                    "required": ["titles_similar"],
+                    "additionalProperties": False, "required": ["titles_similar"],
                 },
             }
         },
@@ -380,28 +390,94 @@ def confirm_doi(title, images):
     return title_similarity
 
 
+def extract_title(images):
+    system_message = ("Read the contents of the provided scan of a page from a research paper. "
+                      "Extract the title of the paper from the text")
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "strict": True,
+                "name": "store_title",
+                "description": "Store the title in the database",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "The title to store",
+                        },
+                    },
+                    "additionalProperties": False, "required": ["title"],
+                },
+            }
+        },
+    ]
+    arguments = {"messages": [
+        {
+            "role": "system",
+            "content": system_message
+        },
+        {
+            "role": "user",
+            "content": [
+                        {
+                          "type": "image_url",
+                          "image_url": {
+                              "url": images[0],
+                          }
+                        }
+                      ]
+        }
+    ], "tools": tools, "model": "gpt-4o", "temperature": 0.2,
+        "tool_choice": {"type": "function", "function": {"name": "store_title"}}}
+
+    retry = 0
+    title_found = False
+    while not title_found and retry < 3:
+        chat_response = client.chat.completions.create(**arguments)
+        if chat_response.choices[0].message.tool_calls:
+            valid_calls = use_tools(chat_response, arguments, call_functions=False)
+            if valid_calls:
+                for call in valid_calls:
+                    if call["name"] == "store_title":
+                        stored_title = call["parameters"]["title"]
+                        title_found = True
+        retry += 1
+
+    if not title_found:
+        return None
+
+    return stored_title
+
+
 def rotate_pdf_pages(pdf_path):
     doc = fitz.open(pdf_path)
+    modified_pdf_path = pdf_path.replace(".pdf", "_rotated.pdf")
+    mod_doc = fitz.open()
     for page in doc:
         text_blocks = page.get_text("dict")["blocks"]
         total_weight = 0
+        total_length = 0
         weighted_sum_angles = 0
-
+        blocks_found = False
         # Collect angles of text blocks
         for block in text_blocks:
             if block["type"] == 0:  # Text block
+                blocks_found = True
                 for line in block['lines']:
                     dir_vector = line['dir']
                     for span in line['spans']:
                         angle = atan2(dir_vector[1], dir_vector[0])
                         text_length = len(span['text'])
+                        total_length += text_length
                         weighted_sum_angles += degrees(angle) * text_length
                         total_weight += text_length
 
         weighted_average_angle = weighted_sum_angles / total_weight if total_weight else 0
 
         # Calculate the average angle if angles were detected
-        if total_weight > 0:
+        if blocks_found and total_weight > 0 and not total_length < 2000:
             average_angle = weighted_average_angle
 
             # Determine the rotation needed to align text upright
@@ -412,73 +488,155 @@ def rotate_pdf_pages(pdf_path):
                 # This is a simplistic approach; more sophisticated logic may be needed
                 normalized_angle = 360 - (round(average_angle / 90) * 90)
                 page.set_rotation(normalized_angle)
-    modified_pdf_path = pdf_path.replace(".pdf", "_rotated.pdf")
-    doc.save(modified_pdf_path)
+        else:
+            pix = page.get_pixmap(dpi=300)
+            image = Image.open(io.BytesIO(pix.tobytes()))
+
+            # Use pytesseract to detect the orientation of the text in the image
+            ocr_data = pytesseract.image_to_osd(image, config='--psm 0 -c min_characters_to_try=50', output_type=pytesseract.Output.DICT)
+
+            # Extract the rotation angle suggested by pytesseract
+            rotation_angle = ocr_data["rotate"]
+
+            # Rotate the page based on the OCR-detected angle
+            page.set_rotation(rotation_angle+page.rotation)
+        src_rect = page.rect  # source page rect
+        w, h = src_rect.br  # save its width, height
+        src_rot = page.rotation  # save source rotation
+        page.set_rotation(0)  # set rotation to 0 temporarily
+        page = mod_doc.new_page(width=w, height=h)  # make output page
+        page.show_pdf_page(  # insert source page
+            page.rect,
+            doc,
+            page.number,
+            rotate=-src_rot,  # use reversed original rotation
+        )
     doc.close()
+    mod_doc.save(modified_pdf_path)
+    mod_doc.close()
     shutil.move(modified_pdf_path, pdf_path)
     return
 
 
-def gather_metadata(pages):
-    retry = 3
-    old_doi_list = None
+def gather_metadata(pdf_path, pages):
+    doc = fitz.open(pdf_path)
     found_doi = False
-    while retry > 0 and not found_doi:
-        doi = extract_doi(pages, incorrect_doi_list=old_doi_list)
-        try:
-            crossref_data = cr.works(ids=doi)
-            title = crossref_data["message"]["title"][0]
-            print("Title: " + title)
-            found_doi = confirm_doi(title, pages)
-            print("Found DOI: " + str(found_doi))
-            if not found_doi:
-                if not old_doi_list:
-                    old_doi_list = [doi]
-                else:
-                    old_doi_list.append(doi)
-        except Exception as e:
-            import traceback
-            print(traceback.format_exc())
-            retry -= 1
+    old_doi_list = None
+    for page in doc:
+        simple_doi_list = []
+        text_blocks = page.get_text("dict")["blocks"]
+        total_length = 0
+        for block in text_blocks:
+            if block["type"] == 0:  # Text block
+                for line in block['lines']:
+                    # use regular expression to find DOI
+                    for span in line['spans']:
+                        text = span['text']
+                        total_length += len(text)
+                        if "10." in text:
+                            # use a simple regular expression to find the DOI
+                            simple_doi_list += re.findall(r"10\.\d{4,9}\/[-._;()/:a-zA-Z0-9]+", text)
+
+        if total_length < 2000:
+
+            pix = page.get_pixmap(dpi=300)
+            image = Image.open(io.BytesIO(pix.tobytes()))
+
+            text_found = pytesseract.image_to_string(image)
+
+            simple_doi_list += re.findall(r"10\.\d{4,9}\/[-._;()/:a-zA-Z0-9]+", text_found)
+
+        if simple_doi_list:
+            for doi in simple_doi_list:
+                try:
+                    crossref_data = cr.works(ids=doi)
+                    title = crossref_data["message"]["title"][0]
+                    print("EZ Title: " + title)
+                    found_doi = confirm_doi(title, pages)
+                    print("EZ Found DOI: " + str(found_doi))
+                    if not found_doi:
+                        if not old_doi_list:
+                            old_doi_list = [doi]
+                        else:
+                            old_doi_list.append(doi)
+                except Exception as e:
+                    import traceback
+                    print(traceback.format_exc())
+        if found_doi:
+            break
+
+    doc.close()
+
     if not found_doi:
-        raise Exception("DOI not found")
-
-    metadata = crossref_data["message"]
-    if "given" not in metadata["author"][0]:
-        metadata["author"][0] = {"given": "", "family": metadata["author"][0]["name"]}
-
-    dois = []
-    for ref in metadata["reference"]:
-        if "DOI" in ref:
-            dois.append(ref["DOI"])
-
-    references = []
-    ref_number = 0
-    try:
-        # Retrieve metadata for multiple DOIs at once
-        res = cr.works(ids=dois)
-        for item in res:
-            ref_number += 1
-            data = item['message']
-            # Format the reference string based on available fields
-            if 'given' in data['author'][0] and 'family' in data['author'][0]:
-                author_str = ', '.join([author['given'] + ' ' + author['family'] for author in data.get('author', []) if
-                                        'given' in author and 'family' in author])
-            elif 'name' in data['author'][0]:
-                author_str = ', '.join([author['name'] for author in data.get('author', []) if 'name' in author])
+        retry = 0
+        while retry < 10 and not found_doi:
+            doi = extract_doi(pages, incorrect_doi_list=old_doi_list)
+            if not doi:
+                print("DOI not found...")
+                break
             else:
-                author_str = ''
-            title_str = data.get('title', [''])[0] if data.get('title', None) else ''
-            journal_str = data.get('container-title', [''])[0] if data.get('container-title', None) else ''
-            volume_str = data.get('volume', '')
-            page_str = data.get('page', '')
-            year_str = str(data['issued']['date-parts'][0][0]) if data.get('issued', None) else ''
-            doi_str = data.get('DOI', '')
-            reference_str = f"{ref_number}. {author_str}. {title_str}. {journal_str}, {volume_str}, {page_str}, " \
-                            f"{year_str}. DOI: {doi_str}"
-            references.append(reference_str.strip())
-    except Exception as e:
-        references.append(f"Details not retrieved due to error: {e}")
+                try:
+                    crossref_data = cr.works(ids=doi)
+                    title = crossref_data["message"]["title"][0]
+                    print("Title: " + title)
+                    found_doi = confirm_doi(title, pages)
+                    print("Found DOI: " + str(found_doi))
+                    if not found_doi:
+                        if not old_doi_list:
+                            old_doi_list = [doi]
+                        else:
+                            old_doi_list.append(doi)
+                except Exception as e:
+                    import traceback
+                    print(traceback.format_exc())
+                    retry += 1
+
+    if not found_doi:
+        warnings.warn("DOI not found")
+    if found_doi:
+        metadata = crossref_data["message"]
+        if "given" not in metadata["author"][0]:
+            metadata["author"][0] = {"given": "", "family": metadata["author"][0]["name"]}
+
+        dois = []
+        for ref in metadata["reference"]:
+            if "DOI" in ref:
+                dois.append(ref["DOI"])
+
+        references = []
+        ref_number = 0
+        try:
+            # Retrieve metadata for multiple DOIs at once
+            res = cr.works(ids=dois)
+            for item in res:
+                ref_number += 1
+                data = item['message']
+                # Format the reference string based on available fields
+                if 'given' in data['author'][0] and 'family' in data['author'][0]:
+                    author_str = ', '.join([author['given'] + ' ' + author['family'] for author in data.get('author', []) if
+                                            'given' in author and 'family' in author])
+                elif 'name' in data['author'][0]:
+                    author_str = ', '.join([author['name'] for author in data.get('author', []) if 'name' in author])
+                else:
+                    author_str = ''
+                title_str = data.get('title', [''])[0] if data.get('title', None) else ''
+                journal_str = data.get('container-title', [''])[0] if data.get('container-title', None) else ''
+                volume_str = data.get('volume', '')
+                page_str = data.get('page', '')
+                year_str = str(data['issued']['date-parts'][0][0]) if data.get('issued', None) else ''
+                doi_str = data.get('DOI', '')
+                reference_str = f"{ref_number}. {author_str}. {title_str}. {journal_str}, {volume_str}, {page_str}, " \
+                                f"{year_str}. DOI: {doi_str}"
+                references.append(reference_str.strip())
+        except Exception as e:
+            references.append(f"Details not retrieved due to error: {e}")
+    else:
+        title_extracted = extract_title(pages)
+        if title_extracted:
+            metadata = {"title": [title_extracted], "metadata_status": "Title extracted, DOI not found"}
+        else:
+            metadata = {"metadata_status": "Title not found, DOI not found"}
+        references = []
     return references, metadata
 
 
@@ -509,7 +667,7 @@ def process_paper(pdf_path):
         page_images.append(page_image)
 
     output = {}
-    references, metadata = gather_metadata(page_images)
+    references, metadata = gather_metadata(pdf_path, page_images)
     title = metadata["title"][0]
     output["page_images"] = page_images
     output["cleaned_text"] = (title + "\n\n\n" +

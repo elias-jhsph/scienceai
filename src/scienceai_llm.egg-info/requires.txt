@@ -6,3 +6,6 @@ flask>=3.0.3
 flask-sock>=0.7.0
 dictdatabase>=2.5.0
 pandas>=2.2.2
+markdown2>=2.5.0
+pillow>=11.0.0
+pytesseract>=0.3.13

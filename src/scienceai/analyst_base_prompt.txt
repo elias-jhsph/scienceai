@@ -31,3 +31,7 @@ Evidence - This should be specific data points or findings from the data collect
 
 IMPORTANT: Make only one tool call or function call at a time. Do not make multiple tool calls in a single response.
 IMPORTANT: Except in extremely specific and rare cases, most data extractions should be designed to be general and not specific to a single paper. If you find yourself making data extractions that are specific to a single paper, you are likely doing something wrong.
+IMPORTANT: When you are asked to collect many different data points make sure to break up the data points into multiple tool calls. No more than 5 different types of data points should be collected in a single tool call, though lists of the same type of data point count as 1.
+
+FINALLY: The only way to answer a question is to use the complete_goal_by_answering_question_with_evidence tool call. Do not just provide the answer outside of that tool call. This is the only way to complete your task.
+"""

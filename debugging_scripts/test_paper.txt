@@ -1,0 +1,263 @@
+What Is the Fate of Total Joint Arthroplasty Patients Who Are Asked to Quit Smoking Prior to Surgery?
+
+
+
+
+**Start of Page 1**
+
+**Abstract**
+
+**Background:** Smoking is a known risk factor for complications following primary total joint arthroplasty (TJA). Little is known regarding the fate of patients who are asked to quit smoking before surgery. The purpose of this study was to evaluate the success of smoking cessation prior to primary TJA and the impact of smoking cessation on perioperative outcomes.
+
+**Methods:** This is a retrospective review of patients who presented between 2008 and 2020 to a single academic medical center with a documented smoking history and were asked to quit smoking prior to receiving a date for primary TJA. The cohort was surveyed about smoking cessation, smoking history, use of quit aids, seeking surgery elsewhere due to the cessation policy, and postoperative complications. Descriptive statistics evaluated the relationship between demographics, smoking cessation, and perioperative complications.
+
+**Results:** A total of 101 patients completed the survey with an overall response rate of 48%. Sixty-two percent of patients quit smoking before surgery, and 51% of these patients reported remaining smoke-free at 6 months postoperatively. The average time to quit before TJA was 45 days (range: 1-365 days), and 62% quit without quit aids. The wound complication/infection rate was significantly higher for patients who did not stop smoking prior to TJA (4 of 16; 27%) than for those who did quit prior to surgery (3 of 63; 5%; P = .02).
+
+**Conclusions:** This study demonstrates that most patients (62%) will stop smoking, if required, prior to primary TJA. Furthermore, 51% of patients reported abstinence from smoking at 6 months following TJA. TJA appears to be an effective motivator for smoking cessation.
+
+**Level of Evidence:** III (retrospective cohort study).
+
+**Introduction**
+
+In the United States, tobacco use is the number 1 preventable cause of death, disease, and disability. In 2019, 34.1 million adults in the United States smoked cigarettes [1]. Today, smoking remains a substantial burden on the health-care system with nearly $170 billion spent on direct medical care for smokers [1]. Most cigarette smokers (68%) desire to quit smoking, and 55% attempted to quit in the past year, but only 7.5% are successful in ceasing smoking for >6 months [2]. Fewer than 30% of those who quit used evidence-based cessation methods to quit smoking [1-3].
+
+It is well established that tobacco smokers are at an increased risk of wound complications, lower respiratory infections, myocardial infarction, and increased mortality rates following primary total hip arthroplasty and total knee arthroplasty [4-11]. Nicotine inhibits blood flow to tissues and disrupts the humoral and cellular mechanisms of immunity at surgical sites [12-14]. Reduced blood flow and compromised immune responses may contribute to poor wound healing and increased risk of periprosthetic joint infection [6,13,14]. Many surgeons require smoking cessation prior to indicating patients for elective, primary total joint
+
+**End of Page 1**
+
+
+
+**Start of Page 2**
+
+arthroplasty (TJA). The American Academy of Orthopedic Surgeons recommends smoking cessation 4-6 weeks prior to surgical procedures. At our institution, smoking cessation is required prior to scheduling an elective primary TJA, with cessation confirmed by urine screening tests. The preoperative period represents a potential target for implementing smoking cessation efforts. This protocol offers a tangible incentive to quit smoking (TJA surgery) with continuity of care at perioperative visits. However, smoking cessation and continued abstinence from tobacco use in the perioperative period surrounding primary TJA have proven difficult for many patients. Little is known about the fate of patients who present to an arthroplasty clinic but are asked to quit smoking prior to indication for TJA. The purpose of this study was to evaluate the success of smoking cessation among TJA candidates who were required to quit smoking prior to the surgery and the impact of smoking cessation on perioperative outcomes.
+
+Material and methods
+
+Institutional review board approval was obtained prior to the initiation of the study. A retrospective review of a single academic medical center’s TJA clinic was performed for the year 2008 through 2020. The study period was chosen to start in 2008 to coincide with the implementation of a division-wide preoperative smoking cessation policy for elective TJA at our institution. Smoking cessation was confirmed through urine nicotine testing prior to scheduling an elective TJA.
+
+Study cohort
+
+Patients identified through retrospective review of the electronic medical record who presented for a new patient visit to the hip and knee arthroplasty clinic between 2008 and 2020 were identified. New patients presenting to hip and knee arthroplasty clinics completed an intake questionnaire with specific social history questions asked regarding the smoking status. The medical records of all new patients who indicated they were actively smoking were reviewed to determine if they were otherwise a candidate for primary TJA. All patients that were indicated for primary TJA but denied scheduling surgery secondary to active smoking status were included. This allowed us to capture patients who may have never proceeded with the surgery or elected to have the surgery elsewhere due to the institution’s smoking cessation policy. A survey was administered retrospectively to patients who were required to quit smoking prior to scheduling of TJA to obtain information regarding their success with smoking cessation, whether they received surgery at another institution, the length of time it took to quit smoking, smoking history (years smoking, amount), current smoking status, and whether any complications occurred in the year following surgery. Surveys were administered at least 6 months after the index surgery. Smoking cessation prior to operation was confirmed with negative urine nicotine test 6 weeks prior to surgery. The survey was administered electronically via REDCap (Research Electronic Data Capture). REDCap is a secure, web-based application designed to support data capture and supported by thousands of academic and partner institutions. The survey was distributed to 209 patients who met study inclusion criteria, and 101 patients completed the survey for a 48% response rate.
+
+Patient demographics, including age, sex, body mass index (BMI), total years smoking, and total pack years smoked, were compared between patients who were able to successfully quit smoking prior to TJA and those who were unable to quit prior to surgery. Demographic variables were also compared to utilization of quit aids and rates of continued abstinence from smoking. The primary outcome of interest was the rate of any complication, any reoperation, and any wound complication or infection. Reoperation is defined as any additional surgery on the joint of interest. Wound complication/infection endpoints included periprosthetic joint infection, superficial soft tissue infection, delayed wound healing, and wound dehiscence.
+
+**Figure Description:**
+
+**Figure 1. Cohorts of study participants, and outcomes of each participant.**
+
+- **209 patients received the survey**
+  - **101 patients completed survey (48%)**
+    - **78 patients underwent TJA surgery (77%)**
+      - **63 subjects quit smoking prior to surgery (62%)**
+        - **58 quit and had surgery at study site (71%)**
+        - **5 quit and had surgery elsewhere (6.5%)**
+      - **15 subjects underwent TJA without smoking cessation (15%)**
+    - **23 subjects did not have surgery (23%)**
+      - **14 did not meet smoking cessation requirement (14%)**
+      - **7 did not meet BMI requirement (7%)**
+      - **2 selected other reason (2%)**
+  - **10 did not quit had surgery at study site (13%)**
+  - **5 did not quit and had surgery elsewhere (6.5%)**
+
+**FIGURES_COMPLETE**
+
+**End of Page 2**
+
+
+
+**Start of Page 3**
+
+Statistical analysis
+
+Descriptive statistics were performed, and continuous variables were presented as median (interquartile range) due to nonnormal distributions while categorical variables were presented as frequencies (percentages). To evaluate the characteristics associated with smoking status and smoking cessation method, differences in continuous variables were evaluated using the Wilcoxon rank-sum test. Categorical variables and differences in complications rates were analyzed with the chi-square test. Analyses were completed using SAS statistical software version 9.4 (SAS Institute, Inc., Cary, NC). A P value <.05 was considered statistically significant.
+
+Results
+
+Smoking cessation, demographics, and quit methods
+
+Of the 101 patients who completed the survey, 63 patients (62%) quit smoking prior to undergoing primary TJA. Fifteen patients (15%) underwent TJA without smoking cessation. In total, 23 patients did not undergo TJA (23%): 19 of 23 patients were unable to quit smoking and thus remained ineligible for surgery, 2 patients were able to quit smoking but were unable to achieve a goal BMI prior to surgery, and 2 patients were able to quit smoking and then deferred surgery.
+
+The average time from being asked to stop smoking to smoking cessation for patients who quit was 45 days (range, 1 to 365 days). There were no significant differences in age, sex, BMI, total years smoking, or total pack years between patients who quit smoking prior to TJA and those who did not (Table 1). Of the 63 patients who quit smoking prior to undergoing primary TJA, 62% did so without any formal aid such as medication, support group, or nicotine replacement therapy (NRT) (Table 2). For the group who used NRT to successfully quit smoking, the average years smoking (39.5 years vs 25 years, P = .007) and the pack-year history (17.5 vs 7.5, P = .0067) were significantly higher than those of the group who did not use NRT (Table 3).
+
+At 6 months following TJA, 32 of 63 patients (51%) reported continued abstinence from smoking, while 31 patients (49%) had resumed smoking (Table 4). There were no significant differences in demographics or smoking history when comparing the group who quit and continued to be abstinent from smoking vs the group who quit and returned to smoking postoperatively (Table 4).
+
+Postoperative complications
+
+Overall, 7 of 78 patients (9%) who had a TJA surgery developed a surgical complication within 1 year postoperatively. All the surgical complications that occurred were infection or wound-related complications (Table 5). Patients who did not quit smoking had a significantly higher rate of wound complications and/or infection (4 of 15, 27%) than patients who did quit smoking prior to TJA (3 of 63, 5%, P = .023). Rates of any reoperation (13% vs 5%, P = .23) were also higher in patients who did not quit smoking prior to TJA, but this difference was not statistically significant.
+
+Discussion
+
+While there have been significant reductions in the incidence and prevalence of cigarette smoking among adults in the United States since the 1960s, smoking cessation remains a difficult process [2]. In 2018, Creamer et al. found that of the 55% of smokers that attempted to quit in the prior year, only 7.5% were successful in quitting 6-7 months [2]. A randomized control trial with 8144 subjects demonstrated that 25%-35% of smokers are able to quit for at least 6 months following a cessation program, but this rate drops to 17% at 1 year [20]. Given this difficulty, the indication for primary TJA may be time of increased education, motivation, or resources for patients to quit smoking [2,15-17]. In the present study, 62% of patients were able to successfully quit smoking, when required to do so, prior to primary TJA. Furthermore, 51% of patients reported remaining abstinent from smoking at least 6 months following the surgery.
+
+Reported rates of smoking cessation to achieve eligibility for arthroplasty surgery are widely variable in current literature. Hart et al. evaluated a cohort of 28,758 primary TJAs: 2514 reported smoking in the year leading up to surgery [17]. Of these 2,514, only 405 (16%) were able to quit smoking prior to surgery [17]. Arhavan et al. examined the utility of a counseling program in order to facilitate smoking cessation prior to TJA [15]; of 30 patients enrolled in the study, 21 (70%) were able to cease smoking for planned TJA; ultimately, only 18 patients (60%) underwent surgery [15]. Patients in the present study were able to cease smoking relatively quickly,
+
+**Table Description:**
+
+**Table 2**
+How subjects quit smoking.
+
+| Return to smoking? | How patients quit smoking | Total |
+|--------------------|---------------------------|-------|
+|                    | Not listed                | NRT   | Non-nicotine Rx group | Support group |
+| No                 | 21                        | 8     | 0                     | 1             | 32    |
+| Yes                | 18                        | 10    | 2                     | 1             | 31    |
+| Total              | 39                        | 18    | 2                     | 2             | 63    |
+
+Rx, prescription.
+
+**Figure/Table Description:**
+This table shows the distribution of patients who quit smoking using different methods and whether they returned to smoking. The methods listed are: not listed, NRT (nicotine replacement therapy), non-nicotine prescription group, and support group. The table indicates that out of 63 patients, 32 did not return to smoking while 31 did. The majority of patients who did not return to smoking used methods that are not listed (21), followed by NRT (8), and support group (1). Among those who returned to smoking, the majority used methods that are not listed (18), followed by NRT (10), non-nicotine prescription group (2), and support group (1).
+
+**Table 1**
+Demographic comparison of quit vs did not quit smoking prior to TJA.
+
+| Did they quit smoking? | Number of participants | Variable         | Median | Mean | Standard deviation | P value |
+|------------------------|------------------------|------------------|--------|------|--------------------|---------|
+| No                     | 15                     | Age              | 57.4   | 58.0 | 13.1               | .6255   |
+|                        |                        | BMI              | 34.9   | 34.8 | 8.1                | .3258   |
+|                        |                        | Female (n, %)    | 6 (40.0%) |      |                    | .5210   |
+|                        |                        | Total smoking years | 30.0 | 28.2 | 12.7               | .9696   |
+|                        |                        | Total pack years | 17.5   | 21.8 | 15.6               | .0973   |
+| Yes                    | 63                     | Age              | 60.5   | 59.5 | 9.9                |         |
+|                        |                        | BMI              | 30.9   | 33.0 | 9.1                |         |
+|                        |                        | Female (n, %)    | 32 (50.8%) |      |                    |         |
+|                        |                        | Total smoking years | 28.0 | 28.0 | 10.0               |         |
+|                        |                        | Total pack years | 10.0   | 16.1 | 15.7               |         |
+
+P value, percent chance that the results are significant (alpha = 0.05).
+
+**Figure/Table Description:**
+This table compares the demographics of patients who quit smoking versus those who did not quit smoking prior to total joint arthroplasty (TJA). The variables compared include age, BMI, gender distribution, total smoking years, and total pack years. The table shows the median, mean, and standard deviation for each variable, along with the P value indicating the statistical significance of the differences. The results indicate no significant differences between the two groups in terms of age, BMI, gender distribution, total smoking years, and total pack years.
+
+
+
+**End of Page 3**
+
+
+
+**Start of Page 4**
+
+Of the patients in the present study that successfully quit smoking prior to TJA surgery, a majority (62%) did so through the use of \"cold turkey\" techniques, without the use of aids in the form of medications, support groups, or NRT. Interestingly, patients that utilized NRT to help quit smoking had a longer history of cigarette use (40 years vs 25 years, P = .007) and a higher overall volume of cigarette use (18 years vs 8 years, P = .007) relative to patients that did not use NRT to quit. Patients utilizing NRT, while they are not smoking, may still be subject to the harmful effects of nicotine in the perioperative period, such as tissue hypoxia, alterations in collagen synthesis, and immune modulation [21]. Given these detrimental effects, consideration for reserving NRT for recalcitrant cases may be of benefit; however, further study is needed.
+
+There is a wealth of data demonstrating risks between smoking and perioperative complications following hip and knee arthroplasty, [7,14,22,23] as well as increased risk of hospital readmission and reoperation in smokers relative to nonsmokers [24-26]. In the present study, smokers had an increased rate of any complication (27% vs 5%, P=.012) and wound complications/infection (27% vs 5%, P = .023) relative to patients who ceased smoking prior to surgery. The data from this study support the findings from other studies demonstrating that active tobacco use at the time of TJA significantly increases the risk of complications, particularly infection-related complications, following surgery.
+
+Along with reducing postoperative wound complications, a smoking cessation protocol prior to elective TJA could aid with public health efforts to reduce smoking. Worldwide, over 7 million deaths a year are attributed to tobacco use, and this number is anticipated to rise [27]. While the present study demonstrates the public health implication of using elective TJA surgery as an incentive for smoking cessation.
+
+This study has limitations. Primarily, the survey responses were self-reported, so there could be reporting bias leading to discrepancies in noted dates, complications, and so on. Second, there were multiple surgeons contributing to the care of patients in the cohort with varied documentation methods. The limitations in documentation made it difficult to determine why 10 of the 15 patients who had surgery despite reporting they continued to smoke preoperatively had the surgery at our institution while the protocol required smoking cessation. A possible explanation would include the surgeon was not aware the patient continued to smoke, surgery was allowed to proceed after discussing the risks and benefits with the patient, the patient resumed smoking after negative urine testing, and so on. This study was conducted at a single hospital, so generalization of outcomes could include population bias.
+
+**Table Description:**
+
+**Table 3**
+Nicotine replacement therapy usage.
+
+| NRT usage | Number of participants | Variable | Median | P value |
+|-----------|-------------------------|----------|--------|---------|
+| No        | 39                      | Age      | 60.5   | .9521   |
+|           |                         | BMI      | 30.9   | .3363   |
+|           |                         | Female (n, %) | 20 (51.3%) | .6312 |
+|           |                         | Total smoking years | 25.0 | .0072 |
+|           |                         | Total pack years | 7.5 | .0067 |
+| Yes       | 18                      | Age      | 60.1   |         |
+|           |                         | BMI      | 30.2   |         |
+|           |                         | Female (n, %) | 8 (44.4%) |         |
+|           |                         | Total smoking years | 39.5 |         |
+|           |                         | Total pack years | 17.5 |         |
+
+*P value, percent chance that the results are significant (alpha = 0.05).*
+
+**Figure/Table Description:**
+Table 3 presents data on the usage of nicotine replacement therapy (NRT) among participants, comparing those who did not use NRT (39 participants) with those who did (18 participants). Variables compared include age, BMI, gender distribution (female percentage), total smoking years, and total pack years. The median values and P values are provided to indicate the statistical significance of the differences observed between the two groups.
+
+---
+
+**Table 4**
+Demographics and smoking years comparison between continued cessation and returning to smoking.
+
+| Return to smoking after quitting? | Number of participants | Variable | Median | P value |
+|-----------------------------------|------------------------|----------|--------|---------|
+| No                                | 32                     | Age      | 60.9   | .4704   |
+|                                   |                        | BMI      | 32.8   | .1670   |
+|                                   |                        | Female (n, %) | 16 (50.0%) | .8981 |
+|                                   |                        | Total smoking years | 26.5 | .3243 |
+|                                   |                        | Total pack years | 9.0 | .7564 |
+| Yes                               | 31                     | Age      | 59.2   |         |
+|                                   |                        | BMI      | 29.5   |         |
+|                                   |                        | Female (n, %) | 16 (51.6%) |         |
+|                                   |                        | Total smoking years | 30.0 |         |
+|                                   |                        | Total pack years | 10.0 |         |
+
+*P value, percent chance that the results are significant (alpha = 0.05).*
+
+**Figure/Table Description:**
+Table 4 compares the demographics and smoking years between participants who continued cessation and those who returned to smoking after quitting. The table includes 32 participants who did not return to smoking and 31 participants who did. Variables compared include age, BMI, gender distribution (female percentage), total smoking years, and total pack years. Median values and P values are provided to assess the statistical significance of the differences between the two groups.
+
+
+
+**End of Page 4**
+
+
+
+**Start of Page 5**
+
+Conclusions
+
+The data from this self-reported survey study demonstrate that most patients (62%) will quit smoking, if required, for an elective TJA. The 6-month continued abstinence rate with TJA as the motivator appears to be significantly higher than the current national average smoking cessation rate of 7.5% at 6 months when using NRT as cited by the Centers for Disease Control and Prevention [1]. Along with long-term public health benefits of smoking cessation, the results of this study suggest that patients may be less likely to experience a wound-related complication or infection if they stop smoking prior to surgery. These data support the development of a standardized smoking cessation protocol before TJA to improve surgery outcomes and the health of individuals.
+
+Available upon request.
+
+Conflicts of interest
+
+Dr. C. N. Carender is in the editorial board of the Journal of Arthroplasty. Dr. N. O. Noiseux is a paid consultant for MicroPort and receives research support as a principal investigator from Wright Medical, DePuy, and Smith & Nephew. Dr. J. M. Elkins receives research support as a principal investigator from DePuy/ J&J and is in the editorial board of the Journal of Arthroplasty. Dr. T. S. Brown is a paid consultant for Stryker; is in the editorial board of the Journal of Arthroplasty; and is a board member in American Association of Hip and Knee Surgeons, Musculoskeletal Infection Society, and Mid-America Orthopaedic Association. Dr. N. A. Bedard is a paid consultant for DePuy; is in the editorial board of the Journal of Arthroplasty; and is a board member of the American Association of Hip and Knee Surgeons. Katelyn Paulsen has no potential conflicts of interest.
+
+**Table Description:**
+
+**Table 5**
+Postoperative complications within 1 year of surgery.
+
+| Patient | Stopped smoking prior to TJA | Postoperative complication | Reoperation | Reoperation details | Time to first reoperation |
+|---------|------------------------------|---------------------------|-------------|---------------------|---------------------------|
+| 1       | Yes                          | PJI                       | Yes         | DAIR followed by 2-stage exchange for persistent PJI | 3 d                       |
+| 2       | No                           | Hematoma, delayed wound healing, superficial infection | No | - | - |
+| 3       | No                           | PJI                       | Yes         | 2-stage exchange     | 21 d                      |
+| 4       | No                           | Superficial wound infection | No         | -                   | -                         |
+| 5       | No                           | Delayed wound healing and dehiscence | Yes | I&D and closure of delayed wound healing | 46 d                      |
+| 6       | Yes                          | PJI                       | Yes         | DAIR                | 35 d                      |
+| 7       | Yes                          | Delayed wound healing and dehiscence | Yes | I&D and closure of delayed wound healing | 41 d                      |
+
+DAIR, irrigation and debridement with component retention and antibiotics; I&D, irrigation and debridement; PJI, periprosthetic joint infection.
+
+
+
+**End of Page 5**
+
+
+
+**Start of Page 6**
+
+
+
+**End of Page 6**
+
+
+
+## REFERENCES
+1. MeLisa R. Creamer, Teresa W. Wang, Stephen Babb, Karen A. Cullen, Hannah Day, Gordon Willis, Ahmed Jamal, Linda Neff. Tobacco Product Use and Cessation Indicators Among Adults — United States, 2018. MMWR. Morbidity and Mortality Weekly Report, 68, 1013-1019, 2019. DOI: 10.15585/mmwr.mm6845a2
+2. Vignesh K. Alamanda, Bryan D. Springer. Perioperative and Modifiable Risk Factors for Periprosthetic Joint Infections (PJI) and Recommended Guidelines. Current Reviews in Musculoskeletal Medicine, 11, 325-331, 2018. DOI: 10.1007/s12178-018-9494-z
+3. Nicholas A. Bedard, David E. DeMik, Jessell M. Owens, Natalie A. Glass, Jennifer DeBerg, John J. Callaghan. Tobacco Use and Risk of Wound Complications and Periprosthetic Joint Infection: A Systematic Review and Meta-Analysis of Primary Total Joint Arthroplasty Procedures. The Journal of Arthroplasty, 34, 385-396.e4, 2019. DOI: 10.1016/j.arth.2018.09.089
+4. Kyle R. Duchman, Yubo Gao, Andrew J. Pugely, Christopher T. Martin, Nicolas O. Noiseux, John J. Callaghan. The Effect of Smoking on Short-Term Complications Following Total Hip and Knee Arthroplasty. Journal of Bone and Joint Surgery, 97, 1049-1058, 2015. DOI: 10.2106/jbjs.n.01016
+5. Jessica H. Heyer, Dana A. Perim, Richard L. Amdur, Rajeev Pandarinath. Impact of smoking on outcomes following knee and shoulder arthroscopy. European Journal of Orthopaedic Surgery &amp; Traumatology, 30, 329-336, 2019. DOI: 10.1007/s00590-019-02577-2
+6. Dhruv Khullar, Steven A. Schroeder, John Maa. Helping Smokers Quit Around the Time of Surgery. JAMA, 309, 993, 2013. DOI: 10.1001/jama.2013.1702
+7. Gulraj S Matharu, Sofia Mouchti, Sarah Twigg, Antonella Delmestri, David W Murray, Andrew Judge, Hemant G Pandit. The effect of smoking on outcomes following primary total hip and knee arthroplasty: a population-based cohort study of 117,024 patients. Acta Orthopaedica, 90, 559-567, 2019. DOI: 10.1080/17453674.2019.1649510
+8. Scott E. Porter, Edward N. Hanley. The Musculoskeletal Effects of Smoking. Journal of the American Academy of Orthopaedic Surgeons, 9, 9-17, 2001. DOI: 10.5435/00124635-200101000-00002
+9. Claire E. Black, Ning Huang, Peter C. Neligan, Ronald H. Levine, Joan E. Lipa, Steven Lintlop, Christopher R. Forrest, Cho Y. Pang. Effect of nicotine on vasoconstrictor and vasodilator responses in human skin vasculature. American Journal of Physiology-Regulatory, Integrative and Comparative Physiology, 281, R1097-R1104, 2001. DOI: 10.1152/ajpregu.2001.281.4.r1097
+10. Bryan D. Springer. Modifying Risk Factors for Total Joint Arthroplasty: Strategies That Work Nicotine. The Journal of Arthroplasty, 31, 1628-1630, 2016. DOI: 10.1016/j.arth.2016.01.071
+11. Sina Akhavan, Long-Co Nguyen, Vanessa Chan, Jamal Saleh, Kevin J. Bozic. Impact of Smoking Cessation Counseling Prior to Total Joint Arthroplasty. Orthopedics, 40, , 2017. DOI: 10.3928/01477447-20161219-02
+12. Adam Hart, William G. Rainer, Michael J. Taunton, Tad M. Mabry, Daniel J. Berry, Matthew P. Abdel. Smoking Cessation Before and After Total Joint Arthroplasty—An Uphill Battle. The Journal of Arthroplasty, 34, S140-S143, 2019. DOI: 10.1016/j.arth.2019.01.073
+13. Michaela Brtnikova, Lori A. Crane, Mandy A. Allison, Laura P. Hurley, Brenda L. Beaty, Allison Kempe. A method for achieving high response rates in national surveys of U.S. primary care physicians. PLOS ONE, 13, e0202755, 2018. DOI: 10.1371/journal.pone.0202755
+14. Robert M Anthenelli, Neal L Benowitz, Robert West, Lisa St Aubin, Thomas McRae, David Lawrence, John Ascher, Cristina Russ, Alok Krishen, A Eden Evins. Neuropsychiatric safety and efficacy of varenicline, bupropion, and nicotine patch in smokers with and without psychiatric disorders (EAGLES): a double-blind, randomised, placebo-controlled clinical trial. The Lancet, 387, 2507-2520, 2016. DOI: 10.1016/s0140-6736(16)30272-0
+15. Nancy A. Rigotti. Strategies to Help a Smoker Who Is Struggling to Quit. JAMA, 308, 1573, 2012. DOI: 10.1001/jama.2012.13043
+16. Shawn Sahota, Francis Lovecchio, Ryan E. Harold, Matthew D. Beal, David W. Manning. The Effect of Smoking on Thirty-Day Postoperative Complications After Total Joint Arthroplasty: A Propensity Score-Matched Analysis. The Journal of Arthroplasty, 33, 30-35, 2018. DOI: 10.1016/j.arth.2017.07.037
+17. JASVINDER A. SINGH. Smoking and Outcomes After Knee and Hip Arthroplasty: A Systematic Review. The Journal of Rheumatology, 38, 1824-1834, 2011. DOI: 10.3899/jrheum.101221
+18. Bhaveen H. Kapadia, Kimona Issa, Robert Pivec, Peter M. Bonutti, Michael A. Mont. Tobacco Use May Be Associated With Increased Revision and Complication Rates Following Total Hip Arthroplasty. The Journal of Arthroplasty, 29, 777-780, 2014. DOI: 10.1016/j.arth.2013.08.023
+19. Bhaveen H. Kapadia, Aaron J. Johnson, Qais Naziri, Michael A. Mont, Ronald E. Delanois, Peter M. Bonutti. Increased Revision Rates After Total Knee Arthroplasty in Patients Who Smoke. The Journal of Arthroplasty, 27, 1690-1695.e1, 2012. DOI: 10.1016/j.arth.2012.03.057
+20. Eric H. Tischler, Laura Matsen Ko, Antonia F. Chen, Mitchell G. Maltenfort, Jacob Schroeder, Matthew S. Austin. Smoking Increases the Rate of Reoperation for Infection within 90 Days After Primary Total Joint Arthroplasty. Journal of Bone and Joint Surgery, 99, 295-304, 2017. DOI: 10.2106/jbjs.16.00311

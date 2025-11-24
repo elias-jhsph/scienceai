@@ -4,19 +4,41 @@
         {% if message.role == 'user' %}
             <div class="chat-bubble-area-user">
                 <div class="chat-bubble-user">
-                    <span><pre>{{ message.content }}</pre></span>
+                    <span>{{ message.content | safe }}</span>
                 </div>
-                    <div class="chat-bubble-timestamp"> Created: {{ message.time }} Status: {{ message.status }}</div>
+                <div class="chat-bubble-timestamp">Created: {{ message.time }} Status: {{ message.status }}</div>
+            </div>
+        {% elif message.role == 'tool' %}
+            <div class="chat-bubble-area-tool" onclick="toggleContent(this)">
+                <div class="chat-bubble-tool" style="display: none;">
+                    <span>{{ message.content | safe }}</span>
+                </div>
+                <div class="show-work-button">Show work...</div>
+                <div class="chat-bubble-timestamp">Created: {{ message.time }} Status: {{ message.status }}</div>
             </div>
         {% else %}
             <div class="chat-bubble-area-ai">
                 <div class="chat-bubble-ai">
-                    <span><pre>{{ message.content }}</pre></span>
+                    <span>{{ message.content | safe }}</span>
                 </div>
-                    <div class="chat-bubble-timestamp"> Created: {{ message.time }} Status: {{ message.status }}</div>
+                <div class="chat-bubble-timestamp">Created: {{ message.time }} Status: {{ message.status }}</div>
             </div>
         {% endif %}
     {% endfor %}
+
+    <script>
+    function toggleContent(element) {
+        var contentDiv = element.querySelector('.chat-bubble-tool');
+        var buttonDiv = element.querySelector('.show-work-button');
+        if (contentDiv.style.display === 'none') {
+            contentDiv.style.display = 'block';
+            buttonDiv.textContent = 'Hide work...';
+        } else {
+            contentDiv.style.display = 'none';
+            buttonDiv.textContent = 'Show work...';
+        }
+    }
+    </script>
     </div>
     {% set last = messages|last %}
     {% if last.status == 'Pending' %}

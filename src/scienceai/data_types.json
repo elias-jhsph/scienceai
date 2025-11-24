@@ -16,18 +16,22 @@
       }
     },
     "tool": {
-      "mode": "prefix",
-      "value": {
-        "description": "DESCRIPTION. The value of the NAME must be a number.",
-        "type": "number"
+      "source_quote": {
+        "description": "The exact FULL quotation of the source of the NAME was found. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '.",
+        "type": "string"
       },
-      "source": {
-        "description": "The location and a quotation of where the NAME was found.",
+      "source_location": {
+        "description": "The location in the paper of the NAME_source_quote",
         "type": "string"
       },
       "unit": {
           "description": "The unit of NAME.",
           "type": "string"
+      },
+      "mode": "prefix",
+      "value": {
+        "description": "DESCRIPTION. The value of the NAME must be a number.",
+        "type": "number"
       }
     }
   },
@@ -51,13 +55,17 @@
       "mode": "array",
       "description": "DESCRIPTION",
       "keys": {
+        "source_quote": {
+          "description": "The exact FULL quotation of the source of the NAME_list value was found. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '.",
+          "type": "string"
+        },
+        "source_location": {
+          "description": "The location in the paper of the NAME_source_quote",
+          "type": "string"
+        },
         "value": {
           "description": "The value of the NAME_list must be a number.",
           "type": "number"
-        },
-        "source": {
-          "description": "The location and a quotation(s) of where this NAME_list value was found.",
-          "type": "string"
         },
         "unit": {
           "description": "The unit of this value in NAME_list.",
@@ -90,13 +98,17 @@
       "mode": "array",
       "description": "DESCRIPTION",
       "keys": {
+        "source_quote": {
+          "description": "The exact FULL quotation of the source of the NAME value was found. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '.",
+          "type": "string"
+        },
+        "source_location": {
+          "description": "The location in the paper of the NAME_source",
+          "type": "string"
+        },
         "value": {
           "description": "The value of the NAME with the following description: DESCRIPTION and the unit: UNIT.",
           "type": "number"
-        },
-        "source": {
-          "description": "The location and a quotation(s) of where this NAME value was found.",
-          "type": "string"
         }
       }
     }
@@ -125,13 +137,17 @@
       "mode": "array",
       "description": "DESCRIPTION",
       "keys": {
+        "source_quote": {
+          "description": "The exact FULL quotation of the source of the NAME_list value was found. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '.",
+          "type": "string"
+        },
+        "source_location": {
+          "description": "The location in the paper of the NAME_source",
+          "type": "string"
+        },
         "value": {
           "description": "The value of the NAME_list with the following description: DESCRIPTION and the unit: UNIT.",
           "type": "number"
-        },
-        "source": {
-          "description": "The location and a quotation(s) of where the NAME_list value was found.",
-          "type": "string"
         }
       }
     }
@@ -162,25 +178,33 @@
     },
     "tool": {
       "mode": "prefix",
+      "numerator_source_quote": {
+        "description": "The exact FULL quotation of the source of the NAME_numerator was found. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '.",
+        "type": "string"
+      },
+      "numerator_source_location": {
+        "description": "The location in the paper of the NAME_numerator_source_quote.",
+        "type": "string"
+      },
       "numerator": {
         "description": "NUMERATOR. The numerator of the NAME with the following description: DESCRIPTION.",
         "type": "number"
-      },
-      "numerator_source": {
-        "description": "The location and a quotation of where the NAME_numerator was found.",
-        "type": "string"
       },
       "numerator_unit": {
         "description": "The unit of NAME_numerator.",
         "type": "string"
       },
+      "denominator_source_quote": {
+          "description": "The exact FULL quotation of the source of the NAME_denominator was found. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '.",
+          "type": "string"
+      },
+      "denominator_source_location": {
+          "description": "The location in the paper of the NAME_denominator_source_quote",
+          "type": "string"
+      },
       "denominator": {
           "description": "DENOMINATOR. The denominator of the NAME with the following description: DESCRIPTION.",
           "type": "number"
-      },
-      "denominator_source": {
-          "description": "The location and a quotation of where the NAME_denominator was found.",
-          "type": "string"
       },
       "denominator_unit": {
           "description": "The unit of NAME_denominator.",
@@ -197,9 +221,10 @@
       "required": {"type": "boolean", "description": "Is this field required?"}
     },
     "tool": {
+      "source_quote": {"type": "string", "description": "The exact FULL quotation of the source of the NAME with description: DESCRIPTION. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."},
+      "source_location": {"type": "string", "description": "The location in the paper of the NAME_source_quote"},
       "mode": "prefix",
-      "value": {"type": "string", "description": "The category chosen from the NAME - DESCRIPTION with categories: CATEGORIES."},
-      "source": {"type": "string", "description": "The location and a quotation of where the categorical data was found for NAME with description: DESCRIPTION."}
+      "value": {"type": "string", "description": "The category chosen from the NAME - DESCRIPTION with categories: CATEGORIES."}
     }
   },
   "lat_lon_pair": {
@@ -210,10 +235,11 @@
       "required": {"type": "boolean", "description": "Is this field required?"}
     },
     "tool": {
+      "source_quote": {"type": "string", "description": "The exact FULL quotation of the source of the coordinates NAME were found with description: DESCRIPTION. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."},
+      "source_location": {"type": "string", "description": "The location in the paper of the NAME_source_quote"},
       "mode": "prefix",
       "latitude": {"type": "number", "description": "Latitude part of the coordinate NAME with description: DESCRIPTION."},
-      "longitude": {"type": "number", "description": "Longitude part of the coordinate NAME with description: DESCRIPTION."},
-      "source": {"type": "string", "description": "The location and a quotation of where the coordinates NAME were found with description: DESCRIPTION."}
+      "longitude": {"type": "number", "description": "Longitude part of the coordinate NAME with description: DESCRIPTION."}
     }
   },
   "lat_lon_pair_list": {
@@ -227,6 +253,13 @@
       "mode": "array",
       "description": "A list of coordinate pairs.",
       "keys": {
+        "source_quote": {
+          "type": "string",
+          "description": "The exact FULL quotation of the source of the coordinates NAME were found with description: DESCRIPTION. (Include nothing but the quote)"},
+        "source_location": {
+          "type": "string",
+          "description": "The location in the paper of the NAME_source_quote"
+        },
         "latitude": {
           "type": "number",
           "description": "Latitude part of the coordinate NAME with description: DESCRIPTION."
@@ -234,10 +267,6 @@
         "longitude": {
           "type": "number",
           "description": "Longitude part of the coordinate NAME with description: DESCRIPTION."
-        },
-        "source": {
-          "type": "string",
-          "description": "The location and a quotation of where the coordinates NAME were found with description: DESCRIPTION."
         }
       }
     }
@@ -250,11 +279,12 @@
       "required": {"type": "boolean", "description": "Is this field required?"}
     },
     "tool": {
+      "source_quote": {"type": "string", "description": "The exact FULL quotation of the source of the date NAME were found with description: DESCRIPTION. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."},
+      "source_location": {"type": "string", "description": "The location in the paper of the NAME_source_quote"},
       "mode": "prefix",
       "year": {"type": "number", "description": "The year of the date NAME with description: DESCRIPTION."},
       "month": {"type": "number", "description": "The month of the date NAME with description: DESCRIPTION."},
-      "day": {"type": "number", "description": "The day of the date NAME with description: DESCRIPTION."},
-      "source": {"type": "string", "description": "The location and a quotation of where the date NAME was found with description: DESCRIPTION."}
+      "day": {"type": "number", "description": "The day of the date NAME with description: DESCRIPTION."}
     }
   },
   "date_list": {
@@ -268,6 +298,14 @@
       "mode": "array",
       "description": "A list of dates.",
       "keys": {
+        "source_quote": {
+          "type": "string",
+          "description": "The exact FULL quotation of the source of the date NAME were found with description: DESCRIPTION. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."
+        },
+        "source_location": {
+          "type": "string",
+          "description": "The location in the paper of the NAME_source_quote"
+        },
         "year": {
           "type": "number",
           "description": "The year of the date with description: DESCRIPTION."
@@ -279,10 +317,6 @@
         "day": {
           "type": "number",
           "description": "The day of the date with description: DESCRIPTION."
-        },
-        "source": {
-          "type": "string",
-          "description": "The location and a quotation of where the date NAME was found with description: DESCRIPTION."
         }
       }
     }
@@ -295,9 +329,10 @@
       "required": {"type": "boolean", "description": "Is this field required?"}
     },
     "tool": {
+      "source_quote": {"type": "string", "description": "The FULL quotation where the text NAME_value was found with description: DESCRIPTION. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."},
+      "source_location": {"type": "string", "description": "The location in the paper of the NAME_source_quote"},
       "mode": "prefix",
-      "value": {"type": "string", "description": "The extracted block of text with description: DESCRIPTION."},
-      "source": {"type": "string", "description": "The location and a quotation of where the text NAME_value was found with description: DESCRIPTION."}
+      "value": {"type": "string", "description": "The extracted block of text with description: DESCRIPTION."}
     }
   },
   "boolean_value": {
@@ -308,9 +343,10 @@
       "required": {"type": "boolean", "description": "Is this field required?"}
     },
     "tool": {
+      "source_quote": {"type": "string", "description": "The exact FULL quotation of the source of the NAME_value information with description: DESCRIPTION. Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."},
+      "source_location": {"type": "string", "description": "The location in the paper of the NAME_source_quote"},
       "mode": "prefix",
-      "value": {"type": "boolean", "description": "True or False value representing NAME with description: DESCRIPTION."},
-      "source": {"type": "string", "description": "The source of the NAME_value information with description: DESCRIPTION."}
+      "value": {"type": "boolean", "description": "True or False value representing NAME with description: DESCRIPTION."}
     }
   },
   "range_value": {
@@ -322,10 +358,11 @@
       "required": {"type": "boolean", "description": "Is this field required?"}
     },
     "tool": {
+      "source_quote": {"type": "string", "description": "The FULL quotation where the range was found with description: DESCRIPTION. Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."},
+      "source_location": {"type": "string", "description": "The location in the paper of the NAME_source_quote"},
       "mode": "prefix",
       "min_value": {"type": "number", "description": "The minimum value of the range with description: DESCRIPTION."},
-      "max_value": {"type": "number", "description": "The maximum value of the range with description: DESCRIPTION."},
-      "source": {"type": "string", "description": "The location and a quotation of where the range was found with description: DESCRIPTION."}
+      "max_value": {"type": "number", "description": "The maximum value of the range with description: DESCRIPTION."}
     }
   }
 }

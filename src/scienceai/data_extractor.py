@@ -1,5 +1,9 @@
 import json
 import os
+import re
+
+from num2words import num2words
+
 from .llm import client, use_tools
 
 
@@ -90,12 +94,13 @@ def generate_description(data_type_key, data_type_value, all_keys):
         {
             "type": "function",
             "function": {
+                "strict": True,
                 "name": "generate_example_data",
                 "description": "creates example data for a given data type",
                 "parameters": {
                     "type": "object",
                     "properties": properties,
-                    "required": list(properties.keys())
+                    "additionalProperties": False, "required": list(properties.keys())
                 }
             }
         }
@@ -124,7 +129,7 @@ def generate_description(data_type_key, data_type_value, all_keys):
         }
     ]
 
-    arguments = {"messages": messages, "tools": tools, "model": "gpt-4o",
+    arguments = {"messages": messages, "tools": tools,  "model": "o3-mini", 'reasoning_effort': 'low',
                  "tool_choice": {"type": "function", "function": {"name": "generate_example_data"}}}
 
     examples = []
@@ -171,29 +176,9 @@ for data_type in data_types:
 
 
 def generate_schema(corpus, goal=None, retries=5):
-    tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": "generate_analysis_schema",
-                "description": "creates example data for a given data type",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "schema": {"type": "string",
-                                   "description": "A JSON string representing the schema for the analysis which should "
-                                                  "be an array of objects with a 'type' key and other keys as "
-                                                  "specified in the data types."},
-                    },
-                    "required": ["schema"]
-                }
-            }
-        }
-    ]
-
-    system_message = ("You are an expert Data Scientist. You have been asked to generate the schema which will be used "
-                      "to extract data from research papers. The schema must be creative and scientific. "
-                      "You must follow the specifications provided for each data type.\n\nSpecifications for Schema:\n")
+    # Construct the system message
+    system_message = (
+        "You are an expert Data Scientist. Generate a creative and scientific schema for extracting data from research papers.\n")
 
     for key, value in data_types_docs.items():
         examples = []
@@ -221,11 +206,44 @@ def generate_schema(corpus, goal=None, retries=5):
     if goal:
         user_message += " that will best address the following goal - " + goal
 
-    user_message += ":\n\n" + corpus + "\n"
+    final_ask = "Please Return a JSON string representing the schema for the analysis which should "
+    "be an array of objects with a 'type' key and other keys as "
+    "specified in the data types. Try to limit the number of objects requested to 8 or less.. "
+
+    user_message += ":\n\n" + corpus + "\n\n\n\n\n" + final_ask
+
+    # Function schema for structured output
+    function_schema = {
+        "type": "function",
+        "function": {
+            "name": "define_schema",
+            "description": "Defines the schema for data extraction from research papers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fields": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "description": {"type": "string"},
+                                "type": {"type": "string", "enum": list(data_types.keys())}
+                            },
+                            "additionalProperties": True,
+                            "required": ["name", "description", "required", "type"]
+                        }
+                    }
+                },
+                "additionalProperties": False,
+                "required": ["fields"]
+            }
+        }
+    }
 
     messages = [
         {
-            "role": "system",
+            "role": "user",
             "content": system_message
         },
         {
@@ -234,47 +252,52 @@ def generate_schema(corpus, goal=None, retries=5):
         }
     ]
 
-    arguments = {"messages": messages, "tools": tools, "model": "gpt-4o",
-                 "tool_choice": {"type": "function", "function": {"name": "generate_analysis_schema"}}}
-
     retry = 0
-    valid_calls = []
-    output_dictionary = None
-    while valid_calls == [] and retry < retries:
-        if retry > 0:
-            print("Retrying...")
-        chat_response = client.chat.completions.create(**arguments)
-        if chat_response.choices[0].message.tool_calls:
-            valid_calls = use_tools(chat_response, arguments, call_functions=False)
+    valid = False
+
+    while not valid and retry < retries:
+        try:
+            o3_arguments = {"messages": messages, "model": "o3-mini", 'reasoning_effort': 'high', "tools": [function_schema],
+                            "tool_choice": {"type": "function", "function": {"name": "define_schema"}}}
+            response = client.chat.completions.create(**o3_arguments)
+
+            valid_calls = use_tools(response, o3_arguments, call_functions=False)
+            output_dictionary = {}
             if valid_calls:
                 for call in valid_calls:
-                    if call["name"] == "generate_analysis_schema":
-                        output_dictionary = call["parameters"]
-                        if "schema" in output_dictionary:
-                            try:
-                                output_dictionary = json.loads(output_dictionary["schema"])
-                                for data_type in output_dictionary:
-                                    valid, error_message = validate_data_type_spec(data_type)
-                                    if not valid:
-                                        print(error_message, output_dictionary)
-                                        valid_calls = []
-                            except json.JSONDecodeError:
-                                print("Schema is not a valid JSON string:", output_dictionary["schema"])
-                                valid_calls = []
-        else:
-            print("No tool calls used")
+                    output_dictionary = call['parameters']
+
+            # Validate the schema
+            for field in output_dictionary.get("fields", []):
+                valid, error_message = validate_data_type_spec(field)
+                if not valid:
+                    print(f"Validation Error: {error_message}")
+                    break
+
+            if valid:
+                print("Schema generated successfully.", output_dictionary["fields"])
+                return output_dictionary["fields"]
+
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"Error processing response: {e}")
+
         retry += 1
-        if valid_calls and output_dictionary:
-            return output_dictionary
+        print(f"Retrying... Attempt {retry}")
+
     return None
 
 
 def schema_to_tool(schema):
+    def camel_to_snake(s):
+        return ''.join(['_' + c.lower() if c.isupper() else c for c in s]).lstrip('_')
 
-    selected_data_types = {}
-    required = []
+    selected_data_types_full = {}
+
+    required_full = []
 
     for data_type_requested in schema:
+        required = []
+        selected_data_types = {}
         data_type_def = data_types[data_type_requested["type"]]["tool"]
         if data_type_def["mode"] == "prefix":
             required_keys = list(data_type_def.keys())
@@ -291,9 +314,6 @@ def schema_to_tool(schema):
                     else:
                         new_description = new_description.replace(spec_key.upper(), str(data_type_requested[spec_key]))
                 selected_data_types[name + "_" + key] = {"type": new_type, "description": new_description}
-            selected_data_types[name + "_successfully_extracted"] = \
-                {"type": "boolean", "description": "Was the data for "+name+" successfully extracted?"}
-            required.append(name + "_successfully_extracted")
         if data_type_def["mode"] == "array":
             name = data_type_requested["name"].replace(" ", "_")
             if data_type_requested["required"]:
@@ -317,110 +337,191 @@ def schema_to_tool(schema):
                 item_properties[key] = {"type": new_type, "description": new_description}
 
             selected_data_types[name] = {"type": "array", "description": new_description,
-                                         "items": {"type": "object", "properties": item_properties}}
+                                         "items": {"type": "object", "properties": item_properties,
+                                                   "additionalProperties": False, "required": list(item_properties.keys())}}
+        required_full = required_full + required
+        selected_data_types_full = {**selected_data_types_full, **selected_data_types}
 
-            selected_data_types[name + "_successfully_extracted"] = \
-                {"type": "boolean", "description": "Was the data for "+name+" successfully extracted?"}
-            required.append(name + "_successfully_extracted")
-
-    required = list(set(required))
-
-    tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": "extract_data",
-                "description": "extracts data from a research paper using a schema",
-                "parameters": {
-                    "type": "object",
-                    "properties": selected_data_types,
-                    "required": required
-                }
+    selected_data_types_full["successfully_extracted"] = \
+        {"type": "boolean", "description": "Was the data successfully extracted and were all required fields populated "
+                                           "correctly and were any not required fields that were included correctly "
+                                           "populated (with no empty strings or blanks)?"}
+    # required.append(name + "_successfully_extracted")
+    required_full.append("successfully_extracted")
+    tool = {
+        "type": "function",
+        "function": {
+            "name": "extract_data",
+            "description": "Stores accurate data from this research paper along with all quotations "
+                           "needed to source the data. Important: if needed separate different quotes by '... '. "
+                           "If a property/parameter is not required and you can not find information for it, "
+                           "exclude it completely DO NOT leave it blank.",
+            "parameters": {
+                "type": "object",
+                "properties": selected_data_types_full.copy(),
+                "additionalProperties": False,
+                "required": required_full.copy()
             }
         }
+    }
+
+    return tool
+
+
+def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_corpus=True):
+    """
+    Validates data extraction results against source corpus with support for both direct quotes
+    and derived/summarized information.
+
+    Args:
+        extraction_dict: Dictionary containing extracted data with source quotes and values
+        corpus: Original text source
+        retries: Number of reflection attempts
+        limit_corpus: Whether to include full corpus in reflection prompt
+    """
+
+    def replace_numbers_with_words(text):
+        def replacer(match):
+            number = match.group()
+            return num2words(int(number))
+
+        return re.sub(r'\d+', replacer, text)
+
+    def check_source(source, pre_processed_corpus):
+        """Validates that source text exists within corpus after normalization"""
+        source = replace_numbers_with_words(source.lower())
+        source = re.sub(r"[\"'`''""]", '', source)
+        sources = re.split(r"\.\.\.|\. ", source)
+        for source in sources:
+            source = ''.join(e for e in source if e.isalnum())
+            if source not in pre_processed_corpus:
+                return (f"Source not found: {source}")
+        return None
+
+    # Pre-process corpus for comparison
+    pre_processed_corpus = corpus.lower()
+    pre_processed_corpus = replace_numbers_with_words(pre_processed_corpus)
+    pre_processed_corpus = re.sub(r"[\"'`''""]", '', pre_processed_corpus)
+    pre_processed_corpus = ''.join(e for e in pre_processed_corpus if e.isalnum())
+
+    if not extraction_dict.get("successfully_extracted", False):
+        return "Data not successfully extracted: " + str(extraction_dict)
+
+    # Validate source quotes exist in corpus
+    for key, value in extraction_dict.items():
+        if key.endswith("_source_quote"):
+            if check_source(extraction_dict[key], pre_processed_corpus) is not None:
+                return "Source not found in corpus (make sure to : (" + key + ") " + str(extraction_dict[key])
+            if extraction_dict[key] == "":
+                return ("If a property/parameter is not required and you can not find information for it, "
+                        "exclude it completely DO NOT leave it blank. ") + str(key)
+            print(f"Validated source for {key}")
+
+        if isinstance(value, list):
+            for item in value:
+                for k in item:
+                    if k.endswith("_source_quote"):
+                        if check_source(item[k], pre_processed_corpus) is not None:
+                            return "Source was not found in corpus: (" + k + ") " + str(extraction_dict[k])
+                        print(f"Validated source for {k}")
+                        if item[k] == "":
+                            return ("If a property/parameter is not required and you can not find information for it, "
+                                    "exclude it completely DO NOT leave it blank. ") + str(k)
+
+    system_message = """You are a careful data analyst validating information extraction results.
+Your task is to verify that all extracted information is justified by the source material.
+
+Valid extractions include:
+1. Direct quotes and explicit statements from the source
+2. Numerical values clearly stated in or computed from the source
+3. Summaries that accurately capture information from one or more source statements
+4. Labels, categories, or groupings that logically organize information present in the source
+5. Derived values (min/max, averages, ranges, etc.) calculated from source data
+6. Normalized or standardized versions of source information
+
+The key requirement is that ALL extracted information must be fully supportable using ONLY 
+the provided source material, whether through direct quotation or reasonable derivation.
+Additions, assumptions, or external knowledge beyond the source are not allowed."""
+
+    user_message = ("Please validate if this data extraction is fully justified by its sources:\n\n"
+                    "Data Extracted:\n\n" + str(extraction_dict))
+
+    if not limit_corpus:
+        user_message += "\n\nSource Material:" + corpus
+    else:
+        user_message += "\n\nAre all information elements fully justified by their corresponding sources?"
+
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": user_message}
     ]
-    return tools
 
+    arguments = {"messages": messages, "model": "o3-mini", 'reasoning_effort': 'medium'}
+    chat_response = client.chat.completions.create(**arguments)
+    messages.append({"role": "assistant", "content": chat_response.choices[0].message.content})
 
-def reflect_on_data_extraction(extraction, corpus, retries=3):
+    tools = [{
+        "type": "function",
+        "function": {
+            "strict": True,
+            "name": "check_extracted_data",
+            "description": """Validates if extracted data is fully justified by source material.
 
-        system_message = "You are a careful data analyst. Reflect on the data extraction process."
+Extracted information is valid if it can be supported entirely by the sources through either:
+- Direct quotation of source text
+- Accurate summarization of source content
+- Logical grouping or categorization of source information
+- Mathematical calculations or derivations from source values
+- Normalization or standardization of source information
 
-        user_message = ("Was this data correctly extracted from this research paper? Explain why or why not. "
-                        "\n\nData Extracted:\n\n") + extraction + "\n\nResearch Paper:" + corpus
-
-        messages = [
-            {
-                "role": "system",
-                "content": system_message
-            },
-            {
-                "role": "user",
-                "content": user_message
-            }
-        ]
-
-        arguments = {"messages": messages, "model": "gpt-4o"}
-
-        chat_response = client.chat.completions.create(**arguments)
-
-        messages.append({"role": "assistant", "content": chat_response.choices[0].message.content})
-
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "check_extracted_data",
-                    "description": "Logs if the extracted data was 100% perfectly extracted.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "valid": {"type": "boolean", "description": "Whether the extracted data was "
-                                                                        "100% perfectly extracted. Do not "
-                                                                        "set this to true if there were any "
-                                                                        "errors in the extraction or even"
-                                                                        "minor mistakes."}
-                        }
+The key requirement is that all information must be clearly traceable to and supported
+by the source material alone, without external assumptions or additions.""",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "valid": {
+                        "type": "boolean",
+                        "description": "Whether the extracted data is 100% justified by sources"
                     },
-                    "required": ["valid"]
-                }
+                    "reason": {
+                        "type": "string",
+                        "description": "Detailed explanation of validation result, especially if invalid"
+                    }
+                },
+                "required": ["valid", "reason"],
+                "additionalProperties": False
             }
-        ]
+        }
+    }]
 
-        arguments = {"messages": messages, "model": "gpt-4o", "tools": tools,
-                     "tool_choice": {"type": "function", "function": {"name": "check_extracted_data"}}}
+    arguments = {
+        "messages": messages,
+        "model": "o3-mini",
+        'reasoning_effort': 'medium',
+        "tools": tools,
+        "tool_choice": {"type": "function", "function": {"name": "check_extracted_data"}}
+    }
 
-        retry = 0
-        valid_calls = []
-        while valid_calls == [] and retry < retries:
-            if retry > 0:
-                print("Retrying...")
-            chat_response = client.chat.completions.create(**arguments)
-            if chat_response.choices[0].message.tool_calls:
-                valid_calls = use_tools(chat_response, arguments, call_functions=False)
-                if valid_calls:
-                    for call in valid_calls:
-                        if call["name"] == "check_extracted_data":
-                            return call["parameters"]["valid"]
-            retry += 1
-        return False
-
-
-def remove_failed_data(data):
-    successfull_keys = []
-    for key, value in data.items():
-        if key.endswith("_successfully_extracted"):
-            if value:
-                successfull_keys.append(key.replace("_successfully_extracted", ""))
-    new_data = {}
-    for key in successfull_keys:
-        for k, v in data.items():
-            if k.startswith(key) and not k.endswith("_successfully_extracted"):
-                new_data[k] = v
-    return new_data
+    retry = 0
+    while retry < retries:
+        if retry > 0:
+            print("Retrying validation...")
+        chat_response = client.chat.completions.create(**arguments)
+        if chat_response.choices[0].message.tool_calls:
+            valid_calls = use_tools(chat_response, arguments, call_functions=False)
+            if valid_calls:
+                for call in valid_calls:
+                    if call["name"] == "check_extracted_data":
+                        if call["parameters"]["valid"]:
+                            print("Data extraction validated successfully")
+                            return None
+                        else:
+                            return f"Data extraction failed validation: {call['parameters']['reason']}"
+        retry += 1
+    return "Data extraction validation failed to complete"
 
 
-def extract_data(tools, corpus, retries=5):
+def extract_data(tool, corpus, retries=5):
 
     system_message = "You are an careful data analyst. Dutifully find the data in the provided research paper."
 
@@ -437,13 +538,12 @@ def extract_data(tools, corpus, retries=5):
         }
     ]
 
-    arguments = {"messages": messages, "tools": tools, "model": "gpt-4o",
-                 "tool_choice": {"type": "function", "function": {"name": "extract_data"}}}
+    arguments = {"messages": messages, "tools": [tool], "model": "o3-mini", "reasoning_effort": "high",
+                 "tool_choice": {"type": "function", "function": {"name": tool["function"]["name"]}}}
 
     retry = 0
-    valid_calls = []
     output_dictionary = None
-    while valid_calls == [] and retry < retries:
+    while not output_dictionary and retry < retries:
         if retry > 0:
             print("Retrying...")
         chat_response = client.chat.completions.create(**arguments)
@@ -451,17 +551,25 @@ def extract_data(tools, corpus, retries=5):
             valid_calls = use_tools(chat_response, arguments, call_functions=False)
             if valid_calls:
                 for call in valid_calls:
-                    if call["name"] == "extract_data":
+                    if call["name"] == tool["function"]["name"]:
                         output_dictionary = call["parameters"]
-                        output_dictionary = remove_failed_data(output_dictionary)
-                        check = reflect_on_data_extraction(str(output_dictionary), corpus)
-                        if not check:
-                            print("Data extraction failed. Retrying...")
-                            valid_calls = []
+                        check = reflect_on_data_extraction(output_dictionary, corpus)
+                        if check is not None:
+                            print("Data extraction failed:", check, "Retrying...")
+                            new_message = {
+                                "role": "system",
+                                "content": ("This data extraction was not completed successfully:\n\n" +
+                                            str(output_dictionary) +
+                                            "\n\n\nThis was not successful for the following reason:\n" + check +
+                                            "\n\n Please try to address this issue.")
+                            }
+                            output_dictionary = None
+                            arguments["messages"] += [new_message]
         else:
             print("No tool calls used")
         retry += 1
-        if output_dictionary:
-            return output_dictionary
-    return None
+    if output_dictionary is not None:
+        del output_dictionary["successfully_extracted"]
+        return output_dictionary.copy()
+    return {}
 

@@ -1,0 +1,40 @@
+{
+    "OverallSampleSize_source_quote": "A total of 101 patients completed the survey with an overall response rate of 48%.",
+    "OverallSampleSize_source_location": "Page 1, Abstract",
+    "OverallSampleSize_unit": "patients",
+    "OverallSampleSize_value": 101,
+    "GroupSampleSizes": [
+        {
+            "source_quote": "Of the 101 patients who completed the survey, 63 patients (62%) quit smoking prior to undergoing primary TJA.",
+            "source_location": "Page 2, Figure 1 description",
+            "value": 63,
+            "unit": "patients"
+        },
+        {
+            "source_quote": "Fifteen patients (15%) underwent TJA without smoking cessation.",
+            "source_location": "Page 2, Figure 1 description",
+            "value": 15,
+            "unit": "patients"
+        },
+        {
+            "source_quote": "In total, 23 patients did not undergo TJA (23%): 19 of 23 patients were unable to quit smoking and thus remained ineligible for surgery, 2 patients were able to quit smoking but were unable to achieve a goal BMI prior to surgery, and 2 patients were able to quit smoking and then deferred surgery.",
+            "source_location": "Page 2, Figure 1 description",
+            "value": 23,
+            "unit": "patients"
+        }
+    ],
+    "GroupLabels_source_quote": "Of the 101 patients who completed the survey, 63 patients (62%) quit smoking prior to undergoing primary TJA. Fifteen patients (15%) underwent TJA without smoking cessation. In total, 23 patients did not undergo TJA (23%): 19 of 23 patients were unable to quit smoking and thus remained ineligible for surgery, 2 patients were able to quit smoking but were unable to achieve a goal BMI prior to surgery, and 2 patients were able to quit smoking and then deferred surgery.",
+    "GroupLabels_source_location": "Page 2, Figure 1 description",
+    "GroupLabels_value": "Patients who quit smoking prior to TJA; patients who underwent TJA without smoking cessation; patients who did not undergo TJA.",
+    "SampleSizeBreakdown_source_quote": "209 patients received the survey\n101 patients completed survey (48%)\n78 patients underwent TJA surgery (77%)\n63 subjects quit smoking prior to surgery (62%)\n58 quit and had surgery at study site (71%)\n5 quit and had surgery elsewhere (6.5%)\n15 subjects underwent TJA without smoking cessation (15%)\n23 subjects did not have surgery (23%):\n14 did not meet smoking cessation requirement (14%)\n7 did not meet BMI requirement (7%)\n2 selected other reason (2%)\n10 did not quit had surgery at study site (13%)\n5 did not quit and had surgery elsewhere (6.5%)",
+    "SampleSizeBreakdown_source_location": "Page 2, Figure 1 description",
+    "SampleSizeBreakdown_value": "209 patients received the survey; 101 patients completed the survey (48%); among those, 78 patients underwent TJA surgery (77%), which further broke down into 63 subjects who quit smoking prior to surgery (62%, with 58 undergoing surgery at the study site and 5 elsewhere) and 15 subjects who underwent TJA without smoking cessation (15%, with 10 at the study site and 5 elsewhere); additionally, 23 subjects did not have surgery (23%) due to not meeting smoking cessation requirements, BMI requirements, or other reasons.",
+    "SampleSizeRange_source_quote": "Of the 101 patients who completed the survey, 63 patients (62%) quit smoking prior to undergoing primary TJA. Fifteen patients (15%) underwent TJA without smoking cessation. In total, 23 patients did not undergo TJA (23%): 19 of 23 patients were unable to quit smoking and thus remained ineligible for surgery, 2 patients were able to quit smoking but were unable to achieve a goal BMI prior to surgery, and 2 patients were able to quit smoking and then deferred surgery.",
+    "SampleSizeRange_source_location": "Page 2, Figure 1 description",
+    "SampleSizeRange_min_value": 15,
+    "SampleSizeRange_max_value": 63,
+    "SampleSizePatterns_source_quote": "The data from this self-reported survey study demonstrate that most patients (62%) will quit smoking, if required, for an elective TJA.",
+    "SampleSizePatterns_source_location": "Page 5, Conclusions",
+    "SampleSizePatterns_value": "Most survey respondents quit smoking prior to TJA (62%), while smaller proportions underwent TJA without smoking cessation (15%) or did not undergo TJA at all (23%), illustrating that the smoking cessation requirement significantly influences patient pathways.",
+    "successfully_extracted": true
+}

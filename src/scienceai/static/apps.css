@@ -1,293 +1,341 @@
-
 /* Color Palette */
- :root {
-     --sea-salt: #F9F8F8;
-     --baby-powder: #fffffaff;
-     --slate-gray: #7a8b99ff;
-     --black: #000103ff;
-     --jet: #333138ff;
-     --blue-munsell: #5296a5ff;
+:root {
+    --sea-salt: #F9F8F8;
+    --baby-powder: #fffffa;
+    --slate-gray: #7a8b99ff;
+    --black: #000103ff;
+    --jet: #333138ff;
+    --blue-munsell: #5296a5ff;
+    --accent-color: #ff7b54; /* A pop of coral for accent elements */
+
+    /* New Variables */
+    --text-color-light: white;
+    --text-color-dark: var(--jet);
+    --border-color: #ccc;
+    --light-border-color: #ddd;
+    --button-border-color: #ff7b54; /* Make buttons stand out with accent color */
+    --hover-border-color: #ff6a3a; /* Darker accent for hover effect */
+    --box-shadow-color: rgba(0, 0, 0, 0.15); /* Increased shadow opacity for more depth */
+    --card-shadow-color: rgba(0, 0, 0, 0.5); /* Slightly increased card shadow */
+    --default-background-color: #f0f0f0;
+    --hover-background-color: #dceefb; /* Lighter blue for hover effects */
+    --loader-border-color: #f3f3f3;
+    --loader-border-top-color: gray;
+    --resize-handle-bg: #ccc;
+    --resize-handle-hover-bg: #bbb;
+    --dark-gray: #333;
+    --timestamp-color: #888; /* Slightly darker for better contrast */
+    --chat-user-bg-color: #6C757D;
+    --chat-ai-bg-color: #6c88a1;
+    --chat-tool-bg-color: #4e6172;
+    --show-work-button-bg-color: #5a697a;
+    --alert-bg-color: #f44336;
+    --modal-overlay-bg: rgba(0, 0, 0, 0.4);
+    --modal-content-bg: #fefefe;
+    --modal-border-color: #888;
+    --close-btn-color: #666; /* Slightly darker for visibility */
+    --draggable-item-bg-color: #f9f9f9;
+    --scrollbar-thumb-bg: #6c88a1;
 }
+
 /* Basic Reset */
- *, *::before, *::after {
-     box-sizing: border-box !important;
+*, *::before, *::after {
+    box-sizing: border-box !important;
 }
+
 /* Typography */
- body {
-     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-     background-color: var(--baby-powder);
-     color: var(--jet);
-     margin: 0;
-     line-height: 1.5;
-     font-size: 16px;
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--baby-powder);
+    color: var(--text-color-dark);
+    margin: 0;
+    line-height: 1.5;
+    font-size: 16px;
 }
 
 /* Container */
- .container {
-     display: flex;
-     flex-wrap: wrap;
-     justify-content: space-around;
-     max-width: 1200px;
-     margin: 20px auto;
+.container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    max-width: 1200px;
+    margin: 20px auto;
 }
+
 /* Column Styling */
- .column {
-     margin: 10px;
-     background: var(--baby-powder);
-     border-radius: 8px;
-     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-     flex: 0 0 calc(33.333% - 20px);
-     display: flex;
-     flex-direction: column;
-     overflow: hidden;
+.column {
+    margin: 10px;
+    background: var(--baby-powder);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px var(--box-shadow-color);
+    flex: 0 0 calc(33.333% - 20px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 /* Header Styling */
- .column-header {
-     background: var(--blue-munsell);
-     color: var(--baby-powder);
-     padding: 20px;
-     text-align: center;
-     font-weight: bold;
-     font-size: 1.2em;
+.column-header {
+    background: var(--blue-munsell);
+    color: var(--baby-powder);
+    padding: 20px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.2em;
 }
- input[type="text"] {
-     margin: 20px;
-     padding: 10px;
-     width: calc(100% - 60px);
-     box-sizing: border-box;
+
+input[type="text"] {
+    margin: 20px;
+    padding: 10px;
+    width: calc(100% - 60px);
+    box-sizing: border-box;
 }
+
 /* Search Box */
- .search-box {
-     padding: 10px;
-     display: flex;
-     align-items: center;
-     gap: 10px;
-     background: var(--slate-gray);
-     border-bottom: 1px solid var(--jet);
-     border-radius: 4px;
+.search-box {
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--slate-gray);
+    border-bottom: 1px solid var(--jet);
+    border-radius: 4px;
 }
- .search-box input[type="text"] {
-     flex-grow: 1;
-     padding: 10px;
-     border: 1px solid var(--black);
-     border-radius: 4px;
-     color: var(--black);
-     background: var(--baby-powder);
+
+.search-box input[type="text"] {
+    flex-grow: 1;
+    padding: 10px;
+    border: 1px solid var(--black);
+    border-radius: 4px;
+    color: var(--black);
+    background: var(--baby-powder);
 }
 
 /* Dynamic height and scrolling for papers-grid */
 .papers-container {
-    flex-grow: 1; /* Takes all available space left by other elements */
-    overflow-y: auto; /* Enables vertical scrolling when needed */
-    margin-top: 10px; /* Adjusted spacing */
-    margin-bottom: 10px; /* Adjusted spacing */
-    height: 100%; /* Takes full height of parent */
-    border-top: 2px solid #ccc;
+    flex-grow: 1;
+    overflow-y: auto;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    height: 100%;
+    border-top: 2px solid var(--border-color);
 }
 
- .grid {
-     display: flex;
-     flex-wrap: wrap;
-     justify-content: space-around;
-     align-content: center;
+.grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    align-content: center;
 }
- .card {
-     display: flex;
-     flex-direction: column;
-     padding: 20px;
-     border: 1px solid #ccc;
-     max-width: 550px;
-     min-width: 300px;
-     width: 90%;
-     box-sizing: border-box;
-     background-color: var(--sea-salt);
-     border-radius: 4px;
-     margin: 10px;
-     box-shadow: 5px 5px 15px -4px rgba(0,0,0,0.83);
-     height: auto;
+
+.card {
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    border: 1px solid var(--border-color);
+    max-width: 550px;
+    min-width: 300px;
+    width: 90%;
+    box-sizing: border-box;
+    background-color: var(--sea-salt);
+    border-radius: 4px;
+    margin: 10px;
+    box-shadow: 5px 5px 15px -4px var(--card-shadow-color);
+    height: auto;
 }
- .icon-button, .icon-container > a {
-     border: none;
-     background: none;
-     cursor: pointer;
-     padding: 5px;
-     color: #000;
+
+.icon-button, .icon-container > a {
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 5px;
+    color: var(--black);
 }
- .json-viewer, .pdf-viewer {
-     margin-top: 10px;
-     border: 1px solid #ddd;
-     padding: 10px;
-     max-height: 200px;
-     overflow: auto;
+
+.json-viewer, .pdf-viewer {
+    margin-top: 10px;
+    border: 1px solid var(--light-border-color);
+    padding: 10px;
+    max-height: 200px;
+    overflow: auto;
 }
- .icon-container-box {
-     display: flex;
+
+.icon-container-box {
+    display: flex;
 }
- .icon-container-box-image {
-     display: flex;
-     width: 100px;
-     height: 100px;
-     justify-content: center;
-     align-content: center;
-     align-items: center;
-     flex-wrap: nowrap;
-     flex-direction: column;
+
+.icon-container-box-image {
+    display: flex;
+    width: 100px;
+    height: 100px;
+    justify-content: center;
+    align-content: center;
+    align-items: center;
+    flex-wrap: nowrap;
+    flex-direction: column;
 }
- .icon-container-json-image {
-     width: 75px;
-     height: 75px;
-     background-size: contain;
-     background-repeat: no-repeat;
-     background-image: url('https://cdn-icons-png.flaticon.com/512/136/136443.png');
+
+.icon-container-json-image {
+    width: 75px;
+    height: 75px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-image: url('https://cdn-icons-png.flaticon.com/512/136/136443.png');
 }
- .icon-container-pdf-image {
-     width: 75px;
-     height: 75px;
-     background-size: contain;
-     background-repeat: no-repeat;
-     background-image: url('https://www.svgrepo.com/show/152004/pdf.svg');
+
+.icon-container-pdf-image {
+    width: 75px;
+    height: 75px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-image: url('https://www.svgrepo.com/show/152004/pdf.svg');
 }
- .tag {
-     display: inline-block;
-     background-color: var(--blue-munsell);
-     color: white;
-     padding: 5px 8px;
-     margin-right: 5px;
-     border-radius: 15px;
-     cursor: pointer;
+
+.tag {
+    display: inline-block;
+    background-color: var(--blue-munsell);
+    color: var(--text-color-light);
+    padding: 5px 8px;
+    margin-right: 5px;
+    border-radius: 15px;
+    cursor: pointer;
 }
- .tag i {
-     margin-left: 5px;
+
+.tag i {
+    margin-left: 5px;
 }
+
 /* Button Styling */
- button {
-     padding: 10px 15px;
-     border: none;
-     background-color: var(--black);
-     color: var(--baby-powder);
-     cursor: pointer;
-     border-radius: 4px;
-     transition: background-color 0.3s;
+button {
+    padding: 10px 15px;
+    border: none;
+    background-color: var(--black);
+    color: var(--baby-powder);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.3s;
 }
- button:hover {
-     background-color: var(--jet);
+
+button:hover {
+    background-color: var(--jet);
 }
+
 /* Content Styling */
- .input-field, .chat-bubble, .record {
-     margin: 10px;
-     padding: 15px;
-     background: var(--baby-powder);
-     border-radius: 4px;
-     border: 1px solid var(--slate-gray);
-     color: var(--black);
+.input-field, .chat-bubble, .record {
+    margin: 10px;
+    padding: 15px;
+    background: var(--baby-powder);
+    border-radius: 4px;
+    border: 1px solid var(--slate-gray);
+    color: var(--black);
 }
- .chat-bubble {
-     background: var(--slate-gray);
-     position: relative;
-     border-radius: 15px;
-     color: var(--baby-powder);
+
+.chat-bubble {
+    background: var(--slate-gray);
+    position: relative;
+    border-radius: 15px;
+    color: var(--baby-powder);
 }
- .record {
-     font-family: monospace;
-     color: var(--jet);
+
+.record {
+    font-family: monospace;
+    color: var(--jet);
 }
+
 /* Responsive Design */
- @media screen and (max-width: 1024px) {
-     .column {
-         flex: 0 0 calc(50% - 20px);
+@media screen and (max-width: 1024px) {
+    .column {
+        flex: 0 0 calc(50% - 20px);
     }
 }
- @media screen and (max-width: 768px) {
-     .container {
-         flex-direction: column;
+
+@media screen and (max-width: 768px) {
+    .container {
+        flex-direction: column;
     }
-     .column {
-         flex: 0 0 100%;
+    .column {
+        flex: 0 0 100%;
     }
 }
- #layout {
-     display: flex;
-     height: 100vh;
+
+#layout {
+    display: flex;
+    height: 100vh;
 }
- .panel {
+
+.panel {
     margin: -10px;
     scroll-snap-align: end;
     height: 70vh;
     overflow: hidden;
-    border-top: 2px solid #ccc;
+    border-top: 2px solid var(--border-color);
 }
+
 .panel-messages {
-     padding-top: 10px;
-     height: 70vh;
-     overflow-y: scroll;
+    padding-top: 10px;
+    height: 70vh;
+    overflow-y: scroll;
 }
 
-.chat-input-container{
-  margin: 20px;
-  border-top: 2px solid #ccc;
+.chat-input-container {
+    margin: 20px;
+    border-top: 2px solid var(--border-color);
 }
 
- #chat-messages {
-     height: calc(100% - 60px);
-     overflow-y: auto;
+#chat-messages {
+    height: calc(100% - 60px);
+    overflow-y: auto;
 }
 
- .nested {
-     padding-left: 20px;
+.nested {
+    padding-left: 20px;
 }
- .db-load-info {
-     padding-bottom: 10px;
-     padding-left: 10px;
-     font-size: 70%;
-     display: inline-flex;
-     justify-content: space-between;
-     align-items: center;
+
+.db-load-info {
+    padding-bottom: 10px;
+    padding-left: 10px;
+    font-size: 70%;
+    display: inline-flex;
+    justify-content: space-between;
+    align-items: center;
 }
- .load-button {
-     font-size: 70%;
-     padding: 2px 4px;
-    /* Minimal padding for a smaller button */
-     background-color: #f0f0f0;
-    /* Light grey background for subtlety */
-     color: #333;
-    /* Dark grey text for readability */
-     border: 1px solid #dcdcdc;
-    /* Slight border to define the button */
-     cursor: pointer;
-    /* Cursor changes to pointer to indicate it's clickable */
-     border-radius: 2px;
-    /* Small border radius for a slightly rounded look */
-     transition: background-color 0.2s, border-color 0.2s;
-    /* Smooth transition for a subtle hover effect */
-     display: inline-flex;
-    /* Make the button only as wide as its content */
+
+.load-button {
+    font-size: 70%;
+    padding: 2px 4px;
+    background-color: var(--default-background-color);
+    color: var(--dark-gray);
+    border: 1px solid var(--button-border-color);
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background-color 0.2s, border-color 0.2s;
+    display: inline-flex;
 }
- .load-button:hover {
-     background-color: #e0e0e0;
-    /* Slightly darker background on hover */
-     border-color: #cacaca;
-    /* Darker border on hover for contrast */
+
+.load-button:hover {
+    background-color: var(--hover-background-color);
+    border-color: var(--hover-border-color);
 }
- .reload {
-     font-family: Lucida Sans Unicode
+
+.reload {
+    font-family: Lucida Sans Unicode;
 }
- .loader {
-     border: 6px solid #f3f3f3;
-    /* Light grey */
-     border-top: 6px solid gray;
-    /* Blue */
-     border-radius: 50%;
-     width: 12px;
-     height: 12px;
-     animation: spin 2s linear infinite;
+
+.loader {
+    border: 6px solid var(--loader-border-color);
+    border-top: 6px solid var(--loader-border-top-color);
+    border-radius: 50%;
+    width: 12px;
+    height: 12px;
+    animation: spin 2s linear infinite;
 }
- @keyframes spin {
-     0% {
-         transform: rotate(0deg);
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
     }
-     100% {
-         transform: rotate(360deg);
+    100% {
+        transform: rotate(360deg);
     }
 }
 
@@ -305,7 +353,7 @@ html {
 /* Flex container to hold the sections */
 #container {
     display: flex;
-    height: 100vh; /* Use the full viewport height */
+    height: 100vh;
 }
 
 /* Style for the titles of the sections, rotated and positioned */
@@ -314,25 +362,25 @@ html {
     white-space: nowrap;
     writing-mode: vertical-rl;
     position: absolute;
-    top: 5%; /* Positioned at the center-top of the section */
-    left: 5px; /* Left offset */
-    transform: translate(0, -50%) rotate(180deg); /* Center the element, then rotate */
-    background: #ccc; /* Dark background for contrast */
+    top: 5%;
+    left: 5px;
+    transform: translate(0, -50%) rotate(180deg);
+    background: var(--resize-handle-bg);
     padding: 5px;
     font-size: 14px;
-    border-radius: 8px; /* Rounded corners */
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Subtle shadow */
-    z-index: 5; /* Ensure it's above the section background, but below the handle */
-    display: none; /* Initially hidden */
+    border-radius: 8px;
+    box-shadow: 0 2px 4px var(--box-shadow-color);
+    z-index: 5;
+    display: none;
 }
 
 /* Styles for the sections */
 .resize-section {
-    flex-grow: 1; /* Allows sections to grow to fill available space */
-    background: #f0f0f0; /* Light grey background */
-    position: relative; /* Needed for absolute positioning of children */
-    overflow: hidden; /* Prevents content from spilling out */
-    margin: 0 0px; /* Spacing between sections; adjust as needed */
+    flex-grow: 1;
+    background: var(--default-background-color);
+    position: relative;
+    overflow: hidden;
+    margin: 0 0px;
 }
 
 #right-section {
@@ -352,7 +400,7 @@ html {
 
 /* Internal content of sections */
 .resize-section-internal {
-    padding: 10px; /* Space inside the section */
+    padding: 10px;
     margin: 20px;
 }
 
@@ -365,28 +413,28 @@ html {
     top: 0;
     right: 0;
     height: 100%;
-    background: #ccc; /* Light grey */
+    background: var(--resize-handle-bg);
     cursor: ew-resize;
-    z-index: 10; /* Above other elements but below overlays, popups, etc. */
+    z-index: 10;
     border-radius: 4px;
 }
 
 /* Hover effect for the resize handles */
 .resize-handle:hover {
-    background: #bbb; /* Darker shade on hover */
+    background: var(--resize-handle-hover-bg);
 }
 
 /* The content of the resize handle, which is the resizable icon */
 .resize-handle::before {
     content: "⇆";
-    color: #333; /* Visible against the handle background */
-    font-size: 20px; /* Large enough to be easily seen and clicked on */
+    color: var(--dark-gray);
+    font-size: 20px;
     display: block;
 }
 
 /* Handle visibility when hovering over the section */
 .resize-section:hover .resize-handle {
-    background: #bbb; /* Slightly darker to highlight the handle */
+    background: var(--resize-handle-hover-bg);
 }
 
 summary {
@@ -395,17 +443,17 @@ summary {
 
 ::-webkit-scrollbar {
     border-radius: 25px;
-  }
+}
 ::-webkit-scrollbar-track {
     background: transparent;
-  }
+}
 ::-webkit-scrollbar-thumb {
-    background: #6c88a1;
+    background: var(--scrollbar-thumb-bg);
     border-radius: 8px;
-  }
+}
 ::-webkit-scrollbar-thumb:hover {
     background: var(--blue-munsell);
-  }
+}
 
 .chat-bubble-area-user {
     display: flex;
@@ -419,9 +467,10 @@ summary {
     align-items: left;
     margin: 0 30% 15px 5%;
 }
+
 .chat-bubble-user {
-    background-color: #6C757D;
-    color: white;
+    background-color: var(--chat-user-bg-color);
+    color: var(--text-color-light);
     border-radius: 16px;
     padding: 10px 14px;
     display: inline-block;
@@ -429,10 +478,22 @@ summary {
     text-align: left;
     word-wrap: break-word;
     border-top-right-radius: 4px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
+
+.chat-bubble-user li {
+    color: var(--text-color-light);
+}
+.chat-bubble-ai li {
+    color: var(--text-color-light);
+}
+.chat-bubble-tool li {
+    color: var(--text-color-light);
+}
+
 .chat-bubble-ai {
-    background-color: #6c88a1;
-    color: white;
+    background-color: var(--chat-ai-bg-color);
+    color: var(--text-color-light);
     border-radius: 16px;
     padding: 10px 14px;
     display: inline-block;
@@ -440,28 +501,65 @@ summary {
     text-align: left;
     word-wrap: break-word;
     border-top-left-radius: 4px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 .chat-bubble-timestamp {
     display: inline-block;
     margin: 5px 0;
     font-size: 10px;
-    color: #999;
+    color: var(--timestamp-color);
 }
-.chat-form{
+
+.chat-bubble-area-tool {
+    display: flex;
+    flex-direction: column;
+    align-items: left;
+    margin: 0 30% 15px 5%;
+    cursor: pointer;
+}
+
+.chat-bubble-tool {
+    background-color: var(--chat-tool-bg-color);
+    color: var(--text-color-light);
+    border-radius: 16px;
+    padding: 10px 14px;
+    display: none;
+    max-width: 100%;
+    text-align: left;
+    word-wrap: break-word;
+    border-top-left-radius: 4px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.show-work-button {
+    background-color: var(--show-work-button-bg-color);
+    color: var(--text-color-light);
+    padding: 5px 10px;
+    text-align: center;
+    border-radius: 8px;
+    margin-top: 5px;
+}
+
+.show-work-button:hover {
+    background-color: var(--chat-tool-bg-color);
+    cursor: pointer;
+}
+
+.chat-form {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
     align-items: flex-end;
     padding: 10px;
-    border-top: 1px solid #ccc;
+    border-top: 1px solid var(--border-color);
 }
 .chat-form textarea {
     width: 100%;
-    border: 1px solid #ddd;
+    border: 1px solid var(--light-border-color);
     border-radius: 5px;
     margin-right: 10px;
     padding: 10px;
-    border-top: 1px solid #ccc;
+    border-top: 1px solid var(--border-color);
 }
 .chat-form button {
     margin: 0;
@@ -477,7 +575,6 @@ pre {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-
 .typing-indicator {
     height: 40px;
     width: 100%;
@@ -486,11 +583,10 @@ pre {
     justify-content: center;
 }
 
-
 .typing-indicator span {
     height: 10px;
     width: 10px;
-    background-color: #ccc;
+    background-color: var(--border-color);
     border-radius: 50%;
     display: inline-block;
     margin: 0 3px;
@@ -498,39 +594,37 @@ pre {
     animation: typingBlink 1.4s infinite;
 }
 
-
 .open-project-menu {
     display: flex;
     align-items: flex-start;
     flex-direction: column;
     max-width: 500px;
     padding: 10px;
-    background-color: #f1f1f1;
+    background-color: var(--default-background-color);
     border-radius: 8px;
     margin: 30px;
     margin-left: 10%;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 6px var(--box-shadow-color);
 }
-
 
 /* Additional styles for the #left-section-internal to ensure full height usage and column layout */
 #left-section-internal {
     display: flex;
     flex-direction: column;
-    height: 100%; /* Ensures it takes full height of its parent */
-    overflow: hidden; /* Ensures no spillover from child elements */
+    height: 100%;
+    overflow: hidden;
 }
 
 /* Ensure h2 and search-box only take necessary space */
 #left-section-internal > h2,
 #left-section-internal > .search-box {
-    flex-shrink: 0; /* These elements won't shrink */
+    flex-shrink: 0;
 }
 
 .alert {
     padding: 20px;
-    background-color: #f44336;
-    color: white;
+    background-color: var(--alert-bg-color);
+    color: var(--text-color-light);
     margin-bottom: 15px;
     margin-left: auto;
     margin-right: auto;
@@ -551,7 +645,6 @@ pre {
     padding-left: 10px;
 }
 
-
 /* Modal styles */
 .modal {
     display: none;
@@ -562,26 +655,25 @@ pre {
     width: 100%;
     height: 100vh;
     overflow: auto;
-    background-color: rgb(0,0,0);
-    background-color: rgba(0,0,0,0.4);
+    background-color: var(--modal-overlay-bg);
 }
 .modal-content {
-    background-color: #fefefe;
+    background-color: var(--modal-content-bg);
     margin: 5% auto;
     padding: 20px;
-    border: 1px solid #888;
+    border: 1px solid var(--modal-border-color);
     width: 80%;
     max-width: 600px;
 }
 .close {
-    color: #aaa;
+    color: var(--close-btn-color);
     float: right;
     font-size: 28px;
     font-weight: bold;
 }
 .close:hover,
 .close:focus {
-    color: black;
+    color: var(--close-btn-hover-color);
     text-decoration: none;
     cursor: pointer;
 }
@@ -594,7 +686,7 @@ pre {
 .draggable-item {
     margin: 2px 0;
     padding: 8px;
-    border: 1px solid #ddd;
-    background-color: #f9f9f9;
+    border: 1px solid var(--light-border-color);
+    background-color: var(--draggable-item-bg-color);
     cursor: move;
 }
