@@ -14,3 +14,4 @@ matplotlib
 scipy
 seaborn
 numpy
+num2words

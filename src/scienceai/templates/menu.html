@@ -1,62 +1,103 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" type="text/css" href="/static/apps.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <title>ScienceAI</title>
 </head>
+
 <body>
-    <h1 style="display: flex;justify-content: center;">ScienceAI</h1>
-    {% if error %}
+    <div class="container">
+        <h1 style="text-align: center; margin-bottom: 2rem; font-size: 2.5rem; color: var(--primary);">ScienceAI</h1>
+
+        {% if error %}
         <div class="alert">
-            <span class="closebtn" onclick="window.location.href = '/menu';">&times;</span>
-            {{ error }}
+            <span>{{ error }}</span>
+            <span class="closebtn" onclick="window.location.href = '/menu';" style="cursor: pointer;">&times;</span>
         </div>
-    {% endif %}
-    <div class="open-project-menu">
-        <h2>Open or Create Project</h2>
-        <form action="/menu" method="post">
-            <label for="project">Project Name:</label><br>
-            <input type="text" id="project" name="project" list="projects" required>
-            <datalist id="projects">
-                {% for project in projects %}
-                    <option value="{{ project }}"></option>
-                {% endfor %}
-            </datalist>
-            <br><br>
-            <button type="submit">Start</button>
-        </form>
-    </div>
-    <div class="open-project-menu">
-        <h2>Load Checkpoint</h2>
-        <form action="/load_checkpoint" method="post" enctype="multipart/form-data">
-            <label for="project">Project Name:</label><br>
-            <input type="text" name="project" required>
-            <br>
-            <label for="overwrite">Overwrite If Project Exists:</label>
-            <input type="checkbox" id="overwrite" name="overwrite" value="F">
-            <br><br>
-            <label for="checkpoint">Checkpoint:</label><br>
-            <input id="checkpoint" type="file" name="checkpoint" accept=".zip" required>
-            <br><br>
-            <button type="submit">Load</button>
-        </form>
-    </div>
-    <div class="open-project-menu">
-        <h2>Delete Project</h2>
-        <form action="/delete_project" method="post">
-            <label for="project">Project Name:</label><br>
-            <input type="text" name="project" list="projects" required>
-            <br><br>
-            <button type="submit">Delete</button>
-        </form>
-    </div>
-    <div class="open-project-menu">
-        <h2>Shutdown System</h2>
-        <form action="/shutdown" method="post">
-            <button type="submit">Shutdown</button>
-        </form>
+        {% endif %}
+
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+            <!-- Open Project Card -->
+            <div class="card open-project-menu" style="margin: 0; max-width: none;">
+                <h2><i class="fas fa-folder-open"></i> Open Project</h2>
+                <form action="/menu" method="post">
+                    <label for="project" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Project
+                        Name</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="project" name="project" list="projects" required
+                            placeholder="Select or type project name..." style="margin: 0;">
+                        <datalist id="projects">
+                            {% for project in projects %}
+                            <option value="{{ project }}"></option>
+                            {% endfor %}
+                        </datalist>
+                        <button type="submit">Start</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Load Checkpoint Card -->
+            <div class="card open-project-menu" style="margin: 0; max-width: none;">
+                <h2><i class="fas fa-save"></i> Load Checkpoint</h2>
+                <form action="/load_checkpoint" method="post" enctype="multipart/form-data">
+                    <div style="margin-bottom: 1rem;">
+                        <label for="load-project"
+                            style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Project Name</label>
+                        <input type="text" id="load-project" name="project" required style="margin: 0;">
+                    </div>
+
+                    <div style="margin-bottom: 1rem;">
+                        <label class="checkbox-container"
+                            style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="overwrite" name="overwrite" value="F" style="width: auto;">
+                            <span>Overwrite if exists</span>
+                        </label>
+                    </div>
+
+                    <div style="margin-bottom: 1rem;">
+                        <label for="checkpoint"
+                            style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Checkpoint File
+                            (.zip)</label>
+                        <input id="checkpoint" type="file" name="checkpoint" accept=".zip" required
+                            style="padding: 0.5rem; background: var(--background);">
+                    </div>
+
+                    <button type="submit" class="secondary" style="width: 100%;">Load Checkpoint</button>
+                </form>
+            </div>
+
+            <!-- Delete Project Card -->
+            <div class="card open-project-menu" style="margin: 0; max-width: none;">
+                <h2><i class="fas fa-trash-alt"></i> Delete Project</h2>
+                <form action="/delete_project" method="post"
+                    onsubmit="return confirm('Are you sure you want to delete this project? This cannot be undone.');">
+                    <label for="delete-project" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Project
+                        Name</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="delete-project" name="project" list="projects" required
+                            style="margin: 0;">
+                        <button type="submit" class="danger">Delete</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Shutdown Card -->
+            <div class="card open-project-menu"
+                style="margin: 0; max-width: none; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+                <h2><i class="fas fa-power-off"></i> System</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Shut down the ScienceAI server.</p>
+                <form action="/shutdown" method="post">
+                    <button type="submit" class="secondary"
+                        style="border-color: var(--danger); color: var(--danger);">Shutdown System</button>
+                </form>
+            </div>
+        </div>
     </div>
 </body>
+
 </html>

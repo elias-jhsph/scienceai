@@ -25,6 +25,7 @@ Requires-Dist: matplotlib
 Requires-Dist: scipy
 Requires-Dist: seaborn
 Requires-Dist: numpy
+Requires-Dist: num2words
 Dynamic: license-file
 
 ScienceAI
