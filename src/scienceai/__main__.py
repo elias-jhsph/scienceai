@@ -81,6 +81,34 @@ def convert_markdown(messages):
     return cp_text_dict
 
 
+def filter_intermediate_messages(messages):
+    """
+    Hide all but the last intermediate status messages like 'Working on that now...' 
+    and 'Reflecting on work now...' to keep the chat clean.
+    """
+    intermediate_phrases = ["Working on that now...", "Reflecting on work now..."]
+    
+    # Find indices of all intermediate messages
+    intermediate_indices = []
+    for i, msg in enumerate(messages):
+        if msg.get("role") == "assistant" and msg.get("content") in intermediate_phrases:
+            intermediate_indices.append(i)
+    
+    # If there are intermediate messages, hide all but the last one (if it's still pending)
+    if intermediate_indices:
+        last_index = intermediate_indices[-1]
+        last_msg = messages[last_index]
+        
+        # Only keep the last one visible if it's still pending
+        for idx in intermediate_indices:
+            if idx != last_index or last_msg.get("status") != "Pending":
+                messages[idx]["hidden"] = True
+    
+    # Filter out hidden messages
+    return [msg for msg in messages if not msg.get("hidden", False)]
+
+
+
 def load_project(project):
     global stop_event
     global database
@@ -248,14 +276,16 @@ def discussion(ws):
         current = str(uuid.uuid4())
     else:
         current = str(hash(str(database.get_database_chat())))
-        ws.send(render_template('chat.html', messages=convert_markdown(messages)))
+        filtered_messages = filter_intermediate_messages(messages.copy())
+        ws.send(render_template('chat.html', messages=convert_markdown(filtered_messages)))
     while True:
         asyncio.run(database.await_update(timeout=60))
         messages = database.get_database_chat()
         new = str(hash(str(database.get_database_chat())))
         if new != current:
             current = new
-            ws.send(render_template('chat.html', messages=convert_markdown(messages)))
+            filtered_messages = filter_intermediate_messages(messages.copy())
+            ws.send(render_template('chat.html', messages=convert_markdown(filtered_messages)))
 
 
 @app.route('/send_message', methods=['POST'])

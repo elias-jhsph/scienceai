@@ -6,25 +6,32 @@
     --black: #000103ff;
     --jet: #333138ff;
     --blue-munsell: #5296a5ff;
-    --accent-color: #ff7b54; /* A pop of coral for accent elements */
+    --accent-color: #ff7b54;
+    /* A pop of coral for accent elements */
 
     /* New Variables */
     --text-color-light: white;
     --text-color-dark: var(--jet);
     --border-color: #ccc;
     --light-border-color: #ddd;
-    --button-border-color: #ff7b54; /* Make buttons stand out with accent color */
-    --hover-border-color: #ff6a3a; /* Darker accent for hover effect */
-    --box-shadow-color: rgba(0, 0, 0, 0.15); /* Increased shadow opacity for more depth */
-    --card-shadow-color: rgba(0, 0, 0, 0.5); /* Slightly increased card shadow */
+    --button-border-color: #ff7b54;
+    /* Make buttons stand out with accent color */
+    --hover-border-color: #ff6a3a;
+    /* Darker accent for hover effect */
+    --box-shadow-color: rgba(0, 0, 0, 0.15);
+    /* Increased shadow opacity for more depth */
+    --card-shadow-color: rgba(0, 0, 0, 0.5);
+    /* Slightly increased card shadow */
     --default-background-color: #f0f0f0;
-    --hover-background-color: #dceefb; /* Lighter blue for hover effects */
+    --hover-background-color: #dceefb;
+    /* Lighter blue for hover effects */
     --loader-border-color: #f3f3f3;
     --loader-border-top-color: gray;
     --resize-handle-bg: #ccc;
     --resize-handle-hover-bg: #bbb;
     --dark-gray: #333;
-    --timestamp-color: #888; /* Slightly darker for better contrast */
+    --timestamp-color: #888;
+    /* Slightly darker for better contrast */
     --chat-user-bg-color: #6C757D;
     --chat-ai-bg-color: #6c88a1;
     --chat-tool-bg-color: #4e6172;
@@ -33,13 +40,16 @@
     --modal-overlay-bg: rgba(0, 0, 0, 0.4);
     --modal-content-bg: #fefefe;
     --modal-border-color: #888;
-    --close-btn-color: #666; /* Slightly darker for visibility */
+    --close-btn-color: #666;
+    /* Slightly darker for visibility */
     --draggable-item-bg-color: #f9f9f9;
     --scrollbar-thumb-bg: #6c88a1;
 }
 
 /* Basic Reset */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     box-sizing: border-box !important;
 }
 
@@ -144,7 +154,8 @@ input[type="text"] {
     height: auto;
 }
 
-.icon-button, .icon-container > a {
+.icon-button,
+.icon-container>a {
     border: none;
     background: none;
     cursor: pointer;
@@ -152,7 +163,8 @@ input[type="text"] {
     color: var(--black);
 }
 
-.json-viewer, .pdf-viewer {
+.json-viewer,
+.pdf-viewer {
     margin-top: 10px;
     border: 1px solid var(--light-border-color);
     padding: 10px;
@@ -191,6 +203,14 @@ input[type="text"] {
     background-image: url('https://www.svgrepo.com/show/152004/pdf.svg');
 }
 
+.icon-container-csv-image {
+    width: 75px;
+    height: 75px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-image: url('https://www.svgrepo.com/show/104744/csv-file-format-extension.svg');
+}
+
 .tag {
     display: inline-block;
     background-color: var(--blue-munsell);
@@ -221,7 +241,9 @@ button:hover {
 }
 
 /* Content Styling */
-.input-field, .chat-bubble, .record {
+.input-field,
+.chat-bubble,
+.record {
     margin: 10px;
     padding: 15px;
     background: var(--baby-powder);
@@ -253,6 +275,7 @@ button:hover {
     .container {
         flex-direction: column;
     }
+
     .column {
         flex: 0 0 100%;
     }
@@ -334,6 +357,7 @@ button:hover {
     0% {
         transform: rotate(0deg);
     }
+
     100% {
         transform: rotate(360deg);
     }
@@ -346,7 +370,9 @@ html {
 }
 
 /* Ensure all elements include padding and border in the element's total width and height */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     box-sizing: inherit;
 }
 
@@ -444,13 +470,16 @@ summary {
 ::-webkit-scrollbar {
     border-radius: 25px;
 }
+
 ::-webkit-scrollbar-track {
     background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb-bg);
     border-radius: 8px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
     background: var(--blue-munsell);
 }
@@ -461,6 +490,7 @@ summary {
     align-items: right;
     margin: 0 5% 15px 30%;
 }
+
 .chat-bubble-area-ai {
     display: flex;
     flex-direction: column;
@@ -484,9 +514,11 @@ summary {
 .chat-bubble-user li {
     color: var(--text-color-light);
 }
+
 .chat-bubble-ai li {
     color: var(--text-color-light);
 }
+
 .chat-bubble-tool li {
     color: var(--text-color-light);
 }
@@ -503,6 +535,7 @@ summary {
     border-top-left-radius: 4px;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
+
 .chat-bubble-timestamp {
     display: inline-block;
     margin: 5px 0;
@@ -553,6 +586,7 @@ summary {
     padding: 10px;
     border-top: 1px solid var(--border-color);
 }
+
 .chat-form textarea {
     width: 100%;
     border: 1px solid var(--light-border-color);
@@ -561,6 +595,7 @@ summary {
     padding: 10px;
     border-top: 1px solid var(--border-color);
 }
+
 .chat-form button {
     margin: 0;
 }
@@ -616,8 +651,8 @@ pre {
 }
 
 /* Ensure h2 and search-box only take necessary space */
-#left-section-internal > h2,
-#left-section-internal > .search-box {
+#left-section-internal>h2,
+#left-section-internal>.search-box {
     flex-shrink: 0;
 }
 
@@ -657,6 +692,7 @@ pre {
     overflow: auto;
     background-color: var(--modal-overlay-bg);
 }
+
 .modal-content {
     background-color: var(--modal-content-bg);
     margin: 5% auto;
@@ -665,12 +701,14 @@ pre {
     width: 80%;
     max-width: 600px;
 }
+
 .close {
     color: var(--close-btn-color);
     float: right;
     font-size: 28px;
     font-weight: bold;
 }
+
 .close:hover,
 .close:focus {
     color: var(--close-btn-hover-color);
@@ -683,10 +721,66 @@ pre {
     margin: 0;
     padding: 0;
 }
+
 .draggable-item {
     margin: 2px 0;
     padding: 8px;
     border: 1px solid var(--light-border-color);
     background-color: var(--draggable-item-bg-color);
     cursor: move;
+}
+
+/* PI Generated Content */
+.pi-generated-content {
+    margin-top: 10px;
+    padding: 15px;
+    background-color: var(--sea-salt);
+    border: 1px solid var(--light-border-color);
+    border-radius: 8px;
+}
+
+.pi-image-container {
+    text-align: center;
+    margin: 15px 0;
+    background: white;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid var(--light-border-color);
+}
+
+.pi-image-container img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
+
+.pi-image-caption {
+    font-size: 0.9em;
+    color: var(--timestamp-color);
+    margin-top: 5px;
+    font-style: italic;
+}
+
+.pi-download-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 5px 0;
+    padding: 8px 12px;
+    background-color: var(--blue-munsell);
+    color: var(--baby-powder) !important;
+    /* Force white text */
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 0.9em;
+    transition: background-color 0.2s;
+}
+
+.pi-download-link:hover {
+    background-color: var(--accent-color);
+    text-decoration: none;
+}
+
+.pi-download-link i {
+    font-size: 1.1em;
 }

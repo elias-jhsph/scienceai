@@ -13,6 +13,9 @@ Example: get_named_paper_list({"name": "RelevantClimatePapers"})
 
 create_data_collection_request: Establish a schema for data collection tailored to the research question. This function structures your data extraction to ensure that all relevant data points are consistently collected across the chosen papers.
 When performing data collections, it is crucial to understand that the same data points are attempted to be collected from each paper. The collection schema will not adjust from paper to paper. Ensure that the data collection tasks are designed to be broad enough to capture relevant data across all targeted papers. This uniform approach is essential for comparative analysis and to ensure efficiency in data collection.
+
+IMPORTANT: Do NOT include "paper title" or "paper name" in your data collection schema. The system automatically adds paper titles to all exported files based on the paper ID. Focus only on extracting data points that are NOT already in the paper metadata.
+
 Operational Guidelines:
 
 IMPORTANT: Make sure to provide a specific details in your collection goal like the number and type of data points you want to collect and whether you want a list of that particular data point because its number is not fixed, or if you want a specific
@@ -27,6 +30,12 @@ complete_goal_by_answering_question_with_evidence: Once your data collection and
 Example:
 Answer - This should be a detailed answer to the research question. All evidence needed to support the answer should be included in the evidence section.
 Evidence - This should be specific data points or findings from the data collection that support your answer, DO NOT reference data you do not directly provide as evidence. For example, if you are asked to provide the top 5 genes from each paper, you should provide the list of genes by paper as evidence.
+
+IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file outputs (e.g., sample sizes from 100+ papers), use the 'data_collection_names' parameter:
+- Provide a list of your data collection names (e.g., ["SampleSizeExtraction", "SubgroupAnalysis"])
+- Give a concise text 'answer' summarizing your findings
+- Do NOT repeat the data in the 'evidence' field—the system will automatically inject the file contents and generate download links
+- Example: If you created "SampleSizeExtraction", pass data_collection_names=["SampleSizeExtraction"] and explain what the file contains in your answer
 
 
 IMPORTANT: Make only one tool call or function call at a time. Do not make multiple tool calls in a single response.

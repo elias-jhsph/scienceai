@@ -1,7 +1,7 @@
 import time
 from datetime import datetime
 
-from .llm import client, use_tools
+from .llm import client, use_tools_sync as use_tools
 from .database_manager import DatabaseManager
 from .data_extractor import generate_schema, extract_data, schema_to_tool
 import os
@@ -17,7 +17,9 @@ with open(os.path.join(path_to_app, "analyst_base_prompt.txt"), "r") as f:
 def reflect_on_evidence(goal, answer, evidence, retries=3):
     system_message = ("The analyst has answered the following question / goal with evidence. "
                       "You are a thoughtful Researcher, evaluate the evidence and "
-                      "determine if the goal has been achieved or the question has been answered.")
+                      "determine if the goal has been achieved or the question has been answered. "
+                      "NOTE: Paper IDs (short alphanumeric identifiers like '1e482c3c3a') are valid and acceptable "
+                      "for identifying papers—title extraction is optional, not required.")
     user_message = f"My goal/question: {goal}\n\nMy answer is:\n{answer}\n\nMy evidence:\n{evidence}."
 
     messages = [
@@ -31,7 +33,7 @@ def reflect_on_evidence(goal, answer, evidence, retries=3):
         }
     ]
 
-    arguments = {"messages": messages, "model": "o3-mini", 'reasoning_effort': 'medium'}
+    arguments = {"messages": messages, "model": "o4-mini", 'reasoning_effort': 'medium'}
 
     chat_response = client.chat.completions.create(**arguments)
 
@@ -62,7 +64,7 @@ def reflect_on_evidence(goal, answer, evidence, retries=3):
         }
     ]
 
-    arguments = {"messages": messages, "model": "gpt-4o", "tools": tools,
+    arguments = {"messages": messages, "model": "o4-mini", 'reasoning_effort': 'medium', "tools": tools,
                  "tool_choice": {"type": "function", "function": {"name": "check_completed_goal"}}}
 
     retry = 0
@@ -86,9 +88,10 @@ def reflect_on_evidence(goal, answer, evidence, retries=3):
 
 # Analyst Module
 class Analyst:
-    def __init__(self, db: DatabaseManager, analyst_dict={}, name="", goal="", attempts=5):
+    def __init__(self, db: DatabaseManager, analyst_dict={}, name="", goal="", attempts=5, require_file_output=False):
         self.db = db
         self.attempts = attempts
+        self.require_file_output = require_file_output
         if analyst_dict and name and goal:
             raise ValueError("Can not provide both analyst_dict and name and goal.")
         if "name" in analyst_dict and "goal" in analyst_dict:
@@ -96,15 +99,19 @@ class Analyst:
             self.goal = analyst_dict["goal"]
             self.answer = analyst_dict.get("answer", None)
             self.evidence = analyst_dict.get("evidence", None)
+            self.require_file_output = analyst_dict.get("require_file_output", False)
         if name and goal:
             self.name = name
             self.goal = goal
             self.answer = None
             self.evidence = None
         try:
-            self.db.get_analyst_metadata(self.name)
+            metadata = self.db.get_analyst_metadata(self.name)
+            # Load require_file_output from metadata if it exists
+            if not analyst_dict:
+                self.require_file_output = metadata.get("require_file_output", False)
         except ValueError:
-            self.db.create_analyst(name, goal, other={"goal_achieved": False})
+            self.db.create_analyst(name, goal, other={"goal_achieved": False, "require_file_output": require_file_output})
         self.get_all_papers()
         self.tool_callables = {
             "get_all_papers": self.get_all_papers,
@@ -118,13 +125,30 @@ class Analyst:
             self.create_named_paper_list(None, None, return_tool=True),
             self.get_named_paper_list(None, return_tool=True),
             self.create_data_collection_request(None, None, return_tool=True),
-            self.complete_goal_by_answering_question_with_evidence(None, None, return_tool=True)
+            self.complete_goal_by_answering_question_with_evidence_schema()
         ]
         self.follow_up_answer = None
         self.follow_up_evidence = None
         messages = self.db.get_analyst_context(self.name)
         answer_attempts = [message for message in messages if message["role"] == "tool" and message["name"] == "complete_goal_by_answering_question_with_evidence"]
         self.answer_attempts = len(answer_attempts)
+        
+        # Build system message with file output requirements
+        file_output_instruction = ""
+        if self.require_file_output:
+            file_output_instruction = """\n\nCRITICAL REQUIREMENT: You MUST provide your answer with data collection files. 
+When completing your goal, you are REQUIRED to use the 'data_collection_names' parameter with the names of the data collections you created.
+Do NOT provide the answer without attaching the file(s). The user specifically requested downloadable file outputs for this analysis.
+"""
+        else:
+            file_output_instruction = """\n\nIMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file outputs (e.g., sample sizes from 100+ papers), use the 'data_collection_names' parameter:
+- Provide a list of your data collection names (e.g., ["SampleSizeExtraction", "SubgroupAnalysis"])
+- Give a concise text 'answer' summarizing your findings
+- Do NOT repeat the data in the 'evidence' field—the system will automatically inject the file contents and generate download links
+- Example: If you created "SampleSizeExtraction", pass data_collection_names=["SampleSizeExtraction"] and explain what the file contains in your answer
+"""
+        
+        self.system_message = analyst_system + file_output_instruction
 
     def get_context(self):
         return self.db.get_analyst_context(self.name)
@@ -277,46 +301,153 @@ class Analyst:
         results = {}
         tracker = self.db.add_analyst_tool_tracker(self.name, collection_name, datetime.now().strftime("%Y-%m-%d_%H_%M_%S"))
         time.sleep(3)
-        for paper in papers:
-            print("*** Extracting from Paper:", paper["database"]["paper_id"][:10])
-            result = extract_data(tool, paper["cleaned_text"])
-            self.db.update_analyst_tool_tracker(tracker, paper["database"]["paper_id"], result)
-            short_id[paper["database"]["paper_id"][:10]] = paper["database"]["paper_id"]
-            results[paper["database"]["paper_id"][:10]] = result
+        
+        # Create async tasks for parallel extraction
+        import asyncio
+        import concurrent.futures
+        
+        print(f"Starting parallel extraction for {len(papers)} papers...")
+        
+        async def extract_from_paper(paper):
+            """Extract data from a single paper"""
+            paper_id = paper["database"]["paper_id"]
+            short_paper_id = paper_id[:10]
+            print(f"*** Extracting from Paper: {short_paper_id}")
+            
+            # Run async extract_data
+            result = await extract_data(tool, paper["cleaned_text"])
+            
+            # Update tracker immediately after extraction
+            self.db.update_analyst_tool_tracker(tracker, paper_id, result)
+            
+            print(f"*** Completed extraction for Paper: {short_paper_id}")
+            return short_paper_id, paper_id, result
+        
+        async def run_all_extractions():
+            """Run all extractions concurrently"""
+            tasks = [extract_from_paper(paper) for paper in papers]
+            results = await asyncio.gather(*tasks)
+            print(f"All {len(results)} extractions completed!")
+            return results
+        
+        # Run in a new thread with its own event loop
+        def run_in_thread():
+            """Create new event loop and run extractions"""
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(run_all_extractions())
+            finally:
+                loop.close()
+        
+        # Execute in thread and wait for results
+        print("Waiting for all extractions to complete...")
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(run_in_thread)
+            extraction_results = future.result()
+        
+        print(f"Received results for {len(extraction_results)} papers, building output...")
+        
+        # Build results dict (tracker already updated during extraction)
+        for short_paper_id, paper_id, result in extraction_results:
+            short_id[short_paper_id] = paper_id
+            results[short_paper_id] = result
+        
         self.db.convert_analyst_tool_tracker(self.name, collection_name)
+        print(f"Data collection complete, returning results.")
         return results
 
-    def complete_goal_by_answering_question_with_evidence(self, answer="", evidence="", return_tool=False):
-        if return_tool:
-            return {
-                "type": "function",
-                "function": {
-                    "strict": True,
-                    "name": "complete_goal_by_answering_question_with_evidence",
-                    "description": "Completes the analyst's goal by answering a question with evidence.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "answer": {
-                                "type": "string",
-                                "description": "This should be a detailed answer to the research question. All "
-                                               "evidence needed to support the answer should be included in the "
-                                               "evidence section."
-                            },
-                            "evidence": {
-                                "type": "string",
-                                "description": "This should be specific data points or findings from the data "
-                                               "collection that support your answer, DO NOT reference data you do not "
-                                               "directly provide as evidence. For example, if you are asked to provide "
-                                               "the top 5 genes from each paper, you should provide the list of genes "
-                                               "by paper as evidence."
-                            }
+    def complete_goal_by_answering_question_with_evidence_schema(self):
+        return {
+            "type": "function",
+            "function": {
+                "name": "complete_goal_by_answering_question_with_evidence",
+                "description": "Completes the analyst's goal by answering a question with evidence.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "answer": {
+                            "type": "string",
+                            "description": "This should be a detailed answer to the research question. All "
+                                           "evidence needed to support the answer should be included in the "
+                                           "evidence section."
                         },
-                        "additionalProperties": False,
-                        "required": ["answer", "evidence"]
-                    }
+                        "evidence": {
+                            "type": "string",
+                            "description": "This should be specific data points or findings from the data "
+                                           "collection that support your answer, DO NOT reference data you do not "
+                                           "directly provide as evidence. For example, if you are asked to provide "
+                                           "the top 5 genes from each paper, you should provide the list of genes "
+                                           "by paper as evidence."
+                        },
+                        "data_collection_names": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Optional list of data collection names to attach as downloadable files. "
+                                           "The system will automatically inject file contents into evidence and generate download links."
+                        }
+                    },
+                    "required": ["answer", "evidence"]
                 }
             }
+        }
+
+    def complete_goal_by_answering_question_with_evidence(self, answer="", evidence="", data_collection_names=None):
+        import pandas as pd
+        import os
+        
+        # Validate require_file_output enforcement
+        if self.require_file_output and (not data_collection_names or len(data_collection_names) == 0):
+            self.answer_attempts += 1
+            return ("Answer not valid. You are REQUIRED to provide data collection files for this analysis. "
+                    "Please create a data collection using create_data_collection_request, then reference it "
+                    "using the data_collection_names parameter. Do not attempt to complete without attaching files.")
+        
+        # Handle data_collection_names if provided
+        if data_collection_names:
+            download_links = []
+            injected_evidence = evidence + "\n\n## Attached Data Collections\n\n"
+            
+            for collection_name in data_collection_names:
+                try:
+                    # Generate CSV and get path
+                    csv_path = self.db.convert_analyst_tool_tracker(self.name, collection_name)
+                    
+                    # Read CSV for injection
+                    df = pd.read_csv(csv_path)
+                    row_count = len(df)
+                    col_count = len(df.columns)
+                    
+                    # Inject full or truncated CSV into evidence
+                    injected_evidence += f"### {collection_name}\n\n"
+                    injected_evidence += f"**Shape**: {row_count} rows, {col_count} columns\n\n"
+                    
+                    if row_count < 500:
+                        # Inject full CSV as markdown table
+                        injected_evidence += df.to_markdown(index=False) + "\n\n"
+                    else:
+                        # Inject summary only
+                        injected_evidence += f"*Note: Dataset truncated (>{row_count} rows). Full data available in download.*\n\n"
+                        injected_evidence += df.head(10).to_markdown(index=False) + "\n\n"
+                    
+                    # Generate download link - use basename for relative path
+                    csv_filename = os.path.basename(csv_path)
+                    html_snippet = f"<div class=\"icon-container-box-image\"><div class=\"icon-container-csv-image\"></div><div class=\"button-icon-menu\"><button class=\"icon-button\" onclick=\"viewCSV('download/{csv_path}')\"><i class=\"fa fa-eye\"></i></button><a href=\"/download/{csv_path}?attached=T\" class=\"icon-button\"><i class=\"fas fa-download\"></i></a></div></div>"
+                    download_links.append(html_snippet)
+                    
+                except Exception as e:
+                    # Error handling - return early and skip checker
+                    error_message = f"Answer not valid. Collection '{collection_name}' does not exist or failed to generate. Reason: {str(e)}"
+                    self.answer_attempts += 1
+                    return error_message
+            
+            # Update evidence with injected data
+            evidence = injected_evidence
+            
+            # Add download links to answer
+            answer = answer + "\n\n**Data collections attached**: " + ", ".join(data_collection_names) + "\n\n" + "\n".join(download_links)
+        
+        # Run the standard goal checker (backward compatible)
         thoughts = reflect_on_evidence(self.goal, answer, evidence)
         self.answer_attempts += 1
         if thoughts == "":
@@ -326,31 +457,32 @@ class Analyst:
         return ("Goal not achieved. Here are some thoughts on why: " + thoughts + "\n\n" +
                 "Consider refining your data collection request with this in mind, and trying again.")
 
-    def answer_followup_question(self, answer="", evidence="", return_tool=False):
-        if return_tool:
-            return {
-                "type": "function",
-                "function": {
-                    "strict": True,
-                    "name": "answer_followup_question",
-                    "description": "Answers a follow-up question with evidence.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "answer": {
-                                "type": "string",
-                                "description": "The answer to the question."
-                            },
-                            "evidence": {
-                                "type": "string",
-                                "description": "The evidence to answer the question."
-                            }
+    def answer_followup_question_schema(self):
+        return {
+            "type": "function",
+            "function": {
+                "strict": True,
+                "name": "answer_followup_question",
+                "description": "Answers a follow-up question with evidence.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "answer": {
+                            "type": "string",
+                            "description": "The answer to the question."
                         },
-                        "additionalProperties": False,
-                        "required": ["answer", "evidence"]
-                    }
+                        "evidence": {
+                            "type": "string",
+                            "description": "The evidence to answer the question."
+                        }
+                    },
+                    "additionalProperties": False,
+                    "required": ["answer", "evidence"]
                 }
             }
+        }
+
+    def answer_followup_question(self, answer="", evidence=""):
         thoughts = reflect_on_evidence(self.goal, answer, evidence)
         if thoughts == "":
             self.follow_up_answer = answer
@@ -365,7 +497,7 @@ class Analyst:
             messages = [
                 {
                     "role": "system",
-                    "content": analyst_system
+                    "content": self.system_message
                 },
                 {
                     "role": "user",
@@ -376,7 +508,7 @@ class Analyst:
                 self.db.add_analyst_context(self.name, message)
         while not self.answer:
             messages = self.db.get_analyst_context(self.name)
-            arguments = {"messages": messages, "model": "o3-mini", 'reasoning_effort': 'medium', "tools": self.tools}
+            arguments = {"messages": messages, "model": "o4-mini", 'reasoning_effort': 'medium', "tools": self.tools}
             chat_response = client.chat.completions.create(**arguments)
             new_history = use_tools(chat_response, arguments, function_dict=self.tool_callables)
             for call in new_history:

@@ -206,7 +206,11 @@ class DatabaseManager:
 
     def get_paper_json(self, paper_id):
         paper = self.get_paper(paper_id)
-        return paper.get("json_path", None)
+        json_path = paper.get("json_path", None)
+        if not json_path:
+            # Construct default path
+            json_path = os.path.join(self.db_path, paper_id + ".json")
+        return json_path
 
     @log_update
     def store_paper_json(self, paper_id, dict_data):
@@ -228,31 +232,34 @@ class DatabaseManager:
             session.write()
         return True
 
-    @log_update
-    def process_paper(self, paper_id):
-        """ Processes the paper
+    async def process_paper(self, paper_id, semaphore):
+        """ Processes the paper asynchronously with a semaphore """
+        async with semaphore:
+            pdf_path = self.get_paper_pdf(paper_id)
+            if not DDB.at(paper_id).exists():
+                print(f"Processing paper {paper_id}...")
+                try:
+                    processed_paper = await self.processor(pdf_path)
+                    self.store_paper_json(paper_id, processed_paper)
+                    print(f"Finished paper {paper_id}")
+                except Exception as e:
+                    print(f"Failed to process paper {paper_id}: {e}")
+                    self.update_paper(paper_id, {"status": "failed", "error": str(e)})
 
-        Returns:
-            string: path to the paper
-
-        """
-        pdf_path = self.get_paper_pdf(paper_id)
-        if not DDB.at(paper_id).exists():
-            processed_paper = self.processor(pdf_path)
-            self.store_paper_json(paper_id, processed_paper)
-
-    def process_all_papers(self):
-        """ Processes all the papers
-
-        Returns:
-            string: path to the paper
-
-        """
+    async def process_all_papers(self):
+        """ Processes all the papers in parallel """
         print("Processing all papers")
         paper_ids = list(DDB.at("papers").read().keys())
+        
+        # Limit concurrency to avoid hitting rate limits too hard
+        # 5 concurrent papers * ~10 concurrent pages per paper = ~50 concurrent requests
+        semaphore = asyncio.Semaphore(5) 
+        
+        tasks = []
         for paper_id in paper_ids:
-            print(f"Processing paper {paper_id}")
-            self.process_paper(paper_id)
+            tasks.append(self.process_paper(paper_id, semaphore))
+        
+        await asyncio.gather(*tasks)
         return True
 
     @log_update
@@ -355,6 +362,18 @@ class DatabaseManager:
                     data = DDB.at(data_path.replace(".json", "")).read()
                     data = list({k: {**{"id": k[:10]}, **v} for k, v in data.items()}.values())
                     flat_data = json_normalize(data)
+                    
+                    # Auto-add paper_title column from metadata if 'id' column exists
+                    if 'id' in flat_data.columns:
+                        papers = DDB.at("papers").read()
+                        # Create title lookup - match on beginning of paper ID (truncated in CSV)
+                        title_map = {}
+                        for pid, paper in papers.items():
+                            truncated_id = pid[:10]
+                            title_map[truncated_id] = paper.get("Title", "")
+                        # Insert paper_title as the second column (after id)
+                        flat_data.insert(1, 'paper_title', flat_data['id'].map(title_map))
+                    
                     csv_path = data_path.replace(".json", ".csv")
                     csv_folder = os.path.join(self.project_path, "csv_files")
                     if not os.path.exists(csv_folder):

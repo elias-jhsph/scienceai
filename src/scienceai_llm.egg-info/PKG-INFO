@@ -1,4 +1,4 @@
-Metadata-Version: 2.2
+Metadata-Version: 2.4
 Name: scienceai-llm
 Version: 0.2.0
 Summary: An AI powered scientific literature search engine
@@ -20,6 +20,12 @@ Requires-Dist: pandas>=2.2.2
 Requires-Dist: markdown2>=2.5.0
 Requires-Dist: pillow>=11.0.0
 Requires-Dist: pytesseract>=0.3.13
+Requires-Dist: tabulate
+Requires-Dist: matplotlib
+Requires-Dist: scipy
+Requires-Dist: seaborn
+Requires-Dist: numpy
+Dynamic: license-file
 
 ScienceAI
 =========
