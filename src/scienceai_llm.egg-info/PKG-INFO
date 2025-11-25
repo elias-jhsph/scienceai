@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: scienceai-llm
-Version: 0.2.0
+Version: 0.3.1
 Summary: An AI powered scientific literature search engine
 Author-email: Elias Weston-Farber <elias@eliastechlabs.com>
 Project-URL: url, https://github.com/elias-jhsph/scienceai
