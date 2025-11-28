@@ -14,6 +14,128 @@ with open(os.path.join(path_to_app, "analyst_base_prompt.txt"), "r") as f:
     analyst_system = f.read()
 
 
+def process_metadata_field(metadata, field_name):
+    """
+    Process a single metadata field into a human-readable format.
+    
+    Args:
+        metadata: The full metadata dict from Crossref
+        field_name: The requested field name (e.g., 'authors', 'journal', 'year')
+    
+    Returns:
+        Processed field value or None if not available
+    """
+    if not metadata:
+        return None
+    
+    # Handle each field type
+    if field_name == "authors":
+        authors = metadata.get("author", [])
+        if not authors:
+            return "Not available"
+        
+        # Format authors
+        formatted = []
+        for author in authors:
+            given = author.get("given", "")
+            family = author.get("family", "")
+            if given and family:
+                formatted.append(f"{given} {family}")
+            elif family:
+                formatted.append(family)
+        
+        if not formatted:
+            return "Not available"
+        
+        # Use et al. for long author lists
+        if len(formatted) <= 5:
+            return ", ".join(formatted)
+        else:
+            return ", ".join(formatted[:3]) + f", et al. ({len(formatted)} total)"
+    
+    elif field_name == "journal":
+        container = metadata.get("container-title", [])
+        return container[0] if container else "Not available"
+    
+    elif field_name == "year":
+        # Try published first, then issued
+        published = metadata.get("published", {})
+        if published and "date-parts" in published and published["date-parts"]:
+            return published["date-parts"][0][0] if published["date-parts"][0] else None
+        
+        issued = metadata.get("issued", {})
+        if issued and "date-parts" in issued and issued["date-parts"]:
+            return issued["date-parts"][0][0] if issued["date-parts"][0] else None
+        
+        return None
+    
+    elif field_name == "title":
+        title = metadata.get("title", [])
+        return title[0] if title else "Not available"
+    
+    elif field_name == "DOI":
+        return metadata.get("DOI", "Not available")
+    
+    elif field_name == "citation_count":
+        return metadata.get("is-referenced-by-count", 0)
+    
+    elif field_name == "publication_date":
+        # Format as "Month Year" or just "Year"
+        published = metadata.get("published", {})
+        if not published:
+            published = metadata.get("issued", {})
+        
+        if published and "date-parts" in published and published["date-parts"]:
+            parts = published["date-parts"][0]
+            if not parts:
+                return "Not available"
+            
+            year = parts[0] if len(parts) > 0 else None
+            month = parts[1] if len(parts) > 1 else None
+            
+            if year and month:
+                month_names = ["January", "February", "March", "April", "May", "June",
+                              "July", "August", "September", "October", "November", "December"]
+                month_name = month_names[month - 1] if 1 <= month <= 12 else str(month)
+                return f"{month_name} {year}"
+            elif year:
+                return str(year)
+        
+        return "Not available"
+    
+    elif field_name == "volume":
+        return metadata.get("volume", "Not available")
+    
+    elif field_name == "issue":
+        return metadata.get("issue", "Not available")
+    
+    elif field_name == "pages":
+        return metadata.get("page", "Not available")
+    
+    elif field_name == "publisher":
+        return metadata.get("publisher", "Not available")
+    
+    elif field_name == "URL":
+        return metadata.get("URL", "Not available")
+    
+    elif field_name == "type":
+        return metadata.get("type", "Not available")
+    
+    elif field_name == "ISSN":
+        issn = metadata.get("ISSN", [])
+        return issn[0] if issn else "Not available"
+    
+    elif field_name == "language":
+        return metadata.get("language", "Not available")
+    
+    elif field_name == "reference_count":
+        # Return count only, not the full reference list
+        return metadata.get("reference-count", 0)
+    
+    # If field not recognized, return None
+    return None
+
+
 def reflect_on_evidence(goal, answer, evidence, retries=3):
     system_message = ("The analyst has answered the following question / goal with evidence. "
                       "You are a thoughtful Researcher, evaluate the evidence and "
@@ -117,6 +239,7 @@ class Analyst:
             "get_all_papers": self.get_all_papers,
             "create_named_paper_list": self.create_named_paper_list,
             "get_named_paper_list": self.get_named_paper_list,
+            "get_paper_metadata": self.get_paper_metadata,
             "create_data_collection_request": self.create_data_collection_request,
             "complete_goal_by_answering_question_with_evidence": self.complete_goal_by_answering_question_with_evidence
         }
@@ -124,6 +247,7 @@ class Analyst:
             self.get_all_papers(return_tool=True),
             self.create_named_paper_list(None, None, return_tool=True),
             self.get_named_paper_list(None, return_tool=True),
+            self.get_paper_metadata(return_tool=True),
             self.create_data_collection_request(None, None, return_tool=True),
             self.complete_goal_by_answering_question_with_evidence_schema()
         ]
@@ -136,12 +260,31 @@ class Analyst:
         # Build system message with file output requirements
         file_output_instruction = ""
         if self.require_file_output:
-            file_output_instruction = """\n\nCRITICAL REQUIREMENT: You MUST provide your answer with data collection files. 
-When completing your goal, you are REQUIRED to use the 'data_collection_names' parameter with the names of the data collections you created.
-Do NOT provide the answer without attaching the file(s). The user specifically requested downloadable file outputs for this analysis.
+            file_output_instruction = """
+
+CRITICAL REQUIREMENT: You MUST provide downloadable file outputs.
+
+**STEP 1: Check if metadata can satisfy the request**
+First, check if ALL requested fields are available in metadata:
+- authors, journal, year, title, DOI, citation_count, publication_date, volume, issue, pages, publisher, URL, type, ISSN, language, reference_count
+
+If YES (e.g., publication years, author lists, journal names):
+1. Use get_paper_metadata() to retrieve the data (100x faster!)
+2. **CRITICAL**: Add `collection_name="YourCollectionName"` to the call (e.g., collection_name="PublicationYears")
+3. This automatically generates the CSV file you need
+4. When completing, use data_collection_names=["YourCollectionName"]
+
+If NO (e.g., sample sizes, methods, results):
+1. Use create_data_collection_request() for full-text extraction
+
+**Why this matters:** Extracting publication years from paper content is SLOW and ERROR-PRONE. The metadata already has this information in structured form. Always check metadata first!
+
+Do NOT complete without using data_collection_names parameter to attach files.
 """
         else:
-            file_output_instruction = """\n\nIMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file outputs (e.g., sample sizes from 100+ papers), use the 'data_collection_names' parameter:
+            file_output_instruction = """
+
+IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file outputs (e.g., sample sizes from 100+ papers), use the 'data_collection_names' parameter:
 - Provide a list of your data collection names (e.g., ["SampleSizeExtraction", "SubgroupAnalysis"])
 - Give a concise text 'answer' summarizing your findings
 - Do NOT repeat the data in the 'evidence' field—the system will automatically inject the file contents and generate download links
@@ -248,6 +391,156 @@ Do NOT provide the answer without attaching the file(s). The user specifically r
             output[paper['paper_id'][:10]] = paper['metadata']['title'][0]
         return output
 
+    def get_paper_metadata(self, paper_ids=None, metadata_fields=None, target_list=None, collection_name=None, return_tool=False):
+        """
+        Get specific metadata fields for papers.
+        
+        Args:
+            paper_ids: List of short paper IDs to query (takes priority over target_list)
+            metadata_fields: List of field names to retrieve. If empty, returns default essential fields.
+            target_list: Name of a paper list or "ALL PAPERS" (used if paper_ids is empty)
+            collection_name: Optional name to save results as a data collection for CSV export
+        
+        Returns:
+            Dictionary mapping short paper IDs to metadata dictionaries
+        """
+        if return_tool:
+            return {
+                "type": "function",
+                "function": {
+                    "strict": False,
+                    "name": "get_paper_metadata",
+                    "description": "Retrieve bibliographic metadata for papers (100x faster than full-text extraction). "
+                                   "AVAILABLE FIELDS: authors, journal, year, title, DOI, citation_count, publication_date, "
+                                   "volume, issue, pages, publisher, URL, type, ISSN, language, reference_count. "
+                                   "USE THIS for: publication years, author names, journal names, DOIs, citation counts, dates. "
+                                   "Query specific papers by ID, a named list, or all papers (default).",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "paper_ids": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Optional list of specific paper IDs (short form) to query. If provided, this takes priority over target_list. Leave empty to use target_list instead."
+                            },
+                            "metadata_fields": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "enum": [
+                                        "authors", "journal", "year", "title", "DOI", 
+                                        "citation_count", "publication_date", "volume", 
+                                        "issue", "pages", "publisher", "URL", "type",
+                                        "ISSN", "language", "reference_count"
+                                    ]
+                                },
+                                "description": "Metadata fields to retrieve. Choose from: 'authors' (author names), 'journal' (venue name), "
+                                               "'year' (publication year), 'title' (paper title), 'DOI', 'citation_count', "
+                                               "'publication_date' (full date), 'volume', 'issue', 'pages', 'publisher', 'URL', "
+                                               "'type' (article/conference), 'ISSN', 'language', 'reference_count'. "
+                                               "Leave empty for defaults (authors, journal, year, DOI, citation_count)."
+                            },
+                            "target_list": {
+                                "type": "string",
+                                "description": "Optional name of a paper list to query, or 'ALL PAPERS' for all papers. Only used if paper_ids is empty. Defaults to 'ALL PAPERS' if neither paper_ids nor target_list is provided."
+                            },
+                            "collection_name": {
+                                "type": "string",
+                                "description": "OPTIONAL: Provide a name (e.g., 'PublicationYears') to automatically save these results as a data collection. "
+                                               "REQUIRED if require_file_output=True. This generates the CSV file needed for your final answer."
+                            }
+                        },
+                        "additionalProperties": False
+                    }
+                }
+            }
+        
+        # Default fields if none specified
+        if not metadata_fields:
+            metadata_fields = ["authors", "journal", "year", "DOI", "citation_count"]
+        
+        # Determine which papers to query
+        papers_to_query = []
+        
+        if paper_ids:
+            # Use specific paper IDs (convert to full paper data)
+            for short_paper_id in paper_ids:
+                full_paper_id = short_id.get(short_paper_id)
+                if full_paper_id:
+                    papers_to_query.append({
+                        "short_id": short_paper_id,
+                        "full_id": full_paper_id
+                    })
+        else:
+            # Use target_list or default to all papers
+            if target_list == "ALL PAPERS" or target_list is None:
+                target_list_name = None
+            else:
+                target_list_name = target_list
+            
+            try:
+                papers_data = self.db.get_all_papers_data(analyst=self.name, named_list=target_list_name)
+            except ValueError:
+                return {"error": f"List '{target_list}' not found."}
+            
+            for paper in papers_data:
+                full_paper_id = paper['database']['paper_id']
+                short_paper_id = full_paper_id[:10]
+                short_id[short_paper_id] = full_paper_id
+                papers_to_query.append({
+                    "short_id": short_paper_id,
+                    "full_id": full_paper_id
+                })
+        
+        # Query metadata for all selected papers
+        output = {}
+        
+        for paper_info in papers_to_query:
+            short_paper_id = paper_info["short_id"]
+            full_paper_id = paper_info["full_id"]
+            
+            try:
+                # Get paper data
+                paper_data = self.db.get_paper_data(full_paper_id)
+                metadata = paper_data.get("metadata", {})
+                
+                # Process requested fields
+                paper_metadata = {}
+                for field in metadata_fields:
+                    processed_value = process_metadata_field(metadata, field)
+                    paper_metadata[field] = processed_value
+                
+                output[short_paper_id] = paper_metadata
+                
+            except Exception as e:
+                output[short_paper_id] = {"error": f"Failed to retrieve metadata: {str(e)}"}
+        
+        # If collection_name is provided, save as a data collection
+        if collection_name:
+            print(f"Saving metadata results to collection: {collection_name}")
+            from datetime import datetime
+            tracker = self.db.add_analyst_tool_tracker(self.name, collection_name, datetime.now().strftime("%Y-%m-%d_%H_%M_%S"))
+            
+            # Save each result to the tracker
+            for short_paper_id, data in output.items():
+                if "error" in data:
+                    continue
+                    
+                # We need full_id for the tracker
+                # Find it from our papers_to_query list
+                full_id = next((p["full_id"] for p in papers_to_query if p["short_id"] == short_paper_id), None)
+                
+                if full_id:
+                    self.db.update_analyst_tool_tracker(tracker, full_id, data)
+            
+            # Generate CSV
+            self.db.convert_analyst_tool_tracker(self.name, collection_name)
+            
+            # Add note to output
+            output["_system_note"] = f"Results saved to collection '{collection_name}'. You can now use data_collection_names=['{collection_name}'] in complete_goal."
+
+        return output
+
     def create_data_collection_request(self, collection_name="", collection_goal="",
                                        target_list=None, return_tool=False):
         if return_tool:
@@ -256,22 +549,31 @@ Do NOT provide the answer without attaching the file(s). The user specifically r
                 "function": {
                     "strict": True,
                     "name": "create_data_collection_request",
-                    "description": "Creates a schema for a data collection request.",
+                    "description": "Extract structured data from research papers using an AI-generated schema. "
+                                   "This tool will: (1) Generate an extraction schema based on your goal, "
+                                   "(2) Extract data from ALL papers in the target list CONCURRENTLY, "
+                                   "(3) Save results to a data collection you can reference later. "
+                                   "Use when you need to collect the SAME types of data points from multiple papers. "
+                                   "NOTE: The schema is uniform across all papers—design a broad schema that captures variations.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "collection_name": {
                                 "type": "string",
-                                "description": "The name of the data collection request."
+                                "description": "Unique name for this data collection (e.g., 'SampleSizeExtraction', 'MethodologyAnalysis'). "
+                                               "Use descriptive names as you may reference this later."
                             },
                             "collection_goal": {
                                 "type": "string",
-                                "description": "The goal of the data collection request."
+                                "description": "Detailed description of what data to extract. BE SPECIFIC about: (1) Types of data points needed, "
+                                               "(2) How many instances per paper (e.g., 'all genes mentioned' vs 'top 5 most important genes'), "
+                                               "(3) Any context needed. Good: 'Collect all sample size information including total N, subgroup names, "
+                                               "and subgroup N values, plus any exclusion criteria.' Bad: 'Get sample sizes.'"
                             },
                             "target_list": {
                                 "type": "string",
-                                "description": "The name of the list of papers to collect data from. "
-                                               "or 'ALL PAPERS' to collect data from all papers."
+                                "description": "Name of paper list to extract from, or 'ALL PAPERS' for entire database. "
+                                               "Extraction runs on ALL papers in this list—there's no per-paper filtering in the schema."
                             }
                         },
                         "additionalProperties": False,
@@ -308,6 +610,19 @@ Do NOT provide the answer without attaching the file(s). The user specifically r
         
         print(f"Starting parallel extraction for {len(papers)} papers...")
         
+        # Track progress with a counter
+        completed_count = [0]  # Using list to allow modification in nested function
+        total_papers = len(papers)
+        
+        # Emit initial progress
+        try:
+            from .__main__ import emit_progress
+            emit_progress(0, total_papers, f"{collection_name}")
+            # Small delay to ensure initial progress is received before concurrent processing
+            time.sleep(0.1)
+        except:
+            pass  # If emit_progress not available, continue without progress updates
+        
         async def extract_from_paper(paper):
             """Extract data from a single paper"""
             paper_id = paper["database"]["paper_id"]
@@ -320,6 +635,14 @@ Do NOT provide the answer without attaching the file(s). The user specifically r
             # Update tracker immediately after extraction
             self.db.update_analyst_tool_tracker(tracker, paper_id, result)
             
+            # Update progress
+            completed_count[0] += 1
+            try:
+                from .__main__ import emit_progress
+                emit_progress(completed_count[0], total_papers, f"{collection_name}")
+            except:
+                pass
+            
             print(f"*** Completed extraction for Paper: {short_paper_id}")
             return short_paper_id, paper_id, result
         
@@ -328,6 +651,14 @@ Do NOT provide the answer without attaching the file(s). The user specifically r
             tasks = [extract_from_paper(paper) for paper in papers]
             results = await asyncio.gather(*tasks)
             print(f"All {len(results)} extractions completed!")
+            
+            # Emit final progress (should already be at total, but ensure)
+            try:
+                from .__main__ import emit_progress
+                emit_progress(total_papers, total_papers, f"Completed {collection_name}")
+            except:
+                pass
+            
             return results
         
         # Run in a new thread with its own event loop
@@ -357,34 +688,105 @@ Do NOT provide the answer without attaching the file(s). The user specifically r
         print(f"Data collection complete, returning results.")
         return results
 
+    def save_metadata_as_collection(self, collection_name, metadata_results, return_tool=False):
+        if return_tool:
+            return {
+                "type": "function",
+                "function": {
+                    "strict": True,
+                    "name": "save_metadata_as_collection",
+                    "description": "Save results from get_paper_metadata() as a data collection. "
+                                   "REQUIRED when require_file_output=True and you used metadata instead of extraction. "
+                                   "This generates the CSV file that allows you to complete the goal.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "collection_name": {
+                                "type": "string",
+                                "description": "Name for the collection (e.g., 'PublicationYears'). Use this same name in data_collection_names when completing."
+                            },
+                            "metadata_results": {
+                                "type": "object",
+                                "description": "The EXACT output dictionary you received from get_paper_metadata()."
+                            }
+                        },
+                        "additionalProperties": False,
+                        "required": ["collection_name", "metadata_results"]
+                    }
+                }
+            }
+            
+        print(f"Saving metadata to collection: {collection_name}")
+        
+        # Initialize tracker
+        from datetime import datetime
+        tracker = self.db.add_analyst_tool_tracker(self.name, collection_name, datetime.now().strftime("%Y-%m-%d_%H_%M_%S"))
+        
+        # Build short_id -> full_id mapping
+        # We need this because metadata_results uses short_ids but tracker needs full_ids
+        all_papers = self.db.get_all_papers_data(analyst=self.name)
+        short_to_full = {}
+        for paper in all_papers:
+            full_id = paper["database"]["paper_id"]
+            short_id = full_id[:10]
+            short_to_full[short_id] = full_id
+            
+        # Save each result
+        count = 0
+        for short_id, data in metadata_results.items():
+            # Skip error entries
+            if "error" in data:
+                continue
+                
+            # Get full ID
+            full_id = short_to_full.get(short_id)
+            if not full_id:
+                # Try to see if short_id is actually a full_id (unlikely but possible)
+                if len(short_id) > 10:
+                    full_id = short_id
+                else:
+                    print(f"Warning: Could not find full ID for {short_id}")
+                    continue
+            
+            # Update tracker
+            self.db.update_analyst_tool_tracker(tracker, full_id, data)
+            count += 1
+            
+        # Finalize and generate CSV
+        self.db.convert_analyst_tool_tracker(self.name, collection_name)
+        
+        return f"Successfully saved {count} metadata records to collection '{collection_name}'. You can now use data_collection_names=['{collection_name}'] in complete_goal."
+
     def complete_goal_by_answering_question_with_evidence_schema(self):
         return {
             "type": "function",
             "function": {
                 "name": "complete_goal_by_answering_question_with_evidence",
-                "description": "Completes the analyst's goal by answering a question with evidence.",
+                "description": "Submit your final answer to the research question with supporting evidence. "
+                               "This is the ONLY way to complete your task.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "answer": {
                             "type": "string",
-                            "description": "This should be a detailed answer to the research question. All "
-                                           "evidence needed to support the answer should be included in the "
-                                           "evidence section."
+                            "description": "Your complete answer to the research question. Be specific and comprehensive. "
+                                           "If you created data collections, summarize key findings here—don't just say 'see attached file.' "
+                                           "The user should understand your findings from reading this answer even without opening files."
                         },
                         "evidence": {
                             "type": "string",
-                            "description": "This should be specific data points or findings from the data "
-                                           "collection that support your answer, DO NOT reference data you do not "
-                                           "directly provide as evidence. For example, if you are asked to provide "
-                                           "the top 5 genes from each paper, you should provide the list of genes "
-                                           "by paper as evidence."
+                            "description": "Specific data points that support your answer. For small datasets (<20 items), include the full list here. "
+                                           "For large datasets, provide summary statistics and key examples. DO NOT just reference data you don't show—"
+                                           "either display it here OR attach it as a data collection file. Example: 'Paper abc123: 150 participants; "
+                                           "Paper xyz789: 200 participants' (showing actual data)."
                         },
                         "data_collection_names": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "Optional list of data collection names to attach as downloadable files. "
-                                           "The system will automatically inject file contents into evidence and generate download links."
+                            "description": "OPTIONAL: List of data collection names to attach as CSV files. Use this when: (1) You have >20 data points, "
+                                           "(2) User requested downloadable data, (3) require_file_output=True. When provided, the system automatically "
+                                           "injects file contents into evidence and generates download buttons. Example: ['SampleSizeExtraction'] if you "
+                                           "created that collection earlier."
                         }
                     },
                     "required": ["answer", "evidence"]

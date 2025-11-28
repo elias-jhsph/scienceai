@@ -26,6 +26,9 @@
 </head>
 
 <body>
+    <!-- WebSocket connection for progress updates -->
+    <div hx-ext="ws" ws-connect="/progress" style="display: none;"></div>
+
     <div id="container">
         <div class="resize-section glass-panel" id="left-section">
             <div class="resize-section-internal" id="left-section-internal">
@@ -75,6 +78,24 @@
                     <form id="chat-form" class="chat-form" hx-post="/send_message" hx-swap="outerHTML">
                         <div class="typing-indicator" id="typing-indicator"><span></span><span></span><span></span>
                         </div>
+                        <!-- Progress Wheel Indicator -->
+                        <div id="progress-wheel-container" class="progress-wheel-container" style="display: none;">
+                            <div class="progress-wheel-card">
+                                <div class="progress-wheel-visual">
+                                    <svg class="progress-circle" width="60" height="60">
+                                        <circle class="progress-circle-bg" cx="30" cy="30" r="24"></circle>
+                                        <circle class="progress-circle-fill" cx="30" cy="30" r="24"></circle>
+                                    </svg>
+                                    <div class="progress-text">
+                                        <span id="progress-numerator">0</span>/<span id="progress-denominator">0</span>
+                                    </div>
+                                </div>
+                                <div class="progress-info">
+                                    <div class="progress-label">Data Collection</div>
+                                    <div class="progress-description"></div>
+                                </div>
+                            </div>
+                        </div>
                         <textarea rows="1" id="chat-input" name="text" class="chat-input"
                             placeholder="Talk to ScienceAI..." /></textarea>
                         <button id="send-message">Send</button>
@@ -105,17 +126,17 @@
     <div class="project-menu">
         <button id="save-button" class="menu-toggle" hx-get="/save_project" hx-trigger="click" hx-swap="innerHTML"
             hx-target="#last-checkpoint-save">
-            <span>💾 Checkpoints</span>
+            <span data-text="Checkpoints">💾</span>
         </button>&nbsp
         <button id="export-button" class="menu-toggle">
-            <span>📦 Papers</span>
+            <span data-text="Papers">📦</span>
         </button>&nbsp
         <button id="analysis-button" class="menu-toggle" onclick="window.location.href = '/download_analysis'">
-            <span>📊 Extracted Data</span>
+            <span data-text="Extracted Data">📊</span>
         </button>&nbsp
         <button id="close-button" class="menu-toggle" hx-get="/close_project" hx-trigger="click" hx-swap="innerHTML"
             hx-target="#last-checkpoint-close">
-            <span>❌ Close</span>
+            <span data-text="Close">❌</span>
         </button>
     </div>
 

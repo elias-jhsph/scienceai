@@ -165,10 +165,27 @@ class DatabaseManager:
 
     def ingest_papers(self):
         found_papers = []
-        for file in os.listdir(self.input_pdf_directory):
-            if file.endswith(".pdf"):
-                pdf_path = os.path.join(self.input_pdf_directory, file)
-                found_papers.append(self.ingest_paper(pdf_path))
+        pdf_files = [f for f in os.listdir(self.input_pdf_directory) if f.endswith(".pdf")]
+        total_papers = len(pdf_files)
+        
+        # Emit initial progress
+        try:
+            from .__main__ import emit_progress
+            emit_progress(0, total_papers, "Ingesting papers")
+        except:
+            pass
+        
+        for idx, file in enumerate(pdf_files, 1):
+            pdf_path = os.path.join(self.input_pdf_directory, file)
+            found_papers.append(self.ingest_paper(pdf_path))
+            
+            # Emit progress after each paper
+            try:
+                from .__main__ import emit_progress
+                emit_progress(idx, total_papers, "Ingesting papers")
+            except:
+                pass
+        
         if self.auto_prune and DDB.at("papers").exists():
             papers = DDB.at("papers").read()
             prune_papers = [paper['paper_id'] for paper in papers if paper['paper_id'] not in found_papers]
@@ -250,15 +267,33 @@ class DatabaseManager:
         """ Processes all the papers in parallel """
         print("Processing all papers")
         paper_ids = list(DDB.at("papers").read().keys())
+        total_papers = len(paper_ids)
+        
+        # Track completed papers
+        completed_count = [0]
+        
+        # Emit initial progress
+        try:
+            from .__main__ import emit_progress
+            emit_progress(0, total_papers, "Processing papers")
+        except:
+            pass
         
         # Limit concurrency to avoid hitting rate limits too hard
         # 5 concurrent papers * ~10 concurrent pages per paper = ~50 concurrent requests
         semaphore = asyncio.Semaphore(5) 
         
-        tasks = []
-        for paper_id in paper_ids:
-            tasks.append(self.process_paper(paper_id, semaphore))
+        async def process_with_progress(paper_id):
+            result = await self.process_paper(paper_id, semaphore)
+            completed_count[0] += 1
+            try:
+                from .__main__ import emit_progress
+                emit_progress(completed_count[0], total_papers, "Processing papers")
+            except:
+                pass
+            return result
         
+        tasks = [process_with_progress(paper_id) for paper_id in paper_ids]
         await asyncio.gather(*tasks)
         return True
 
@@ -360,8 +395,29 @@ class DatabaseManager:
                 if tool["tool_name"] == tool_name:
                     data_path = tool["json_path"]
                     data = DDB.at(data_path.replace(".json", "")).read()
-                    data = list({k: {**{"id": k[:10]}, **v} for k, v in data.items()}.values())
-                    flat_data = json_normalize(data)
+                    
+                    # Normalize data for CSV
+                    # Handle both extraction results (with source_quote etc) and metadata results (flat key-value)
+                    normalized_items = []
+                    for k, v in data.items():
+                        # Skip system keys (like _system_note)
+                        if k.startswith("_"):
+                            continue
+                            
+                        item = {"id": k[:10]}
+                        if isinstance(v, dict):
+                            # Filter out error fields if present
+                            if "error" in v:
+                                continue
+                            # Flatten the dictionary
+                            for field_key, field_val in v.items():
+                                item[field_key] = field_val
+                        else:
+                            # Handle simple value case (unlikely but possible)
+                            item["value"] = v
+                        normalized_items.append(item)
+                        
+                    flat_data = json_normalize(normalized_items)
                     
                     # Auto-add paper_title column from metadata if 'id' column exists
                     if 'id' in flat_data.columns:

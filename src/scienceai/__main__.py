@@ -10,6 +10,7 @@ import uuid
 import zipfile
 import tempfile
 import markdown2
+import json
 
 
 from flask_sock import Sock
@@ -32,12 +33,33 @@ stop_event = None
 message_queue = None
 thread = None
 original_save = None
+
+# Progress tracking globals
+progress_connections = []  # WebSocket connections for progress updates
+progress_lock = threading.Lock()
+
 db_folder = os.path.join(os.path.expanduser('~'), 'Documents', "ScienceAI")
 if not os.path.exists(db_folder):
     os.makedirs(db_folder)
 path_to_app = os.path.dirname(os.path.abspath(__file__))
 path_to_python = sys.executable
 script_to_return_to_menu = "<script>window.location.href = '/menu';</script>"
+
+
+def emit_progress(current, total, description="Processing"):
+    """Emit progress update to all connected WebSocket clients"""
+    global progress_connections
+    message = json.dumps({
+        "current": current,
+        "total": total,
+        "description": description
+    })
+    with progress_lock:
+        for ws in progress_connections[:]:  # Copy list to avoid modification during iteration
+            try:
+                ws.send(message)
+            except:
+                progress_connections.remove(ws)
 
 
 def close():
@@ -315,6 +337,22 @@ def papers(ws):
             papers_dict = database.get_database_papers()
             current = new
             ws.send(render_template('papers.html', papers=papers_dict))
+
+
+@sock.route('/progress')
+def progress(ws):
+    """WebSocket endpoint for progress updates"""
+    global progress_connections
+    with progress_lock:
+        progress_connections.append(ws)
+    try:
+        while True:
+            # Keep connection alive, actual updates sent via emit_progress()
+            time.sleep(1)
+    finally:
+        with progress_lock:
+            if ws in progress_connections:
+                progress_connections.remove(ws)
 
 
 @app.route('/close_project')

@@ -87,28 +87,35 @@ class PrincipalInvestigator:
             "type": "function",
             "function": {
                 "name": "delegate_research",
-                "description": "Delegates a specific research question pertaining to the "
-                               "uploaded database of research papers to a new Analyst Agent",
+                "description": "Delegate data extraction from research papers to a specialized Analyst Agent. "
+                               "The Analyst will extract structured data and optionally create CSV files. "
+                               "Use this when you need NEW information from papers that hasn't been collected yet. "
+                               "Returns answer and evidence from the Analyst after completion.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "name": {
                             "type": "string",
-                            "description": "Assign a meaningful name to each Analyst Agent that reflects their "
-                                           "specific task or research focus in title case."
+                            "description": "Descriptive name for this analyst (e.g., 'Sample Size Analyst', 'Methods Analyst'). "
+                                           "Keep it concise but specific to the task. Used to track analyst's work."
                         },
                         "question": {
-                            "type": "string",
-                            "description": "The specific sub-research question to be answered by the analyst. Make "
-                                           "sure to include any relevant context or details that may be helpful to "
-                                           "the analyst in performing their data collections and analysis, as well "
-                                           "as specific forms and types of data evidence that may be required to "
-                                           "support their conclusions when answering the question."
-                        },
+                        "type": "string",
+                        "description": "The research question or data extraction goal. Be specific about WHAT to extract, "
+                                       "not HOW to format it. **If you already know which specific papers to analyze** "
+                                       "(e.g., from previous analyst results or your own analysis), include their paper IDs "
+                                       "or titles directly in the question (e.g., 'For papers [abc123def4, xyz789ghi0], extract "
+                                       "sample sizes' or 'From papers titled X, Y, Z, extract methods'). This ensures consistency "
+                                       "and avoids forcing the analyst to rediscover your paper selection. Only use general "
+                                       "descriptions (e.g., 'papers using qualitative methods') when you need the analyst to "
+                                       "discover or filter papers themselves. Include what data points are needed and any "
+                                       "specific details (like lists vs fixed counts)."
+                    },
                         "require_file_output": {
                             "type": "boolean",
-                            "description": "If true, the analyst MUST provide their answer with downloadable data collection files. "
-                                           "Use this when you need the user to be able to download large datasets (e.g., sample sizes from many papers)."
+                            "description": "Set to true when you need downloadable CSV files with structured data (typically "
+                                           "for 10+ papers or complex multi-field extractions). Set to false for quick queries "
+                                           "or summary analyses. Default: false. When true, analyst MUST attach data collection files."
                         }
                     },
                     "required": ["name", "question"]
@@ -440,54 +447,12 @@ class PrincipalInvestigator:
                             # Store the CSV content for potential use
                             last_csv = call["content"]
                         
-                        # Skip reflection/synthesis for run_python_code to allow auto-fixing loop
+                        # Skip continuing the loop for run_python_code to allow auto-fixing
                         if call.get("name") == "run_python_code":
                             continue
-
-                        # Execute reflection step for all delegations
-                        temp_messages = [{"content": self.system_message,
-                                        "role": "system"}] + self.db.get_database_chat()
-                        arguments = {"messages": temp_messages, "model": "gpt-5.1", 'reasoning_effort': 'medium',
-                                        "tools": [self.reflect_on_delegations(return_tool=True)],
-                                        "tool_choice": {"type": "function", "function": {"name": "reflect_on_delegations"}}}
-                        chat_response = client.chat.completions.create(**arguments)
-                        if chat_response.choices[0].message.tool_calls:
-                            print("Reflecting on delegations")
-                            call_new_history = use_tools(chat_response, arguments, function_dict=self.tool_callables)
-                            for call in call_new_history:
-                                self.db.update_last_chat("Processed")
-                                call["status"] = "Pending"
-                                call["time"] = datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')
-                                if call["role"] == "assistant" and not call["content"]:
-                                    call["content"] = "Reflecting on work now..."
-                                self.db.add_chat(call)
                         
-                        # After reflection, synthesize final response for user
-                        self.db.update_last_chat("Processed")
-                        synthesis_messages = [{
-                            "content": self.system_message,
-                            "role": "system"
-                        }] + self.db.get_database_chat() + [{
-                            "role": "system",
-                            "content": ("Based on the analyst's findings and your reflection, provide a clear, "
-                                      "concise summary for the user that answers their original question. "
-                                      "Synthesize the key points without repeating all the evidence verbatim.")
-                        }]
-                        
-                        synthesis_args = {
-                            "messages": synthesis_messages,
-                            "model": "gpt-5.1",
-                            "reasoning_effort": "low"
-                        }
-                        
-                        final_response = client.chat.completions.create(**synthesis_args)
-                        final_message = {
-                            "content": final_response.choices[0].message.content,
-                            "role": "assistant",
-                            "status": "Pending",
-                            "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')
-                        }
-                        self.db.add_chat(final_message)
+                        # For all other tools, the loop will naturally continue
+                        # The PI will keep calling tools until it responds with text (no tools)
         self.db.update_last_chat("Processed")
 
     async def finish_tool_calls(self, last_chat):
