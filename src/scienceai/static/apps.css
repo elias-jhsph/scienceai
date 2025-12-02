@@ -61,7 +61,7 @@
     --danger-hover: #dc2626;
     --modal-overlay: rgba(15, 23, 42, 0.4);
     --glass-border: rgba(255, 255, 255, 0.3);
-    --chat-bubble-user-bg: #ffe28c;
+    --chat-bubble-user-bg: #ffd88c;
     --chat-bubble-user-text: #1a1a1a;
     --chat-bubble-ai-bg: #fef7e8;
     --chat-bubble-ai-text: #1a1a1a;
@@ -971,7 +971,6 @@ details[open]>summary {
 
 .nested {
     padding: 0.75rem 0 0.75rem 1rem;
-    border-left: 2px solid var(--border);
     margin-left: 0.5rem;
     margin-top: 0.5rem;
 }
@@ -1038,6 +1037,10 @@ details div:not(.nested) {
     box-shadow: 0 1px 2px rgba(2, 132, 199, 0.1);
 }
 
+.tag .fas {
+    margin-left: 0.25rem;
+}
+
 /* Alerts */
 .alert {
     padding: 1rem;
@@ -1060,6 +1063,10 @@ details div:not(.nested) {
     padding: 0.5rem;
     width: 100%;
     animation: fadeIn 0.3s ease-in;
+    display: none;
+    /* Start hidden by default */
+    position: relative;
+    z-index: 50;
 }
 
 .progress-wheel-card {

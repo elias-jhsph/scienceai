@@ -66,7 +66,7 @@ The `database_manager` module is the backbone of ScienceAI's data handling. It's
 
 ### Principal Investigator (PI)
 
-The `principle_investigator` module represents the main AI persona you interact with. The PI:
+The `principal_investigator` module represents the main AI persona you interact with. The PI:
 
 - **Delegates Research:** Creates and manages Analyst Agents to address specific research questions.
 - **Interacts with User:** Conducts the conversation with the user, understanding their goals and relaying information from the Analyst Agents.

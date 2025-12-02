@@ -8,13 +8,14 @@ src/scienceai/analyst.py
 src/scienceai/analyst_base_prompt.txt
 src/scienceai/backend.py
 src/scienceai/cli.py
+src/scienceai/client.py
 src/scienceai/data_extractor.py
 src/scienceai/data_types.json
 src/scienceai/data_types_docs.json
 src/scienceai/database_manager.py
 src/scienceai/llm.py
-src/scienceai/principle_investigator.py
-src/scienceai/principle_investigator_base_prompt.txt
+src/scienceai/principal_investigator.py
+src/scienceai/principal_investigator_base_prompt.txt
 src/scienceai/process_paper.py
 src/scienceai/reasoning.py
 src/scienceai/static/apps.css

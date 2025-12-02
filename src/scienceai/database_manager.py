@@ -411,7 +411,25 @@ class DatabaseManager:
                                 continue
                             # Flatten the dictionary
                             for field_key, field_val in v.items():
-                                item[field_key] = field_val
+                                # Special handling for derivation objects
+                                if field_key.endswith("_derivation") and isinstance(field_val, dict):
+                                    # Flatten derivation into multiple columns
+                                    item[f"{field_key}_operation"] = field_val.get("operation", "")
+                                    item[f"{field_key}_description"] = field_val.get("operation_description", "")
+                                    item[f"{field_key}_computation"] = field_val.get("computation", "")
+                                    
+                                    # Concatenate source quotes for readability
+                                    sources = field_val.get("sources", [])
+                                    if sources:
+                                        sources_text = " | ".join([
+                                            f"{s.get('location', '')}: {s.get('quote', '')}"
+                                            for s in sources
+                                        ])
+                                        item[f"{field_key}_sources"] = sources_text
+                                    else:
+                                        item[f"{field_key}_sources"] = ""
+                                else:
+                                    item[field_key] = field_val
                         else:
                             # Handle simple value case (unlikely but possible)
                             item["value"] = v

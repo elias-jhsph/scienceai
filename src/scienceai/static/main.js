@@ -39,27 +39,46 @@ function formatElapsedTime(seconds) {
 }
 
 // Progress Wheel Functions
-function updateProgress(current, total, description) {
+function updateProgress(current, total, description, analystName) {
     const container = document.getElementById('progress-wheel-container');
     const numerator = document.getElementById('progress-numerator');
     const denominator = document.getElementById('progress-denominator');
+    const labelEl = document.getElementById('progress-label');
     const descriptionEl = document.querySelector('.progress-description');
     const circle = document.querySelector('.progress-circle-fill');
     const typingIndicator = document.getElementById('typing-indicator');
 
-    if (!container || !numerator || !denominator || !circle) return;
+    if (!container || !numerator || !denominator || !circle) {
+        console.error('Progress wheel elements not found');
+        return;
+    }
 
-    // Show the progress wheel and hide typing indicator
+    console.log(`Progress update: ${current}/${total} - ${description} - ${analystName}`);
+
+    // Force show the progress wheel with explicit styling
     container.style.display = 'block';
+    container.style.opacity = '1';
+    container.style.visibility = 'visible';
+
+    // Force hide typing indicator
     if (typingIndicator) {
         typingIndicator.style.display = 'none';
+        typingIndicator.style.visibility = 'hidden';
     }
 
     // Update text
     numerator.textContent = current;
     denominator.textContent = total;
 
-    // Update description if provided
+    // Update label and description
+    if (labelEl) {
+        if (analystName) {
+            labelEl.textContent = analystName + ': Data Collection';
+        } else {
+            labelEl.textContent = 'Data Collection';
+        }
+    }
+
     if (description && descriptionEl) {
         descriptionEl.textContent = description;
     }
@@ -79,11 +98,13 @@ function updateProgress(current, total, description) {
             container.style.transition = 'opacity 0.5s ease-out';
             setTimeout(() => {
                 container.style.display = 'none';
+                container.style.visibility = 'hidden';
                 container.style.opacity = '1';
                 container.style.transition = '';
                 // Show typing indicator again if it should be visible
                 if (typingIndicator) {
                     typingIndicator.style.display = 'flex';
+                    typingIndicator.style.visibility = 'visible';
                 }
             }, 500);
         }, 1000);
@@ -104,11 +125,22 @@ function hideProgress() {
 
 // Listen for WebSocket messages from htmx for progress updates
 document.addEventListener('DOMContentLoaded', function () {
+    // Small delay to let WebSocket establish before checking for initial progress
+    setTimeout(function () {
+        const container = document.getElementById('progress-wheel-container');
+        const typingIndicator = document.getElementById('typing-indicator');
+
+        // If progress is showing, make sure typing indicator is hidden
+        if (container && container.style.display === 'block' && typingIndicator) {
+            typingIndicator.style.display = 'none';
+        }
+    }, 100);
+
     document.body.addEventListener('htmx:wsAfterMessage', function (event) {
         try {
             const data = JSON.parse(event.detail.message);
             if (data.current !== undefined && data.total !== undefined) {
-                updateProgress(data.current, data.total, data.description || '');
+                updateProgress(data.current, data.total, data.description || '', data.analyst_name);
             }
         } catch (e) {
             // Not a progress message, ignore

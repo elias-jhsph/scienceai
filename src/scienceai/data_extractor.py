@@ -182,6 +182,50 @@ def generate_schema(corpus, goal=None, retries=5):
                       "CRITICAL: You must ONLY use these valid data types: " + ", ".join(data_types.keys()) + "\n\n"
                       "DO NOT use 'list', 'object_list', or any other data type not in the list above. "
                       "For multiple items, use types ending in '_list' like 'number_list', 'text_block', 'date_list', etc.\n\n"
+                      "IMPORTANT: Data types like 'number', 'fraction', 'unit_number' automatically generate metadata fields (_value, _source_quote, _source_location, _unit). "
+                      "Do NOT manually specify fields ending in '_source_quote', '_source_location', '_unit', or '_value'. "
+                      "For example, request ONLY 'exposed_group_n' (type: number), NOT 'exposed_group_n_value', 'exposed_group_n_source_quote', etc.\n\n"
+                      "SEMANTIC FIELD NAMING FOR COMPARATIVE DATA:\n"
+                      "When the goal involves comparisons or contrasts (e.g., exposed vs unexposed, treatment vs control):\n"
+                      " - Create field names that encode meaning and directionality, not generic labels like 'group1' or 'group2'\n"
+                      " - For comparative data, ALWAYS include:\n"
+                      "   * A field with 'contrast' or 'comparison' in the name (type: text_block) describing what is being compared\n"
+                      "   * Separate label fields for each group (e.g., 'exposed_group_label', 'reference_group_label')\n"
+                      "   * Use descriptive names for numeric fields (e.g., 'exposed_group_n', 'reference_group_n' NOT 'group1_n', 'group2_n')\n"
+                      "\n"
+                      "Example for exposure/treatment comparison:\n"
+                      "✅ GOOD schema fields:\n"
+                      "  - name: 'exposure_contrast', type: 'text_block', description: 'Description of the exposure comparison (e.g., high dose vs low dose)'\n"
+                      "  - name: 'exposed_group_label', type: 'text_block', description: 'Label for the exposed/treatment group'\n"
+                      "  - name: 'reference_group_label', type: 'text_block', description: 'Label for the reference/control group'\n"
+                      "  - name: 'exposed_group_n_at_risk', type: 'number', description: 'Number at risk in exposed group'\n"
+                      "  - name: 'reference_group_n_at_risk', type: 'number', description: 'Number at risk in reference group'\n"
+                      "\n"
+                      "**IMPORTANT - Group Mapping Verification:**\n"
+                      "For comparative data, ALWAYS include a verification field to prevent group-swapping errors:\n"
+                      "  - name: 'group_mapping_verification', type: 'text_block', description: 'Explicit statement confirming: \"[exposed_group_label] has n=[exposed_group_n], [reference_group_label] has n=[reference_group_n]\" - this must match source quotes'\n"
+                      "\n"
+                      "❌ BAD schema fields:\n"
+                      "  - name: 'group1_n' (doesn't indicate what group1 represents)\n"
+                      "  - name: 'group2_n' (doesn't indicate what group2 represents)\n"
+                      "\n"
+                      "GENERAL principal: Field names are documentation. Make them self-explanatory so downstream analysis "
+                      "doesn't require external context to interpret the data.\n\n"
+                      "**CHOOSING BETWEEN TEXT AND NUMERIC TYPES:**\n\n"
+                      "✅ USE `text_block` for EXPLORATORY/DESCRIPTIVE goals:\n"
+                      "  - Summarizing methodology, describing outcomes, categorizing papers\n"
+                      "  - Understanding what's reported, identifying themes\n"
+                      "  - Any goal focused on 'what', 'describe', 'summarize', 'categorize'\n\n"
+                      "✅ USE STRUCTURED NUMERIC TYPES when goal mentions CALCULATIONS:\n"
+                      "  - Signal words: 'for pooling', 'for meta-analysis', 'as numeric fields', 'for calculations'\n"
+                      "  - `effect_estimate`/`effect_estimate_list`: effect sizes with CI and p-value\n"
+                      "  - `sample_statistics`/`sample_statistics_list`: n, mean, SD, median, IQR\n"
+                      "  - `contingency_table_2x2`: 2x2 cell counts for binary outcomes\n"
+                      "  - `proportion_with_ci`: percentages with confidence intervals\n"
+                      "  - `measurement_with_error`: value ± uncertainty\n\n"
+                      "**DEFAULT BEHAVIOR:**\n"
+                      "  - If goal is vague/exploratory → prefer text_block (safe for discovery)\n"
+                      "  - If goal explicitly mentions needing numbers for analysis → use numeric types\n\n"
                       "Design your schema to be specific and extractable from the papers. "
                       "Focus on: " + (goal if goal else "extracting relevant structured data") + "\n\n")
 
@@ -211,9 +255,9 @@ def generate_schema(corpus, goal=None, retries=5):
     if goal:
         user_message += " that will best address the following goal - " + goal
 
-    final_ask = "Please Return a JSON string representing the schema for the analysis which should "
-    "be an array of objects with a 'type' key and other keys as "
-    "specified in the data types. Try to limit the number of objects requested to 8 or less.. "
+    final_ask = ("Please return a JSON string representing the schema for the analysis which should "
+                 "be an array of objects with a 'type' key and other keys as "
+                 "specified in the data types. Try to limit the number of objects requested to 8 or less.")
 
     user_message += ":\n\n" + corpus + "\n\n\n\n\n" + final_ask
 
@@ -308,9 +352,31 @@ def schema_to_tool(schema):
             required_keys = list(data_type_def.keys())
             required_keys.remove("mode")
             name = data_type_requested["name"].replace(" ", "_")
+            # Fields that should never be marked as required in the extraction tool
+            # These are either metadata fields OR optional statistical fields that may not be reported
+            optional_fields = [
+                # Metadata fields (choose quote OR derivation)
+                "source_quote", "derivation", "source_location", "unit", "computation",
+                # Optional statistical fields that papers may not report
+                "ci_level",           # Usually 95%, often not explicitly stated
+                "is_reference",       # Only relevant for reference categories
+                "t_statistic",        # Often not reported
+                "df", "df_numerator", "df_denominator",  # Degrees of freedom often omitted
+                "se",                 # Standard error often omitted when CI given
+                "error_lower", "error_upper",  # Only for asymmetric errors
+                # Sample statistics - papers report different subsets
+                "mean", "sd", "median", "q1", "q3", "min", "max",
+                # Survival analysis - optional fields
+                "log_rank_p", "rate_at_timepoint", "rate_timepoint",
+                "median_survival_ci_lower", "median_survival_ci_upper",
+                # Contingency table - totals can be computed
+                "total_exposed", "total_unexposed",
+            ]
             for key in required_keys:
                 if data_type_requested["required"]:
-                    required.append(name + "_" + key)
+                    # Only make core value fields required, not metadata or optional stats
+                    if key not in optional_fields:
+                        required.append(name + "_" + key)
                 new_type = data_type_def[key]["type"]
                 new_description = data_type_def[key]["description"]
                 for spec_key in data_types[data_type_requested["type"]]["spec"]:
@@ -318,7 +384,18 @@ def schema_to_tool(schema):
                         new_description = new_description.replace("NAME", name)
                     else:
                         new_description = new_description.replace(spec_key.upper(), str(data_type_requested[spec_key]))
-                selected_data_types[name + "_" + key] = {"type": new_type, "description": new_description}
+                
+                # For object types (like derivation), include full nested properties
+                if new_type == "object" and "properties" in data_type_def[key]:
+                    selected_data_types[name + "_" + key] = {
+                        "type": new_type,
+                        "description": new_description,
+                        "properties": data_type_def[key]["properties"],
+                        "required": data_type_def[key].get("required", []),
+                        "additionalProperties": False
+                    }
+                else:
+                    selected_data_types[name + "_" + key] = {"type": new_type, "description": new_description}
         if data_type_def["mode"] == "array":
             name = data_type_requested["name"].replace(" ", "_")
             if data_type_requested["required"]:
@@ -339,13 +416,35 @@ def schema_to_tool(schema):
                         new_description = new_description.replace("NAME", name)
                     else:
                         new_description = new_description.replace(spec_key.upper(), str(data_type_requested[spec_key]))
-                item_properties[key] = {"type": new_type, "description": new_description}
+                
+                # For object types (like derivation) in arrays, include full nested properties
+                if new_type == "object" and "properties" in data_type_def["keys"][key]:
+                    item_properties[key] = {
+                        "type": new_type,
+                        "description": new_description,
+                        "properties": data_type_def["keys"][key]["properties"],
+                        "required": data_type_def["keys"][key].get("required", []),
+                        "additionalProperties": False
+                    }
+                else:
+                    item_properties[key] = {"type": new_type, "description": new_description}
 
             selected_data_types[name] = {"type": "array", "description": new_description,
                                          "items": {"type": "object", "properties": item_properties,
                                                    "additionalProperties": False, "required": list(item_properties.keys())}}
         required_full = required_full + required
         selected_data_types_full = {**selected_data_types_full, **selected_data_types}
+
+    # Add optional discrepancy notes field for documenting source conflicts
+    selected_data_types_full["data_discrepancy_notes"] = {
+        "type": "string", 
+        "description": "OPTIONAL: Document any inconsistencies or conflicts found in the source material "
+                       "(e.g., 'Abstract reports n=150 but Table 2 shows n=142 for the same group', "
+                       "'CI reported as 1.25-0.78 which appears reversed'). "
+                       "Leave empty if no discrepancies found. This helps flag data quality issues "
+                       "without forcing incorrect extractions."
+    }
+    # Note: data_discrepancy_notes is NOT added to required_full - it's optional
 
     selected_data_types_full["successfully_extracted"] = \
         {"type": "boolean", "description": "Was the data successfully extracted and were all required fields populated "
@@ -373,6 +472,75 @@ def schema_to_tool(schema):
     return tool
 
 
+
+
+def verify_computation(derivation, expected_value):
+    """Verify that derivation computation produces the expected value
+    
+    Args:
+        derivation: Dict with 'operation', 'sources', etc.
+        expected_value: The value that should result from the computation
+        
+    Returns:
+        bool: True if computation is correct (or cannot be verified), False if incorrect
+    """
+    try:
+        operation = derivation.get("operation")
+        sources = derivation.get("sources", [])
+        
+        if not sources:
+            return False
+            
+        # Extract numeric values from sources
+        values = []
+        for s in sources:
+            extracted = s.get("extracted_value")
+            if extracted is None:
+                return True  # Cannot verify if values missing
+            try:
+                values.append(float(extracted))
+            except (ValueError, TypeError):
+                # Non-numeric derivation (lookup, custom) - cannot auto-verify
+                return True
+        
+        # Perform computation based on operation type
+        if operation == "sum":
+            computed = sum(values)
+        elif operation == "subtraction":
+            computed = values[0]
+            for v in values[1:]:
+                computed -= v
+        elif operation == "multiplication":
+            computed = 1
+            for v in values:
+                computed *= v
+        elif operation == "division":
+            computed = values[0]
+            for v in values[1:]:
+                if v == 0:
+                    return False  # Division by zero
+                computed /= v
+        elif operation == "average":
+            computed = sum(values) / len(values)
+        elif operation in ["lookup", "custom"]:
+            # Cannot automatically verify lookup/custom operations
+            return True
+        else:
+            # Unknown operation
+            return False
+            
+        # Compare with expected value (allow small floating point errors)
+        try:
+            expected_float = float(expected_value)
+            return abs(computed - expected_float) < 0.001
+        except (ValueError, TypeError):
+            return False
+            
+    except Exception as e:
+        print(f"Error verifying computation:  {e}")
+        return True  # Be lenient on verification errors
+
+
 async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_corpus=True, justification=None):
     """
     Validates data extraction results against source corpus with support for both direct quotes
@@ -394,6 +562,9 @@ async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_c
 
     def check_source(source, pre_processed_corpus):
         """Validates that source text exists within corpus after normalization"""
+        # FIX: Handle None explicitly
+        if source is None:
+            return "Source quote is None"
         source = replace_numbers_with_words(source.lower())
         source = re.sub(r"[\"'`''""]", '', source)
         sources = re.split(r"\.\.\.|\. ", source)
@@ -412,15 +583,85 @@ async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_c
     if not extraction_dict.get("successfully_extracted", False):
         return "Data not successfully extracted: " + str(extraction_dict)
 
-    # Validate source quotes exist in corpus
+    # Validate source quotes OR derivations
     for key, value in extraction_dict.items():
         if key.endswith("_source_quote"):
-            if check_source(extraction_dict[key], pre_processed_corpus) is not None:
-                return "The value of '" + key + "' not found in corpus, update this value so its contents can be found verbatim in the corpus (seperate sections broken up by '...'): " + str(extraction_dict[key])
-            if extraction_dict[key] == "":
+            # Check if this field has a corresponding derivation instead
+            derivation_key = key.replace("_source_quote", "_derivation")
+            
+            if derivation_key in extraction_dict:
+                # DERIVATION path - validate the derivation
+                derivation = extraction_dict[derivation_key]
+                
+                # CRITICAL: Validate that derivation is a dict, not a string
+                if not isinstance(derivation, dict):
+                    return f"Derivation field '{derivation_key}' must be an object/dictionary with operation, sources, computation, etc. Got type {type(derivation).__name__} instead. Value: {derivation}"
+                
+                # 1. Validate all source quotes in derivation exist in corpus
+                for source_idx, source_obj in enumerate(derivation.get("sources", [])):
+                    quote = source_obj.get("quote")
+                    if not quote:
+                        return f"Derivation {key}: source {source_idx} missing quote"
+                    
+                    quote_check = check_source(quote, pre_processed_corpus)
+                    if quote_check is not None:
+                        return f"Derivation {key}: {quote_check} (source {source_idx})"
+                
+                # 2. Verify computation is correct
+                value_key = key.replace("_source_quote", "_value")
+                if not value_key.endswith("_value"):  # Handle numerator/denominator
+                    value_key = key.replace("_source_quote", "")
+                    
+                if value_key in extraction_dict:
+                    if not verify_computation(derivation, extraction_dict[value_key]):
+                        return f"Derivation computation incorrect for {value_key}: expected {extraction_dict[value_key]}, check {derivation.get('computation')}"
+                
+                print(f"Validated derivation for {value_key}")
+            
+            elif value is not None and value != "":
+                # DIRECT QUOTE path - existing validation
+                source_check = check_source(value, pre_processed_corpus)
+                if source_check is not None:
+                    return "The value of '" + key + "' not found in corpus, update this value so its contents can be found verbatim in the corpus (seperate sections broken up by '...'): " + str(value)
+                
+                # NEW: Check if the extracted VALUE is actually supported by this quote
+                # This prevents using a quote like "10...13" to justify a value of "23" without a derivation
+                value_key = key.replace("_source_quote", "_value")
+                if not value_key.endswith("_value"):
+                    value_key = key.replace("_source_quote", "")
+                
+                if value_key in extraction_dict:
+                    extracted_val = extraction_dict[value_key]
+                    # Only check numeric values or short strings to avoid false positives on long text
+                    if isinstance(extracted_val, (int, float)) or (isinstance(extracted_val, str) and len(extracted_val) < 20):
+                        # Normalize quote and value for comparison
+                        norm_quote = str(value).lower()
+                        norm_val = str(extracted_val).lower()
+                        
+                        # Simple check: is the value inside the quote?
+                        # We also check num2words for numbers (e.g. "twenty-three" vs 23)
+                        val_in_quote = norm_val in norm_quote
+                        
+                        if not val_in_quote and isinstance(extracted_val, (int, float)):
+                            # Try word form for numbers
+                            try:
+                                word_val = num2words(int(extracted_val)).lower()
+                                val_in_quote = word_val in norm_quote
+                            except:
+                                pass
+                        
+                        if not val_in_quote and isinstance(extracted_val, (int, float)):
+                            # If value is a number and NOT in the quote, it likely requires derivation (sum/calc)
+                            return (f"Value {extracted_val} for '{value_key}' is NOT found in the source quote '{value}'. "
+                                    f"If this value was calculated (e.g., sum of multiple numbers), you MUST use '_derivation' "
+                                    f"instead of '_source_quote'.")
+
+                print(f"Validated source for {key}")
+                
+            elif value == "":
                 return ("If a property/parameter is not required and you can not find information for it, "
                         "exclude it completely DO NOT leave it blank. ") + str(key)
-            print(f"Validated source for {key}")
+            # else: value is None and no derivation - field might be optional, let it pass
 
         if isinstance(value, list):
             for item in value:
@@ -437,8 +678,8 @@ async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_c
 Your task is to verify that all extracted DATA VALUES are justified by the source material.
 
 CRITICAL INSTRUCTION:
-You must IGNORE metadata fields such as 'source_location' and 'successfully_extracted' when checking for direct support. 
-These fields are generated by the extractor and are NOT expected to be found in the source text.
+You must IGNORE metadata fields such as 'source_location', 'successfully_extracted', and 'data_discrepancy_notes' 
+when checking for direct support. These fields are generated by the extractor and are NOT expected to be found in the source text.
 Focus ONLY on validating the actual data content (values, units, descriptions) and their corresponding 'source_quote'.
 
 Valid extractions include:
@@ -448,6 +689,20 @@ Valid extractions include:
 4. Labels, categories, or groupings that logically organize information present in the source
 5. Derived values (min/max, averages, ranges, etc.) calculated from source data
 6. Normalized or standardized versions of source information
+
+**HANDLING CONFLICTING SOURCE DATA:**
+If the 'data_discrepancy_notes' field documents conflicts (e.g., "Abstract says n=150 but Table shows n=142"):
+- This is VALID and should NOT cause validation failure
+- The extractor correctly identified and documented the conflict
+- Verify the CHOSEN value matches ONE of the documented conflicting sources
+- Extractions that document discrepancies are BETTER than forcing incorrect reconciliations
+
+**CRITICAL GROUP MAPPING VALIDATION (for comparative/stratified data):**
+When the extraction contains group comparisons (exposed vs reference, group1 vs group2, etc.):
+1. Check that GROUP LABELS match their corresponding VALUES
+2. If a source quote mentions "Group A (n=X)" and exposed_group_label="Group A", then exposed_group_n MUST be X
+3. Watch for SWAPPED GROUPS - this is a common error where values for group A are placed in group B's columns
+4. Verify the sample sizes (n) align with the correct group labels throughout
 
 The key requirement is that ALL extracted DATA VALUES must be fully supportable using ONLY 
 the provided source material. Additions, assumptions, or external knowledge beyond the source are not allowed.
@@ -545,7 +800,66 @@ by the source material alone.""",
 
 async def extract_data(tool, corpus, retries=5):
 
-    system_message = "You are an careful data analyst. Dutifully find the data in the provided research paper."
+    system_message = """You are a careful data analyst. Dutifully find the data in the provided research paper.
+
+IMPORTANT INSTRUCTIONS FOR DATA EXTRACTION:
+
+1. SOURCE QUOTES vs DERIVATIONS:
+   - Use 'source_quote' fields when the value is DIRECTLY STATED in the paper as a single quote
+   - Use 'derivation' fields when the value requires CALCULATION from multiple sources (e.g., summing numbers, looking up values from different sections)
+   - NEVER use both source_quote and derivation for the same field - choose ONE
+
+2. DERIVATION STRUCTURE (when calculation is needed):
+   A derivation field must be a properly structured object with these required components:
+   {
+     "operation": one of ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"],
+     "operation_description": "Human-readable explanation of what was calculated",
+     "sources": [
+       {
+         "quote": "Exact quote from paper",
+         "location": "Page/section where found",
+         "extracted_value": numeric_value_from_this_quote
+       },
+       // ... more source objects as needed
+     ],
+     "computation": "The actual formula, e.g., '13 + 10 = 23'"
+   }
+
+3. EXAMPLES:
+   - Direct quote: If paper says "23 patients", use source_quote = "23 patients"
+   - Derivation needed: If paper says "13 in group A" and "10 in group B", and you need total, use derivation with operation="sum"
+
+4. CRITICAL FOR COMPARATIVE/GROUP DATA:
+   When extracting data for multiple groups (e.g., exposed vs reference, treatment vs control):
+   
+   a) VERIFY GROUP-VALUE ALIGNMENT: Before filling in values, explicitly identify:
+      - Which group label goes in 'exposed_group' columns
+      - Which group label goes in 'reference_group' columns
+      - Confirm sample sizes (n) match the correct group
+   
+   b) COMMON ERROR TO AVOID: When a source quote mentions BOTH groups like:
+      "Group A (n=9, mean 18.2) vs Group B (n=21, mean 15.8)"
+      DO NOT accidentally swap the values! Verify each value goes with its correct group.
+   
+   c) SELF-CHECK: After extraction, mentally read back:
+      "[exposed_label] had [exposed_n] participants with [exposed_value]"
+      Confirm this matches what the paper actually states.
+
+5. DATA DISCREPANCY NOTES:
+   If you find CONFLICTING or INCONSISTENT data in the paper, use the 'data_discrepancy_notes' field to document it:
+   - Example: "Abstract reports n=150 for control group but Table 2 shows N=142 for the same group"
+   - Example: "CI appears reversed in Table 3 (1.25-0.78 instead of 0.78-1.25)"
+   - Example: "Follow-up rate 95% of 200 = 190, but Results section states n=187"
+   
+   This is BETTER than:
+   - Forcing one value when sources conflict
+   - Inventing reconciliations not stated in the paper
+   - Failing the extraction entirely
+   
+   When conflicts exist, extract the most reliable source (typically Tables > Abstract > Text) 
+   and document the discrepancy.
+
+DO NOT provide derivation as a string - it must be a structured object as shown above."""
 
     user_message = "Extract the requested data using the extract_data tool:\n\n" + corpus + "\n"
 
@@ -620,6 +934,9 @@ async def extract_data(tool, corpus, retries=5):
         retry += 1
     if output_dictionary is not None:
         del output_dictionary["successfully_extracted"]
+        # Remove empty discrepancy notes (keep if populated)
+        if "data_discrepancy_notes" in output_dictionary and not output_dictionary["data_discrepancy_notes"]:
+            del output_dictionary["data_discrepancy_notes"]
         return output_dictionary.copy()
     if explanation:
         return {"failed_extraction": explanation}

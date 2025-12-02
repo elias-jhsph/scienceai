@@ -43,7 +43,17 @@
     {% set last = messages|last %}
     {% if last.status == 'Pending' %}
     <script>
-        document.getElementById('typing-indicator').style.display = 'flex';
+        var progressContainer = document.getElementById('progress-wheel-container');
+        var typingIndicator = document.getElementById('typing-indicator');
+
+        // Only show typing indicator if progress wheel is NOT visible
+        if (progressContainer && progressContainer.style.display === 'block') {
+            typingIndicator.style.display = 'none';
+            typingIndicator.style.visibility = 'hidden';
+        } else {
+            typingIndicator.style.display = 'flex';
+            typingIndicator.style.visibility = 'visible';
+        }
         document.getElementById('chat-input').style.display = 'none';
         document.getElementById('send-message').style.display = 'none';
     </script>

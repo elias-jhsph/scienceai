@@ -19,8 +19,8 @@ src/scienceai/data_types.json
 src/scienceai/data_types_docs.json
 src/scienceai/database_manager.py
 src/scienceai/llm.py
-src/scienceai/principle_investigator.py
-src/scienceai/principle_investigator_base_prompt.txt
+src/scienceai/principal_investigator.py
+src/scienceai/principal_investigator_base_prompt.txt
 src/scienceai/process_paper.py
 src/scienceai/io/placeholder.txt
 src/scienceai/static/apps.css

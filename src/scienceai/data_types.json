@@ -17,16 +17,75 @@
     },
     "tool": {
       "source_quote": {
-        "description": "The exact FULL quotation of the source of the NAME was found. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '.",
+        "description": "The exact FULL quotation if the NAME value is directly stated in the paper. Use this OR derivation (not both). If value requires calculation from multiple sources, use derivation instead. Separate multiple quotes with ' ... '.",
         "type": "string"
       },
+      "derivation": {
+        "description": "Use instead of source_quote when NAME value requires calculation from multiple sources. Document the operation, all contributing source quotes, and the computation formula.",
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ],
+            "description": "The mathematical or logical operation performed to derive the value"
+          },
+          "operation_description": {
+            "type": "string",
+            "description": "Human-readable explanation of what was calculated and why"
+          },
+          "sources": {
+            "type": "array",
+            "description": "All source quotes that contributed to this derivation",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {
+                  "type": "string",
+                  "description": "Exact quote from the paper"
+                },
+                "location": {
+                  "type": "string",
+                  "description": "Where this quote appears (page, table, section)"
+                },
+                "extracted_value": {
+                  "type": "number",
+                  "description": "The numeric value extracted from this quote"
+                }
+              },
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
+            }
+          },
+          "computation": {
+            "type": "string",
+            "description": "The actual calculation formula (e.g., '13 + 10 = 23')"
+          }
+        },
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
+      },
       "source_location": {
-        "description": "The location in the paper of the NAME_source_quote",
+        "description": "The location in the paper of the NAME_source_quote or primary source for derivation",
         "type": "string"
       },
       "unit": {
-          "description": "The unit of NAME.",
-          "type": "string"
+        "description": "The unit of NAME.",
+        "type": "string"
       },
       "mode": "prefix",
       "value": {
@@ -56,8 +115,60 @@
       "description": "DESCRIPTION",
       "keys": {
         "source_quote": {
-          "description": "The exact FULL quotation of the source of the NAME_list value was found. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '.",
+          "description": "The exact FULL quotation if the NAME_list value is directly stated. Use this OR derivation (not both). Separate multiple quotes with ' ... '.",
           "type": "string"
+        },
+        "derivation": {
+          "description": "Use instead of source_quote when value requires calculation from multiple sources.",
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "subtraction",
+                "division",
+                "multiplication",
+                "lookup",
+                "average",
+                "custom"
+              ]
+            },
+            "operation_description": {
+              "type": "string"
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "quote": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "extracted_value": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "quote",
+                  "location",
+                  "extracted_value"
+                ]
+              }
+            },
+            "computation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "operation_description",
+            "sources",
+            "computation"
+          ]
         },
         "source_location": {
           "description": "The location in the paper of the NAME_source_quote",
@@ -99,8 +210,60 @@
       "description": "DESCRIPTION",
       "keys": {
         "source_quote": {
-          "description": "The exact FULL quotation of the source of the NAME value was found. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '.",
+          "description": "The exact FULL quotation if the NAME value is directly stated. Use this OR derivation (not both). Separate multiple quotes with ' ... '.",
           "type": "string"
+        },
+        "derivation": {
+          "description": "Use instead of source_quote when value requires calculation from multiple sources.",
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "subtraction",
+                "division",
+                "multiplication",
+                "lookup",
+                "average",
+                "custom"
+              ]
+            },
+            "operation_description": {
+              "type": "string"
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "quote": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "extracted_value": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "quote",
+                  "location",
+                  "extracted_value"
+                ]
+              }
+            },
+            "computation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "operation_description",
+            "sources",
+            "computation"
+          ]
         },
         "source_location": {
           "description": "The location in the paper of the NAME_source",
@@ -125,12 +288,12 @@
         "type": "string"
       },
       "unit": {
-          "description": "The unit that this number will likely have.",
-          "type": "string"
+        "description": "The unit that this number will likely have.",
+        "type": "string"
       },
       "required": {
-          "description": "Is this field required?",
-          "type": "boolean"
+        "description": "Is this field required?",
+        "type": "boolean"
       }
     },
     "tool": {
@@ -138,8 +301,60 @@
       "description": "DESCRIPTION",
       "keys": {
         "source_quote": {
-          "description": "The exact FULL quotation of the source of the NAME_list value was found. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '.",
+          "description": "The exact FULL quotation if the NAME_list value is directly stated. Use this OR derivation (not both). Separate multiple quotes with ' ... '.",
           "type": "string"
+        },
+        "derivation": {
+          "description": "Use instead of source_quote when value requires calculation from multiple sources.",
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "subtraction",
+                "division",
+                "multiplication",
+                "lookup",
+                "average",
+                "custom"
+              ]
+            },
+            "operation_description": {
+              "type": "string"
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "quote": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "extracted_value": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "quote",
+                  "location",
+                  "extracted_value"
+                ]
+              }
+            },
+            "computation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "operation_description",
+            "sources",
+            "computation"
+          ]
         },
         "source_location": {
           "description": "The location in the paper of the NAME_source",
@@ -179,8 +394,60 @@
     "tool": {
       "mode": "prefix",
       "numerator_source_quote": {
-        "description": "The exact FULL quotation of the source of the NAME_numerator was found. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '.",
+        "description": "The exact quotation if NAME_numerator is directly stated. Use this OR numerator_derivation (not both).",
         "type": "string"
+      },
+      "numerator_derivation": {
+        "description": "Use instead of numerator_source_quote when numerator requires calculation.",
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
+            }
+          },
+          "computation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
       },
       "numerator_source_location": {
         "description": "The location in the paper of the NAME_numerator_source_quote.",
@@ -195,59 +462,266 @@
         "type": "string"
       },
       "denominator_source_quote": {
-          "description": "The exact FULL quotation of the source of the NAME_denominator was found. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '.",
-          "type": "string"
+        "description": "The exact quotation if NAME_denominator is directly stated. Use this OR denominator_derivation (not both).",
+        "type": "string"
+      },
+      "denominator_derivation": {
+        "description": "Use instead of denominator_source_quote when denominator requires calculation.",
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
+            }
+          },
+          "computation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
       },
       "denominator_source_location": {
-          "description": "The location in the paper of the NAME_denominator_source_quote",
-          "type": "string"
+        "description": "The location in the paper of the NAME_denominator_source_quote",
+        "type": "string"
       },
       "denominator": {
-          "description": "DENOMINATOR. The denominator of the NAME with the following description: DESCRIPTION.",
-          "type": "number"
+        "description": "DENOMINATOR. The denominator of the NAME with the following description: DESCRIPTION.",
+        "type": "number"
       },
       "denominator_unit": {
-          "description": "The unit of NAME_denominator.",
-          "type": "string"
+        "description": "The unit of NAME_denominator.",
+        "type": "string"
       }
     }
   },
   "categorical_value": {
     "spec_description": "A categorical value is used to extract data that falls into predefined categories, such as types of diseases, genres of literature, or classifications of artifacts.",
     "spec": {
-      "name": {"type": "string", "description": "The name of this field."},
-      "description": {"type": "string", "description": "A description of the category."},
-      "categories": {"type": "array", "description": "A list of possible categories."},
-      "required": {"type": "boolean", "description": "Is this field required?"}
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of the category."
+      },
+      "categories": {
+        "type": "array",
+        "description": "A list of possible categories."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
     },
     "tool": {
-      "source_quote": {"type": "string", "description": "The exact FULL quotation of the source of the NAME with description: DESCRIPTION. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."},
-      "source_location": {"type": "string", "description": "The location in the paper of the NAME_source_quote"},
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation if NAME is directly stated. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when NAME requires lookup/derivation from multiple locations.",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
+            }
+          },
+          "computation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
       "mode": "prefix",
-      "value": {"type": "string", "description": "The category chosen from the NAME - DESCRIPTION with categories: CATEGORIES."}
+      "value": {
+        "type": "string",
+        "description": "The category chosen from the NAME - DESCRIPTION with categories: CATEGORIES."
+      }
     }
   },
   "lat_lon_pair": {
     "spec_description": "A coordinate pair extracts geographical or spatial data points, such as locations on a map or positions in a spatial experiment.",
     "spec": {
-      "name": {"type": "string", "description": "The name of this field."},
-      "description": {"type": "string", "description": "A description of what the coordinates represent."},
-      "required": {"type": "boolean", "description": "Is this field required?"}
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of what the coordinates represent."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
     },
     "tool": {
-      "source_quote": {"type": "string", "description": "The exact FULL quotation of the source of the coordinates NAME were found with description: DESCRIPTION. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."},
-      "source_location": {"type": "string", "description": "The location in the paper of the NAME_source_quote"},
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation if coordinates are directly stated. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when coordinates require lookup from multiple sources.",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
+            }
+          },
+          "computation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
       "mode": "prefix",
-      "latitude": {"type": "number", "description": "Latitude part of the coordinate NAME with description: DESCRIPTION."},
-      "longitude": {"type": "number", "description": "Longitude part of the coordinate NAME with description: DESCRIPTION."}
+      "latitude": {
+        "type": "number",
+        "description": "Latitude part of the coordinate NAME with description: DESCRIPTION."
+      },
+      "longitude": {
+        "type": "number",
+        "description": "Longitude part of the coordinate NAME with description: DESCRIPTION."
+      }
     }
   },
   "lat_lon_pair_list": {
     "spec_description": "A list of coordinate pairs extracts geographical or spatial data points, such as locations on a map or positions in a spatial experiment.",
     "spec": {
-      "name": {"type": "string", "description": "The name of this field."},
-      "description": {"type": "string", "description": "A description of what the coordinates represent."},
-      "required": {"type": "boolean", "description": "Is this field required?"}
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of what the coordinates represent."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
     },
     "tool": {
       "mode": "array",
@@ -255,7 +729,60 @@
       "keys": {
         "source_quote": {
           "type": "string",
-          "description": "The exact FULL quotation of the source of the coordinates NAME were found with description: DESCRIPTION. (Include nothing but the quote)"},
+          "description": "The exact quotation if coordinates directly stated. Use this OR derivation (not both)."
+        },
+        "derivation": {
+          "type": "object",
+          "description": "Use when coordinates require lookup.",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "subtraction",
+                "division",
+                "multiplication",
+                "lookup",
+                "average",
+                "custom"
+              ]
+            },
+            "operation_description": {
+              "type": "string"
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "quote": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "extracted_value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "quote",
+                  "location",
+                  "extracted_value"
+                ]
+              }
+            },
+            "computation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "operation_description",
+            "sources",
+            "computation"
+          ]
+        },
         "source_location": {
           "type": "string",
           "description": "The location in the paper of the NAME_source_quote"
@@ -274,25 +801,110 @@
   "date": {
     "spec_description": "A date is a specific point in time, such as a birthday, a historical event, or a deadline.",
     "spec": {
-      "name": {"type": "string", "description": "The name of this field."},
-      "description": {"type": "string", "description": "A description of the date."},
-      "required": {"type": "boolean", "description": "Is this field required?"}
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of the date."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
     },
     "tool": {
-      "source_quote": {"type": "string", "description": "The exact FULL quotation of the source of the date NAME were found with description: DESCRIPTION. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."},
-      "source_location": {"type": "string", "description": "The location in the paper of the NAME_source_quote"},
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation if date directly stated. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when date requires lookup.",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
+            }
+          },
+          "computation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
       "mode": "prefix",
-      "year": {"type": "number", "description": "The year of the date NAME with description: DESCRIPTION."},
-      "month": {"type": "number", "description": "The month of the date NAME with description: DESCRIPTION."},
-      "day": {"type": "number", "description": "The day of the date NAME with description: DESCRIPTION."}
+      "year": {
+        "type": "number",
+        "description": "The year of the date NAME with description: DESCRIPTION."
+      },
+      "month": {
+        "type": "number",
+        "description": "The month of the date NAME with description: DESCRIPTION."
+      },
+      "day": {
+        "type": "number",
+        "description": "The day of the date NAME with description: DESCRIPTION."
+      }
     }
   },
   "date_list": {
     "spec_description": "A list of dates is a collection of specific points in time, such as birthdays, historical events, or deadlines.",
     "spec": {
-      "name": {"type": "string", "description": "The name of this field."},
-      "description": {"type": "string", "description": "A description of the dates."},
-      "required": {"type": "boolean", "description": "Is this field required?"}
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of the dates."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
     },
     "tool": {
       "mode": "array",
@@ -300,7 +912,59 @@
       "keys": {
         "source_quote": {
           "type": "string",
-          "description": "The exact FULL quotation of the source of the date NAME were found with description: DESCRIPTION. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."
+          "description": "The exact quotation if date directly stated. Use this OR derivation (not both)."
+        },
+        "derivation": {
+          "type": "object",
+          "description": "Use when date requires lookup.",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "subtraction",
+                "division",
+                "multiplication",
+                "lookup",
+                "average",
+                "custom"
+              ]
+            },
+            "operation_description": {
+              "type": "string"
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "quote": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "extracted_value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "quote",
+                  "location",
+                  "extracted_value"
+                ]
+              }
+            },
+            "computation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "operation_description",
+            "sources",
+            "computation"
+          ]
         },
         "source_location": {
           "type": "string",
@@ -324,45 +988,1330 @@
   "text_block": {
     "spec_description": "A block of text, typically a paragraph or a set of paragraphs, used to extract larger narrative sections.",
     "spec": {
-      "name": {"type": "string", "description": "The name of this field."},
-      "description": {"type": "string", "description": "A description of the content to be extracted."},
-      "required": {"type": "boolean", "description": "Is this field required?"}
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of the content to be extracted."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
     },
     "tool": {
-      "source_quote": {"type": "string", "description": "The FULL quotation where the text NAME_value was found with description: DESCRIPTION. (Include nothing but the quote). Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."},
-      "source_location": {"type": "string", "description": "The location in the paper of the NAME_source_quote"},
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation if NAME_value directly stated. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when text block requires assembly from multiple sources.",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
+            }
+          },
+          "computation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
       "mode": "prefix",
-      "value": {"type": "string", "description": "The extracted block of text with description: DESCRIPTION."}
+      "value": {
+        "type": "string",
+        "description": "The extracted block of text with description: DESCRIPTION."
+      }
     }
   },
   "boolean_value": {
     "spec_description": "A true or false value often used to answer yes/no questions or confirm the presence or absence of a feature.",
     "spec": {
-      "name": {"type": "string", "description": "The name of this field."},
-      "description": {"type": "string", "description": "A description of this field."},
-      "required": {"type": "boolean", "description": "Is this field required?"}
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of this field."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
     },
     "tool": {
-      "source_quote": {"type": "string", "description": "The exact FULL quotation of the source of the NAME_value information with description: DESCRIPTION. Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."},
-      "source_location": {"type": "string", "description": "The location in the paper of the NAME_source_quote"},
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation supporting NAME_value. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when boolean value requires inference from multiple sources.",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
+            }
+          },
+          "computation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
       "mode": "prefix",
-      "value": {"type": "boolean", "description": "True or False value representing NAME with description: DESCRIPTION."}
+      "value": {
+        "type": "boolean",
+        "description": "True or False value representing NAME with description: DESCRIPTION."
+      }
     }
   },
   "range_value": {
     "spec_description": "A range value specifies a minimum and maximum of a measurable quantity, useful for extracting data where a span is significant, such as temperature ranges, age groups, or measurement tolerances.",
     "spec": {
-      "name": {"type": "string", "description": "The name of this field."},
-      "description": {"type": "string", "description": "A description of what the range represents."},
-      "unit": {"type": "string", "description": "The unit of measurement for the range values."},
-      "required": {"type": "boolean", "description": "Is this field required?"}
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of what the range represents."
+      },
+      "unit": {
+        "type": "string",
+        "description": "The unit of measurement for the range values."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
     },
     "tool": {
-      "source_quote": {"type": "string", "description": "The FULL quotation where the range was found with description: DESCRIPTION. Important: The quote must be an exact quote! Always check to make sure the quote appears exactly as it does in the paper. Separate multiple quotes with ' ... '."},
-      "source_location": {"type": "string", "description": "The location in the paper of the NAME_source_quote"},
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation if range directly stated. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when range requires calculation from multiple sources.",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
+            }
+          },
+          "computation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
       "mode": "prefix",
-      "min_value": {"type": "number", "description": "The minimum value of the range with description: DESCRIPTION."},
-      "max_value": {"type": "number", "description": "The maximum value of the range with description: DESCRIPTION."}
+      "min_value": {
+        "type": "number",
+        "description": "The minimum value of the range with description: DESCRIPTION."
+      },
+      "max_value": {
+        "type": "number",
+        "description": "The maximum value of the range with description: DESCRIPTION."
+      }
+    }
+  },
+  "effect_estimate": {
+    "spec_description": "An effect estimate captures a statistical measure of association (hazard ratio, odds ratio, risk ratio, incidence rate ratio, mean difference, etc.) with its confidence interval and p-value. Use for single comparisons like 'HR = 1.52 (95% CI: 1.12-2.08), p = 0.008'.",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of what effect is being estimated and the comparison being made."
+      },
+      "effect_type": {
+        "type": "string",
+        "description": "The type of effect measure (e.g., HR, OR, RR, IRR, MD, SMD, beta)."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation containing the NAME effect estimate. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when effect estimate requires assembly from multiple sources.",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]
+          },
+          "operation_description": {"type": "string"},
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {"type": "string"},
+                "location": {"type": "string"},
+                "extracted_value": {"type": "number"}
+              },
+              "required": ["quote", "location", "extracted_value"]
+            }
+          },
+          "computation": {"type": "string"}
+        },
+        "required": ["operation", "operation_description", "sources", "computation"]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
+      "mode": "prefix",
+      "point_estimate": {
+        "type": "number",
+        "description": "The point estimate value (EFFECT_TYPE) for NAME with description: DESCRIPTION."
+      },
+      "ci_lower": {
+        "type": "number",
+        "description": "The lower bound of the confidence interval for NAME."
+      },
+      "ci_upper": {
+        "type": "number",
+        "description": "The upper bound of the confidence interval for NAME."
+      },
+      "ci_level": {
+        "type": "number",
+        "description": "The confidence level as a percentage (typically 95) for NAME."
+      },
+      "p_value": {
+        "type": "number",
+        "description": "The p-value for NAME (use -1 if reported as < threshold, e.g., p<0.001 = -0.001)."
+      },
+      "is_reference": {
+        "type": "boolean",
+        "description": "True if this is the reference category (point_estimate typically 1.0 for ratios)."
+      }
+    }
+  },
+  "effect_estimate_list": {
+    "spec_description": "A list of effect estimates for multiple comparisons or groups. Use when extracting multiple HRs, ORs, etc. from the same analysis (e.g., multiple exposure levels vs reference).",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of what effects are being estimated."
+      },
+      "effect_type": {
+        "type": "string",
+        "description": "The type of effect measure (e.g., HR, OR, RR, IRR, MD, SMD, beta)."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "mode": "array",
+      "description": "List of effect estimates (EFFECT_TYPE) for DESCRIPTION",
+      "keys": {
+        "source_quote": {
+          "type": "string",
+          "description": "The exact quotation for this effect estimate. Use this OR derivation (not both)."
+        },
+        "derivation": {
+          "type": "object",
+          "description": "Use when value requires calculation.",
+          "properties": {
+            "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
+            "operation_description": {"type": "string"},
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "quote": {"type": "string"},
+                  "location": {"type": "string"},
+                  "extracted_value": {"type": "number"}
+                },
+                "required": ["quote", "location", "extracted_value"]
+              }
+            },
+            "computation": {"type": "string"}
+          },
+          "required": ["operation", "operation_description", "sources", "computation"]
+        },
+        "source_location": {
+          "type": "string",
+          "description": "The location in the paper of this effect estimate"
+        },
+        "group_label": {
+          "type": "string",
+          "description": "The label/name for this comparison group"
+        },
+        "point_estimate": {
+          "type": "number",
+          "description": "The point estimate value (EFFECT_TYPE)"
+        },
+        "ci_lower": {
+          "type": "number",
+          "description": "The lower bound of the confidence interval"
+        },
+        "ci_upper": {
+          "type": "number",
+          "description": "The upper bound of the confidence interval"
+        },
+        "ci_level": {
+          "type": "number",
+          "description": "The confidence level as percentage (typically 95)"
+        },
+        "p_value": {
+          "type": "number",
+          "description": "The p-value (use -1 if < threshold)"
+        },
+        "is_reference": {
+          "type": "boolean",
+          "description": "True if this is the reference category"
+        }
+      }
+    }
+  },
+  "measurement_with_error": {
+    "spec_description": "A measurement with associated uncertainty/error, such as '15.3 ± 2.1 mm' or '42.5 (SE: 3.2)'. Use for single measurements with standard deviation, standard error, or other error terms.",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of what is being measured."
+      },
+      "unit": {
+        "type": "string",
+        "description": "The unit of measurement."
+      },
+      "error_type": {
+        "type": "string",
+        "description": "The type of error (SD, SE, 95% CI, IQR, range)."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation containing the NAME measurement. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when measurement requires assembly from multiple sources.",
+        "properties": {
+          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
+          "operation_description": {"type": "string"},
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {"type": "string"},
+                "location": {"type": "string"},
+                "extracted_value": {"type": "number"}
+              },
+              "required": ["quote", "location", "extracted_value"]
+            }
+          },
+          "computation": {"type": "string"}
+        },
+        "required": ["operation", "operation_description", "sources", "computation"]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
+      "mode": "prefix",
+      "value": {
+        "type": "number",
+        "description": "The central/point value for NAME (DESCRIPTION) in UNIT."
+      },
+      "error_value": {
+        "type": "number",
+        "description": "The ERROR_TYPE value for NAME."
+      },
+      "error_lower": {
+        "type": "number",
+        "description": "Lower bound if error is asymmetric (e.g., IQR, 95% CI). Use same as error_value if symmetric."
+      },
+      "error_upper": {
+        "type": "number",
+        "description": "Upper bound if error is asymmetric. Use same as error_value if symmetric."
+      }
+    }
+  },
+  "measurement_with_error_list": {
+    "spec_description": "A list of measurements with associated uncertainty/error. Use when extracting multiple measurements with their error terms.",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of what is being measured."
+      },
+      "unit": {
+        "type": "string",
+        "description": "The unit of measurement."
+      },
+      "error_type": {
+        "type": "string",
+        "description": "The type of error (SD, SE, 95% CI, IQR, range)."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "mode": "array",
+      "description": "List of measurements (DESCRIPTION) in UNIT with ERROR_TYPE",
+      "keys": {
+        "source_quote": {
+          "type": "string",
+          "description": "The exact quotation for this measurement. Use this OR derivation (not both)."
+        },
+        "derivation": {
+          "type": "object",
+          "description": "Use when value requires calculation.",
+          "properties": {
+            "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
+            "operation_description": {"type": "string"},
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "quote": {"type": "string"},
+                  "location": {"type": "string"},
+                  "extracted_value": {"type": "number"}
+                },
+                "required": ["quote", "location", "extracted_value"]
+              }
+            },
+            "computation": {"type": "string"}
+          },
+          "required": ["operation", "operation_description", "sources", "computation"]
+        },
+        "source_location": {
+          "type": "string",
+          "description": "The location in the paper"
+        },
+        "label": {
+          "type": "string",
+          "description": "Label for this measurement (e.g., group name, time point)"
+        },
+        "value": {
+          "type": "number",
+          "description": "The central/point value"
+        },
+        "error_value": {
+          "type": "number",
+          "description": "The error value (SD, SE, etc.)"
+        },
+        "error_lower": {
+          "type": "number",
+          "description": "Lower bound if asymmetric"
+        },
+        "error_upper": {
+          "type": "number",
+          "description": "Upper bound if asymmetric"
+        }
+      }
+    }
+  },
+  "sample_statistics": {
+    "spec_description": "Descriptive statistics for a sample including count, central tendency, and spread. Use for extracting summary statistics like 'n=42, mean 15.3 (SD 2.1)' or 'n=50, median 12 (IQR 8-16)'.",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of the sample and what is being measured."
+      },
+      "unit": {
+        "type": "string",
+        "description": "The unit of measurement for the variable."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation containing the NAME statistics. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when statistics require assembly from multiple sources.",
+        "properties": {
+          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
+          "operation_description": {"type": "string"},
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {"type": "string"},
+                "location": {"type": "string"},
+                "extracted_value": {"type": "number"}
+              },
+              "required": ["quote", "location", "extracted_value"]
+            }
+          },
+          "computation": {"type": "string"}
+        },
+        "required": ["operation", "operation_description", "sources", "computation"]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
+      "mode": "prefix",
+      "n": {
+        "type": "number",
+        "description": "Sample size for NAME (DESCRIPTION)."
+      },
+      "mean": {
+        "type": "number",
+        "description": "Mean value for NAME in UNIT (use -999 if not reported, use median instead)."
+      },
+      "sd": {
+        "type": "number",
+        "description": "Standard deviation for NAME in UNIT (use -999 if not reported)."
+      },
+      "se": {
+        "type": "number",
+        "description": "Standard error for NAME in UNIT (use -999 if not reported)."
+      },
+      "median": {
+        "type": "number",
+        "description": "Median value for NAME in UNIT (use -999 if not reported, use mean instead)."
+      },
+      "q1": {
+        "type": "number",
+        "description": "First quartile/25th percentile for NAME in UNIT (use -999 if not reported)."
+      },
+      "q3": {
+        "type": "number",
+        "description": "Third quartile/75th percentile for NAME in UNIT (use -999 if not reported)."
+      },
+      "min": {
+        "type": "number",
+        "description": "Minimum value for NAME in UNIT (use -999 if not reported)."
+      },
+      "max": {
+        "type": "number",
+        "description": "Maximum value for NAME in UNIT (use -999 if not reported)."
+      }
+    }
+  },
+  "sample_statistics_list": {
+    "spec_description": "A list of sample statistics for multiple groups or variables. Use when extracting summary statistics across multiple groups (e.g., treatment vs control).",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of what is being measured across groups."
+      },
+      "unit": {
+        "type": "string",
+        "description": "The unit of measurement."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "mode": "array",
+      "description": "List of sample statistics for DESCRIPTION in UNIT",
+      "keys": {
+        "source_quote": {
+          "type": "string",
+          "description": "The exact quotation for these statistics. Use this OR derivation (not both)."
+        },
+        "derivation": {
+          "type": "object",
+          "description": "Use when values require calculation.",
+          "properties": {
+            "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
+            "operation_description": {"type": "string"},
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "quote": {"type": "string"},
+                  "location": {"type": "string"},
+                  "extracted_value": {"type": "number"}
+                },
+                "required": ["quote", "location", "extracted_value"]
+              }
+            },
+            "computation": {"type": "string"}
+          },
+          "required": ["operation", "operation_description", "sources", "computation"]
+        },
+        "source_location": {
+          "type": "string",
+          "description": "The location in the paper"
+        },
+        "group_label": {
+          "type": "string",
+          "description": "Label for this group/sample"
+        },
+        "n": {
+          "type": "number",
+          "description": "Sample size"
+        },
+        "mean": {
+          "type": "number",
+          "description": "Mean value (use -999 if not reported)"
+        },
+        "sd": {
+          "type": "number",
+          "description": "Standard deviation (use -999 if not reported)"
+        },
+        "se": {
+          "type": "number",
+          "description": "Standard error (use -999 if not reported)"
+        },
+        "median": {
+          "type": "number",
+          "description": "Median (use -999 if not reported)"
+        },
+        "q1": {
+          "type": "number",
+          "description": "First quartile (use -999 if not reported)"
+        },
+        "q3": {
+          "type": "number",
+          "description": "Third quartile (use -999 if not reported)"
+        },
+        "min": {
+          "type": "number",
+          "description": "Minimum (use -999 if not reported)"
+        },
+        "max": {
+          "type": "number",
+          "description": "Maximum (use -999 if not reported)"
+        }
+      }
+    }
+  },
+  "regression_coefficient": {
+    "spec_description": "A regression coefficient with standard error, confidence interval, and p-value. Use for extracting beta coefficients from linear, logistic, or other regression models.",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of the predictor variable and outcome."
+      },
+      "coefficient_type": {
+        "type": "string",
+        "description": "The type of coefficient (beta, B, log-odds, etc.)."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation containing the NAME coefficient. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when coefficient requires assembly from multiple sources.",
+        "properties": {
+          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
+          "operation_description": {"type": "string"},
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {"type": "string"},
+                "location": {"type": "string"},
+                "extracted_value": {"type": "number"}
+              },
+              "required": ["quote", "location", "extracted_value"]
+            }
+          },
+          "computation": {"type": "string"}
+        },
+        "required": ["operation", "operation_description", "sources", "computation"]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
+      "mode": "prefix",
+      "coefficient": {
+        "type": "number",
+        "description": "The COEFFICIENT_TYPE coefficient value for NAME (DESCRIPTION)."
+      },
+      "se": {
+        "type": "number",
+        "description": "Standard error of the coefficient for NAME."
+      },
+      "ci_lower": {
+        "type": "number",
+        "description": "Lower bound of confidence interval for NAME."
+      },
+      "ci_upper": {
+        "type": "number",
+        "description": "Upper bound of confidence interval for NAME."
+      },
+      "t_statistic": {
+        "type": "number",
+        "description": "T-statistic for NAME (use -999 if not reported)."
+      },
+      "p_value": {
+        "type": "number",
+        "description": "P-value for NAME (use -1 if reported as < threshold)."
+      }
+    }
+  },
+  "regression_coefficient_list": {
+    "spec_description": "A list of regression coefficients from a model. Use when extracting multiple predictors from the same regression analysis.",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of the regression model and outcome."
+      },
+      "coefficient_type": {
+        "type": "string",
+        "description": "The type of coefficient (beta, B, log-odds, etc.)."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "mode": "array",
+      "description": "List of COEFFICIENT_TYPE coefficients from regression model for DESCRIPTION",
+      "keys": {
+        "source_quote": {
+          "type": "string",
+          "description": "The exact quotation for this coefficient. Use this OR derivation (not both)."
+        },
+        "derivation": {
+          "type": "object",
+          "description": "Use when value requires calculation.",
+          "properties": {
+            "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
+            "operation_description": {"type": "string"},
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "quote": {"type": "string"},
+                  "location": {"type": "string"},
+                  "extracted_value": {"type": "number"}
+                },
+                "required": ["quote", "location", "extracted_value"]
+              }
+            },
+            "computation": {"type": "string"}
+          },
+          "required": ["operation", "operation_description", "sources", "computation"]
+        },
+        "source_location": {
+          "type": "string",
+          "description": "The location in the paper"
+        },
+        "predictor_label": {
+          "type": "string",
+          "description": "Name/label of the predictor variable"
+        },
+        "coefficient": {
+          "type": "number",
+          "description": "The coefficient value"
+        },
+        "se": {
+          "type": "number",
+          "description": "Standard error"
+        },
+        "ci_lower": {
+          "type": "number",
+          "description": "Lower CI bound"
+        },
+        "ci_upper": {
+          "type": "number",
+          "description": "Upper CI bound"
+        },
+        "t_statistic": {
+          "type": "number",
+          "description": "T-statistic (use -999 if not reported)"
+        },
+        "p_value": {
+          "type": "number",
+          "description": "P-value (use -1 if < threshold)"
+        }
+      }
+    }
+  },
+  "statistical_test": {
+    "spec_description": "A statistical test result including test statistic, degrees of freedom, and p-value. Use for chi-square, t-tests, F-tests, ANOVA, etc.",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of what is being tested."
+      },
+      "test_type": {
+        "type": "string",
+        "description": "The type of statistical test (chi-square, t-test, F-test, Mann-Whitney, etc.)."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation containing the NAME test result. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when test result requires assembly from multiple sources.",
+        "properties": {
+          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
+          "operation_description": {"type": "string"},
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {"type": "string"},
+                "location": {"type": "string"},
+                "extracted_value": {"type": "number"}
+              },
+              "required": ["quote", "location", "extracted_value"]
+            }
+          },
+          "computation": {"type": "string"}
+        },
+        "required": ["operation", "operation_description", "sources", "computation"]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
+      "mode": "prefix",
+      "test_statistic": {
+        "type": "number",
+        "description": "The TEST_TYPE statistic value for NAME (DESCRIPTION)."
+      },
+      "df": {
+        "type": "number",
+        "description": "Degrees of freedom for NAME (use -999 if not applicable or not reported)."
+      },
+      "df_numerator": {
+        "type": "number",
+        "description": "Numerator df for F-tests (use -999 if not applicable)."
+      },
+      "df_denominator": {
+        "type": "number",
+        "description": "Denominator df for F-tests (use -999 if not applicable)."
+      },
+      "p_value": {
+        "type": "number",
+        "description": "P-value for NAME (use -1 if reported as < threshold, e.g., p<0.001 = -0.001)."
+      }
+    }
+  },
+  "contingency_table_2x2": {
+    "spec_description": "A 2x2 contingency table for binary exposure and binary outcome. Use for extracting data needed for odds ratios, risk ratios, chi-square tests. Cells are: [exposed+outcome, exposed+no_outcome, unexposed+outcome, unexposed+no_outcome].",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of the exposure and outcome being cross-tabulated."
+      },
+      "exposure_label": {
+        "type": "string",
+        "description": "Label for the exposure/row variable."
+      },
+      "outcome_label": {
+        "type": "string",
+        "description": "Label for the outcome/column variable."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation containing the NAME table data. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when cell counts require assembly from multiple sources.",
+        "properties": {
+          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
+          "operation_description": {"type": "string"},
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {"type": "string"},
+                "location": {"type": "string"},
+                "extracted_value": {"type": "number"}
+              },
+              "required": ["quote", "location", "extracted_value"]
+            }
+          },
+          "computation": {"type": "string"}
+        },
+        "required": ["operation", "operation_description", "sources", "computation"]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
+      "mode": "prefix",
+      "exposed_label": {
+        "type": "string",
+        "description": "The label for the exposed group in NAME (EXPOSURE_LABEL positive)."
+      },
+      "unexposed_label": {
+        "type": "string",
+        "description": "The label for the unexposed group in NAME (EXPOSURE_LABEL negative)."
+      },
+      "outcome_positive_label": {
+        "type": "string",
+        "description": "The label for positive outcome in NAME (OUTCOME_LABEL positive)."
+      },
+      "outcome_negative_label": {
+        "type": "string",
+        "description": "The label for negative outcome in NAME (OUTCOME_LABEL negative)."
+      },
+      "a_exposed_outcome": {
+        "type": "number",
+        "description": "Cell A for NAME (DESCRIPTION): Number with EXPOSURE_LABEL AND OUTCOME_LABEL."
+      },
+      "b_exposed_no_outcome": {
+        "type": "number",
+        "description": "Cell B for NAME: Number with EXPOSURE_LABEL but without OUTCOME_LABEL."
+      },
+      "c_unexposed_outcome": {
+        "type": "number",
+        "description": "Cell C for NAME: Number without EXPOSURE_LABEL but with OUTCOME_LABEL."
+      },
+      "d_unexposed_no_outcome": {
+        "type": "number",
+        "description": "Cell D for NAME: Number without EXPOSURE_LABEL and without OUTCOME_LABEL."
+      },
+      "total_exposed": {
+        "type": "number",
+        "description": "Total in EXPOSURE_LABEL group for NAME (a + b)."
+      },
+      "total_unexposed": {
+        "type": "number",
+        "description": "Total in non-EXPOSURE_LABEL group for NAME (c + d)."
+      }
+    }
+  },
+  "named_number_set": {
+    "spec_description": "A flexible set of related named numbers extracted together from the same source. Use when you need to extract multiple related numeric values that don't fit standard statistical patterns, such as study characteristics, multiple time points, or custom metrics. Specify the expected field names in the description.",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "Description including the names and meanings of each number to extract (e.g., 'Extract: follow_up_months, total_n, dropout_n, completion_rate')."
+      },
+      "field_names": {
+        "type": "array",
+        "description": "List of field names to extract (e.g., ['follow_up_months', 'total_n', 'dropout_n'])."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation containing the NAME values. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when values require assembly from multiple sources.",
+        "properties": {
+          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
+          "operation_description": {"type": "string"},
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {"type": "string"},
+                "location": {"type": "string"},
+                "extracted_value": {"type": "number"}
+              },
+              "required": ["quote", "location", "extracted_value"]
+            }
+          },
+          "computation": {"type": "string"}
+        },
+        "required": ["operation", "operation_description", "sources", "computation"]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
+      "mode": "prefix",
+      "values_json": {
+        "type": "string",
+        "description": "JSON object mapping field names to numeric values for NAME (DESCRIPTION). Expected fields: FIELD_NAMES. Example: {\"field1\": 10, \"field2\": 20.5}"
+      }
+    }
+  },
+  "proportion_with_ci": {
+    "spec_description": "A proportion or percentage with confidence interval. Use for prevalence, incidence rates, or any percentage with uncertainty bounds.",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of what proportion is being reported."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation containing the NAME proportion. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when proportion requires calculation from sources.",
+        "properties": {
+          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
+          "operation_description": {"type": "string"},
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {"type": "string"},
+                "location": {"type": "string"},
+                "extracted_value": {"type": "number"}
+              },
+              "required": ["quote", "location", "extracted_value"]
+            }
+          },
+          "computation": {"type": "string"}
+        },
+        "required": ["operation", "operation_description", "sources", "computation"]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
+      "mode": "prefix",
+      "numerator": {
+        "type": "number",
+        "description": "The count/numerator for NAME."
+      },
+      "denominator": {
+        "type": "number",
+        "description": "The total/denominator for NAME."
+      },
+      "proportion": {
+        "type": "number",
+        "description": "The proportion (0-1) or percentage (0-100) for NAME (DESCRIPTION)."
+      },
+      "is_percentage": {
+        "type": "boolean",
+        "description": "True if reported as percentage (0-100), False if proportion (0-1)."
+      },
+      "ci_lower": {
+        "type": "number",
+        "description": "Lower bound of confidence interval for NAME."
+      },
+      "ci_upper": {
+        "type": "number",
+        "description": "Upper bound of confidence interval for NAME."
+      },
+      "ci_level": {
+        "type": "number",
+        "description": "Confidence level as percentage (typically 95)."
+      }
+    }
+  },
+  "survival_analysis_result": {
+    "spec_description": "Results from survival/time-to-event analysis including median survival, rates at specific time points, and comparison statistics. Use for Kaplan-Meier, Cox regression summaries.",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of the survival outcome and groups being compared."
+      },
+      "time_unit": {
+        "type": "string",
+        "description": "Unit of time for survival analysis (days, months, years)."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "source_quote": {
+        "type": "string",
+        "description": "The exact quotation containing the NAME survival data. Use this OR derivation (not both)."
+      },
+      "derivation": {
+        "type": "object",
+        "description": "Use when survival data requires assembly from multiple sources.",
+        "properties": {
+          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
+          "operation_description": {"type": "string"},
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quote": {"type": "string"},
+                "location": {"type": "string"},
+                "extracted_value": {"type": "number"}
+              },
+              "required": ["quote", "location", "extracted_value"]
+            }
+          },
+          "computation": {"type": "string"}
+        },
+        "required": ["operation", "operation_description", "sources", "computation"]
+      },
+      "source_location": {
+        "type": "string",
+        "description": "The location in the paper of the NAME_source_quote"
+      },
+      "mode": "prefix",
+      "group_label": {
+        "type": "string",
+        "description": "Label for this group in NAME analysis (DESCRIPTION)."
+      },
+      "n_at_risk": {
+        "type": "number",
+        "description": "Number at risk at start for NAME (DESCRIPTION)."
+      },
+      "n_events": {
+        "type": "number",
+        "description": "Number of events for NAME (DESCRIPTION)."
+      },
+      "median_survival": {
+        "type": "number",
+        "description": "Median survival time in TIME_UNIT for NAME (use -999 if not reached or not reported)."
+      },
+      "median_survival_ci_lower": {
+        "type": "number",
+        "description": "Lower bound of CI for median survival in NAME."
+      },
+      "median_survival_ci_upper": {
+        "type": "number",
+        "description": "Upper bound of CI for median survival in NAME."
+      },
+      "rate_at_timepoint": {
+        "type": "number",
+        "description": "Survival/event rate at specific timepoint for NAME (0-1 or 0-100)."
+      },
+      "rate_timepoint": {
+        "type": "number",
+        "description": "The timepoint in TIME_UNIT at which rate is measured for NAME."
+      },
+      "log_rank_p": {
+        "type": "number",
+        "description": "Log-rank test p-value for NAME comparison (use -999 if not applicable)."
+      }
     }
   }
 }

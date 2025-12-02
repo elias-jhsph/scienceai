@@ -3,7 +3,7 @@ import sys
 import subprocess
 from .process_paper import process_paper
 from .database_manager import DatabaseManager
-from .principle_investigator import PrincipalInvestigator
+from .principal_investigator import PrincipalInvestigator
 from datetime import datetime
 
 

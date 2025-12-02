@@ -10,7 +10,7 @@ src/science_ai/cli.py
 src/science_ai/data_extractor.py
 src/science_ai/database_manager.py
 src/science_ai/llm.py
-src/science_ai/principle_investigator.py
+src/science_ai/principal_investigator.py
 src/science_ai/process_paper.py
 src/science_ai/static/apps.css
 src/science_ai/static/main.js

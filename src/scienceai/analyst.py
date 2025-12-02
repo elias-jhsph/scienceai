@@ -141,7 +141,23 @@ def reflect_on_evidence(goal, answer, evidence, retries=3):
                       "You are a thoughtful Researcher, evaluate the evidence and "
                       "determine if the goal has been achieved or the question has been answered. "
                       "NOTE: Paper IDs (short alphanumeric identifiers like '1e482c3c3a') are valid and acceptable "
-                      "for identifying papers—title extraction is optional, not required.")
+                      "for identifying papers—title extraction is optional, not required. "
+                      "\n\n"
+                      "CRITICAL EVALUATION RULE - Metadata Columns Are Expected: "
+                      "When evaluating data collection outputs, the presence of auto-generated metadata columns "
+                      "(such as _source_quote, _source_location, _derivation, _unit, numerator_*, denominator_*, etc.) "
+                      "is COMPLETELY ACCEPTABLE and is in fact a system feature that provides crucial data provenance "
+                      "and validation. "
+                      "\n\n"
+                      "If the goal requests 'N fields' or a specific number of data points (e.g., '10 flat fields'), "
+                      "evaluate ONLY whether those N core data points are present and correctly extracted. "
+                      "The metadata columns are ADDITIONAL to the requested fields and should NOT count against the analyst. "
+                      "Having significantly more columns than explicitly requested is NOT a failure as long as the "
+                      "requested core data points are all present. "
+                      "\n\n"
+                      "Example: If asked for '10 fields' (N_total, N_exposed, N_reference, outcomes_exposed, etc.), "
+                      "the output should have those 10 core fields plus their associated metadata columns "
+                      "(_value, _source_quote, _derivation, etc.). This is CORRECT behavior, NOT a failure.")
     user_message = f"My goal/question: {goal}\n\nMy answer is:\n{answer}\n\nMy evidence:\n{evidence}."
 
     messages = [
@@ -602,7 +618,18 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         print("Tool:", tool)
         results = {}
         tracker = self.db.add_analyst_tool_tracker(self.name, collection_name, datetime.now().strftime("%Y-%m-%d_%H_%M_%S"))
-        time.sleep(3)
+        
+        # Wait a moment for WebSocket to establish, then emit initial progress
+        time.sleep(0.5)  # Give WebSocket time to connect
+        try:
+            from .__main__ import emit_progress
+            emit_progress(0, len(papers), collection_name, analyst_name=self.name)
+            time.sleep(0.1)
+            emit_progress(0, len(papers), collection_name, analyst_name=self.name)  # Emit twice to ensure delivery
+        except:
+            pass
+        
+        time.sleep(2.5)  # Original 3 second wait, minus 0.5 already spent
         
         # Create async tasks for parallel extraction
         import asyncio
@@ -613,15 +640,6 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         # Track progress with a counter
         completed_count = [0]  # Using list to allow modification in nested function
         total_papers = len(papers)
-        
-        # Emit initial progress
-        try:
-            from .__main__ import emit_progress
-            emit_progress(0, total_papers, f"{collection_name}")
-            # Small delay to ensure initial progress is received before concurrent processing
-            time.sleep(0.1)
-        except:
-            pass  # If emit_progress not available, continue without progress updates
         
         async def extract_from_paper(paper):
             """Extract data from a single paper"""
@@ -639,7 +657,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             completed_count[0] += 1
             try:
                 from .__main__ import emit_progress
-                emit_progress(completed_count[0], total_papers, f"{collection_name}")
+                emit_progress(completed_count[0], total_papers, collection_name, analyst_name=self.name)
             except:
                 pass
             
@@ -655,7 +673,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             # Emit final progress (should already be at total, but ensure)
             try:
                 from .__main__ import emit_progress
-                emit_progress(total_papers, total_papers, f"Completed {collection_name}")
+                emit_progress(total_papers, total_papers, f"Completed {collection_name}", analyst_name=self.name)
             except:
                 pass
             
@@ -824,13 +842,18 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                     injected_evidence += f"### {collection_name}\n\n"
                     injected_evidence += f"**Shape**: {row_count} rows, {col_count} columns\n\n"
                     
-                    if row_count < 500:
-                        # Inject full CSV as markdown table
+                    if row_count < 500 and col_count <= 20 :
+                        # Inject full CSV as markdown table 
                         injected_evidence += df.to_markdown(index=False) + "\n\n"
-                    else:
+                    elif col_count <= 20 and row_count > 500:
                         # Inject summary only
                         injected_evidence += f"*Note: Dataset truncated (>{row_count} rows). Full data available in download.*\n\n"
                         injected_evidence += df.head(10).to_markdown(index=False) + "\n\n"
+                    else:
+                        # Inject summary only
+                        injected_evidence += f"*Note: Dataset truncated (>{row_count} rows and <{col_count} columns). Full data available in download with all columns and rows .*\n\n"
+                        # select just the first 10 rows and first 20 columns
+                        injected_evidence += df.iloc[:, :20].head(10).to_markdown(index=False) + "\n\n"
                     
                     # Generate download link - use basename for relative path
                     csv_filename = os.path.basename(csv_path)
@@ -893,6 +916,14 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         return "Question not answered. Here are some thoughts on why: " + thoughts
 
     def pursue_goal(self):
+        # Clear any lingering progress indicators from previous operations
+        try:
+            from .__main__ import emit_progress
+            # Send a "complete" signal to hide any stuck progress indicators
+            emit_progress(1, 1, "")
+        except:
+            pass
+        
         messages = self.db.get_analyst_context(self.name)
         if not messages:
             user_message = f"Here is your goal/question: {self.goal}\n\n"
@@ -910,7 +941,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                 self.db.add_analyst_context(self.name, message)
         while not self.answer:
             messages = self.db.get_analyst_context(self.name)
-            arguments = {"messages": messages, "model": "o4-mini", 'reasoning_effort': 'medium', "tools": self.tools}
+            arguments = {"messages": messages, "model": "gpt-5.1", 'reasoning_effort': 'medium', "tools": self.tools, "parallel_tool_calls": False}
             chat_response = client.chat.completions.create(**arguments)
             new_history = use_tools(chat_response, arguments, function_dict=self.tool_callables)
             for call in new_history:

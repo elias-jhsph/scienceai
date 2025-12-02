@@ -9,12 +9,13 @@ import contextlib
 import traceback
 import sys
 import shutil
+from time import sleep
 
 
 
 path_to_app = os.path.dirname(os.path.abspath(__file__))
 
-with open(os.path.join(path_to_app, "principle_investigator_base_prompt.txt"), "r") as file:
+with open(os.path.join(path_to_app, "principal_investigator_base_prompt.txt"), "r") as file:
     system_message = file.read()
 
 
@@ -30,18 +31,21 @@ class PrincipalInvestigator:
             "delegate_research": self.delegate_research,
             "reflect_on_delegations": self.reflect_on_delegations,
             "create_arbitrary_csv": self.create_arbitrary_csv,
-            "get_analyst_data_link": self.get_analyst_data_link
+            "get_analyst_data_link": self.get_analyst_data_link,
+            "view_image": self.view_image
         }
         self.tools = [
             self.delegate_research_schema(), 
+            self.reflect_on_delegations(return_tool=True),
             self.create_arbitrary_csv(None, None, return_tool=True),
             self.get_analyst_data_link(None, None, return_tool=True),
-            self.run_python_code(None, return_tool=True)
+            self.run_python_code(None, return_tool=True),
+            self.view_image(None, return_tool=True)
         ]
         self.tool_callables["run_python_code"] = self.run_python_code
         self.system_message = system_message
 
-    async def initialize(self):
+    async def initialize(self, ingest=True):
         chat_db = self.db.get_database_chat()
         first_message = ("Hello, I am ScienceAI. I first need to make sure all your papers are loaded into the system "
                          "before I can help you. I will let you know when I am ready to answer your questions. "
@@ -52,14 +56,15 @@ class PrincipalInvestigator:
         if len(chat_db) > 0:
             last_chat = chat_db[-1]
             if last_chat["content"] == first_message:
-                self.db.update_last_chat("Pending")
-                self.db.ingest_papers()
-                await self.db.process_all_papers()
-                self.db.update_last_chat("Processed")
-                second = {"content": second_message, "role": "system", "status": "Pending",
-                          "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')}
-                self.db.add_chat(second)
-                self.db.update_last_chat("Processed")
+                if ingest:
+                    self.db.update_last_chat("Pending")
+                    self.db.ingest_papers()
+                    await self.db.process_all_papers()
+                    self.db.update_last_chat("Processed")
+                    second = {"content": second_message, "role": "system", "status": "Pending",
+                              "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')}
+                    self.db.add_chat(second)
+                    self.db.update_last_chat("Processed")
             elif last_chat["content"] == second_message:
                 self.db.update_last_chat("Processed")
             else:
@@ -73,14 +78,24 @@ class PrincipalInvestigator:
             first = {"content": first_message, "role": "system", "status": "Pending",
                      "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')}
             self.db.add_chat(first)
-            self.db.ingest_papers()
-            await self.db.process_all_papers()
-            self.db.update_last_chat("Processed")
-            second = {"content": second_message, "role": "system", "status": "Pending",
-                      "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')}
-            self.db.add_chat(second)
-            self.db.update_last_chat("Processed")
+            if ingest:
+                self.db.ingest_papers()
+                await self.db.process_all_papers()
+                self.db.update_last_chat("Processed")
+                second = {"content": second_message, "role": "system", "status": "Pending",
+                          "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')}
+                self.db.add_chat(second)
+                self.db.update_last_chat("Processed")
         self.db.update_last_chat("Processed")
+        messages = self.db.get_database_chat()
+        for msg in messages:
+            if msg.get("status") == "Pending":
+                msg["status"] = "Processed"
+        # Update the chat in the database
+        from .database_manager import DDB
+        with DDB.at("chat").session() as (session, chat):
+            chat["messages"] = messages
+            session.write()
 
     def delegate_research_schema(self):
         return {
@@ -150,7 +165,6 @@ class PrincipalInvestigator:
         return ("Response from " + name + ":\n" + new_analyst.answer +
                 "\nEvidence provided by " + name + ":\n" + new_analyst.evidence)
     
-
     def create_arbitrary_csv(self, csv_name, csv_str, return_tool=False):
         if return_tool:
             return {
@@ -331,7 +345,97 @@ class PrincipalInvestigator:
             
         return result_msg
 
-
+    def view_image(self, filename, return_tool=False):
+        if return_tool:
+            return {
+                "type": "function",
+                "function": {
+                    "name": "view_image",
+                    "description": "View and analyze an image file that you generated. This allows you to visually inspect "
+                                   "the image quality, clarity, labels, colors, and overall presentation before sharing it "
+                                   "with the user. Use this IMMEDIATELY after generating any image to ensure it meets quality standards.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "filename": {
+                                "type": "string",
+                                "description": "The name of the image file to view (e.g., 'plot_20231128_143022.png')"
+                            }
+                        },
+                        "required": ["filename"],
+                        "additionalProperties": False
+                    }
+                }
+            }
+        
+        # Locate the image file in the workspace
+        workspace_dir = os.path.join(self.db.project_path, "pi_generated")
+        image_path = os.path.join(workspace_dir, filename)
+        
+        if not os.path.exists(image_path):
+            return f"Error: Image file '{filename}' not found in workspace. Available files: {', '.join(os.listdir(workspace_dir)) if os.path.exists(workspace_dir) else 'none'}"
+        
+        try:
+            from PIL import Image
+            import base64
+            
+            # Load the image and get metadata
+            img = Image.open(image_path)
+            width, height = img.size
+            format_name = img.format
+            file_size = os.path.getsize(image_path)
+            
+            # Encode image as base64 for vision model
+            with open(image_path, "rb") as img_file:
+                img_base64 = base64.b64encode(img_file.read()).decode('utf-8')
+            
+            # SIDE-CHANNEL ANALYSIS:
+            # Instead of returning the base64 string to the main chat (which explodes context window),
+            # we send it to the vision model here and return ONLY the text critique.
+            
+            print(f"Analyzing image {filename} ({width}x{height}, {round(file_size/1024)}KB) with vision model...")
+            
+            vision_messages = [
+                {
+                    "role": "system",
+                    "content": "You are an expert data visualization critic. Analyze the provided image for quality, clarity, label readability, color usage, and overall effectiveness. Be concise but critical. Identify any issues that need fixing (e.g., overlapping text, missing titles, poor contrast)."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"Please analyze this generated image ({filename})."},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/{format_name.lower()};base64,{img_base64}",
+                                "detail": "high"
+                            }
+                        }
+                    ]
+                }
+            ]
+            
+            # Call the vision model (using gpt-4o or compatible vision model)
+            vision_response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=vision_messages,
+                max_tokens=500
+            )
+            
+            critique = vision_response.choices[0].message.content
+            
+            # Return structured data with the CRITIQUE, not the image data
+            response = f"Image: {filename}\n"
+            response += f"Dimensions: {width}x{height}\n"
+            response += f"Format: {format_name}\n"
+            response += f"Size: {round(file_size / 1024, 2)} KB\n\n"
+            response += "### Vision Model Analysis:\n"
+            response += critique
+            
+            return response
+            
+        except Exception as e:
+            return f"Error viewing image '{filename}': {str(e)}"
 
     def reflect_on_delegations(self, return_tool=False):
         if return_tool:
@@ -339,9 +443,10 @@ class PrincipalInvestigator:
                 "type": "function",
                 "function": {
                     "name": "reflect_on_delegations",
-                    "description": "Reflect on the current status of all delegated research questions. "
-                                   "This function has 0 parameters/arguments and it will automatically reflect on "
-                                   "the last message.",
+                    "description": "Reflect on the entire conversation history to identify issues with data, "
+                                   "suggest helpful calculations, or provide additional insights. "
+                                   "Use this when you want a second opinion on the analysis so far. "
+                                   "Takes no parameters.",
                     "parameters": {
                         "type": "object",
                         "properties": {},
@@ -377,18 +482,30 @@ class PrincipalInvestigator:
             chat_message = {"content": content, "role": role, "status": status, "time": time}
             self.db.add_chat(chat_message)
         called_tools = True
-        while called_tools:
+        first_tool_call = True  # Track if this is the first tool call in this process_message invocation
+        loop_iteration = 0
+        no_final_content = False
+        while called_tools or no_final_content:
+            no_final_content = True
+            loop_iteration += 1
             called_tools = False
             temp_messages = [{"content": self.system_message, "role": "system"}] + self.db.get_database_chat()
-            arguments = {"messages": temp_messages, "model": "gpt-5.1", 'reasoning_effort': 'high', "tools": self.tools}
+            arguments = {"messages": temp_messages, "model": "gpt-5.1", 'reasoning_effort': 'high', "tools": self.tools, "parallel_tool_calls": False}
             chat_response = client.chat.completions.create(**arguments)
+
             if chat_response.choices[0].message.tool_calls:
                 called_tools = True
+
             if chat_response.choices[0].message.content and not called_tools:
-                self.db.update_last_chat("Processed")
                 chat_message = {"content": chat_response.choices[0].message.content, "role": "assistant",
                                 "status": "Pending", "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')}
                 self.db.add_chat(chat_message)
+                no_final_content = False
+            elif chat_response.choices[0].message.content and called_tools:
+                no_final_content = True
+            elif not chat_response.choices[0].message.content and not called_tools:
+                no_final_content = True
+                
             if called_tools:
                 call_new_history = use_tools(chat_response, arguments, function_dict=self.tool_callables, pre_tool_call=True)
                 added_csv = False
@@ -416,13 +533,15 @@ class PrincipalInvestigator:
                                 "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')
                             }
                             self.db.add_chat(button_message)
-                    self.db.update_last_chat("Processed")
                     continue
                 
                 # Normal tool call handling for other tools
                 for call in call_new_history:
                     if call["role"] == "assistant":
-                        self.db.update_last_chat("Processed")
+                        if first_tool_call:
+                            # Mark user's message as processed when we start working
+                            self.db.update_last_chat("Processed")
+                            first_tool_call = False
                         call["status"] = "Pending"
                         call["time"] = datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')
                         
@@ -438,7 +557,6 @@ class PrincipalInvestigator:
 
                 for call in new_history:
                     if call["role"] != "assistant":
-                        self.db.update_last_chat("Processed")
                         call["status"] = "Pending"
                         call["time"] = datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')
                         self.db.add_chat(call)
@@ -453,7 +571,17 @@ class PrincipalInvestigator:
                         
                         # For all other tools, the loop will naturally continue
                         # The PI will keep calling tools until it responds with text (no tools)
-        self.db.update_last_chat("Processed")
+        # Mark all pending messages as processed now that PI is done
+        sleep(0.025)
+        messages = self.db.get_database_chat()
+        for msg in messages:
+            if msg.get("status") == "Pending":
+                msg["status"] = "Processed"
+        # Update the chat in the database
+        from .database_manager import DDB
+        with DDB.at("chat").session() as (session, chat):
+            chat["messages"] = messages
+            session.write()
 
     async def finish_tool_calls(self, last_chat):
         new_history = use_tools(last_chat, {"messages": self.db.get_database_chat(), "model": "gpt-5.1", 'reasoning_effort': 'medium',

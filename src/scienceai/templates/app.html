@@ -32,7 +32,9 @@
     <div id="container">
         <div class="resize-section glass-panel" id="left-section">
             <div class="resize-section-internal" id="left-section-internal">
-                <h2 style="text-align: center;" id="papers-heading">Papers</h2>
+                <h2 style="text-align: center;" id="papers-heading">Papers <button id="add-paper-button"
+                        class="icon-button" style="font-size: 0.8em;" title="Add Paper"><i
+                            class="fas fa-plus-circle"></i></button></h2>
                 <div class="search-box">
                     <input type="text" id="searchInput" placeholder="Filter...">
                     <button id="searchButton">Search</button>
@@ -91,7 +93,7 @@
                                     </div>
                                 </div>
                                 <div class="progress-info">
-                                    <div class="progress-label">Data Collection</div>
+                                    <div class="progress-label" id="progress-label">Data Collection</div>
                                     <div class="progress-description"></div>
                                 </div>
                             </div>
@@ -213,6 +215,44 @@
         </div>
     </div>
 
+    <!-- Add Paper Modals -->
+    <div id="pending-messages-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('pending-messages-modal')">&times;</span>
+            <h2>Cannot Add Papers Yet</h2>
+            <p>Please wait for the current message to finish processing before adding papers.</p>
+            <button onclick="closeModal('pending-messages-modal')">OK</button>
+        </div>
+    </div>
+
+    <div id="upload-warning-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('upload-warning-modal')">&times;</span>
+            <h2>Warning</h2>
+            <p>Adding papers to an existing project will not automatically update previous extractions or analyses. The
+                new papers will be available for future queries, but existing data will remain unchanged unless you
+                explicitly request re-analysis.</p>
+            <div style="margin-top: 20px; text-align: right;">
+                <button onclick="closeModal('upload-warning-modal')">Cancel</button>
+                <button onclick="showUploadModal()" style="background-color: #d9534f;">I Understand</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="upload-papers-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('upload-papers-modal')">&times;</span>
+            <h2>Add Papers</h2>
+            <form id="upload-papers-form" enctype="multipart/form-data">
+                <input type="file" name="files" multiple accept=".pdf" required>
+                <div style="margin-top: 20px; text-align: right;">
+                    <button type="button" onclick="closeModal('upload-papers-modal')">Cancel</button>
+                    <button type="submit">Upload</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
     <script>
         document.getElementById('save-button').onclick = function () {
@@ -225,6 +265,65 @@
 
         document.getElementById('close-button').onclick = function () {
             openModal('close-modal');
+        };
+
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('#add-paper-button');
+            if (btn) {
+                // Check for pending messages
+                const typingIndicator = document.getElementById('typing-indicator');
+
+                // Check last message status directly from DOM
+                let isPending = false;
+                const timestamps = document.querySelectorAll('.chat-bubble-timestamp');
+                if (timestamps.length > 0) {
+                    const lastTimestamp = timestamps[timestamps.length - 1];
+                    if (lastTimestamp.textContent.includes('Status: Pending')) {
+                        isPending = true;
+                    }
+                }
+
+                if ((typingIndicator.style.display !== 'none' && typingIndicator.style.display !== '') || isPending) {
+                    openModal('pending-messages-modal');
+                } else {
+                    openModal('upload-warning-modal');
+                }
+            }
+        });
+
+        function showUploadModal() {
+            closeModal('upload-warning-modal');
+            openModal('upload-papers-modal');
+        }
+
+        document.getElementById('upload-papers-form').onsubmit = async function (e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.textContent = 'Uploading...';
+            submitBtn.disabled = true;
+
+            try {
+                const response = await fetch('/add_papers_to_existing_project', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    closeModal('upload-papers-modal');
+                    this.reset();
+                    // Force a refresh of the papers list if needed, but the backend should handle the chat updates
+                } else {
+                    alert('Failed to upload papers');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error uploading papers');
+            } finally {
+                submitBtn.textContent = originalText;
+                submitBtn.disabled = false;
+            }
         };
 
         function openModal(modalId) {

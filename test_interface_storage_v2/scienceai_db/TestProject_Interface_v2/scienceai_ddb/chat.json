@@ -1,0 +1,22 @@
+{
+  "messages": [
+    {
+      "content": "Hello, I am ScienceAI. I first need to make sure all your papers are loaded into the system before I can help you. I will let you know when I am ready to answer your questions. This may take a long time if you uploaded many papers.",
+      "role": "system",
+      "status": "Processed",
+      "time": "December 02, 2025 02:52:20 AM "
+    },
+    {
+      "content": "Processing papers...",
+      "role": "system",
+      "status": "Processed",
+      "time": "December 02, 2025 02:52:21 AM "
+    },
+    {
+      "content": "All papers have been loaded into the system.",
+      "role": "system",
+      "status": "Processed",
+      "time": "December 02, 2025 02:52:30 AM "
+    }
+  ]
+}

@@ -8,7 +8,7 @@ sys.modules["scienceai.llm"] = MagicMock()
 sys.modules["scienceai.analyst"] = MagicMock()
 sys.modules["scienceai.reasoning"] = MagicMock()
 
-from scienceai.principle_investigator import PrincipalInvestigator
+from scienceai.principal_investigator import PrincipalInvestigator
 
 # Setup paths
 PROJECT_PATH = "/tmp/scienceai_test_project_load"
