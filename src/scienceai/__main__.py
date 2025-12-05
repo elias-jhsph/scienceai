@@ -51,6 +51,12 @@ progress_connections = []  # WebSocket connections for progress updates
 progress_lock = threading.Lock()
 current_progress = None  # Store current progress state for new connections
 
+# Context usage tracking globals
+context_connections = []  # WebSocket connections for context updates
+context_lock = threading.Lock()
+current_context = None  # Store current context state for new connections
+CONTEXT_LIMIT = 400000  # GPT-5.1 context limit (400,000 tokens)
+
 db_folder = os.path.join(os.path.expanduser('~'), 'Documents', "ScienceAI")
 if not os.path.exists(db_folder):
     os.makedirs(db_folder)
@@ -86,6 +92,76 @@ def emit_progress(current, total, description="Processing", analyst_name=None):
     if current >= total and total > 0:
         with progress_lock:
             current_progress = None
+
+
+def emit_context(tokens_used, tokens_limit=None, can_compress=True):
+    """Emit context usage update to all connected WebSocket clients"""
+    global context_connections, current_context
+    if tokens_limit is None:
+        tokens_limit = CONTEXT_LIMIT
+    percentage = min(100, round((tokens_used / tokens_limit) * 100, 1))
+    message_data = {
+        "type": "context",
+        "tokens_used": tokens_used,
+        "tokens_limit": tokens_limit,
+        "percentage": percentage,
+        "can_compress": can_compress
+    }
+    
+    message = json.dumps(message_data)
+    
+    # Store current context state for new connections
+    with context_lock:
+        current_context = message
+        for ws in context_connections[:]:  # Copy list to avoid modification during iteration
+            try:
+                ws.send(message)
+            except:
+                context_connections.remove(ws)
+
+
+def calculate_and_emit_context_from_messages(messages):
+    """Calculate token count from chat messages and emit context usage. Returns percentage."""
+    try:
+        import tiktoken
+        enc = tiktoken.encoding_for_model("gpt-4")
+        
+        total_tokens = 0
+        for msg in messages:
+            content = msg.get("content", "")
+            if content:
+                total_tokens += len(enc.encode(str(content)))
+            # Account for tool calls if present
+            if msg.get("tool_calls"):
+                total_tokens += len(enc.encode(json.dumps(msg.get("tool_calls"))))
+        
+        # Add overhead for message structure (roughly 4 tokens per message)
+        total_tokens += len(messages) * 4
+        
+        # Add estimate for system message (~2000 tokens typically)
+        total_tokens += 2000
+        
+        # Check if compression is possible
+        can_compress = can_compress_context(messages)
+        
+        emit_context(total_tokens, can_compress=can_compress)
+        
+        # Return the percentage for template use
+        return min(100, round((total_tokens / CONTEXT_LIMIT) * 100, 1))
+    except Exception as e:
+        # Don't let context tracking break the main flow
+        return 0
+
+
+def can_compress_context(messages):
+    """Check if there are any uncompressed tool messages that can be compressed."""
+    for msg in messages:
+        # Skip already compressed messages
+        if msg.get("compressed"):
+            continue
+        if msg.get("role") == "tool" or msg.get("tool_calls"):
+            return True
+    return False
 
 
 def close():
@@ -269,6 +345,130 @@ def filter_intermediate_messages(messages):
     
     # Filter out hidden messages
     return [msg for msg in messages if not msg.get("hidden", False)]
+
+
+def replace_pi_generated_file_links(messages, project_path):
+    """
+    Replace exact file path references to pi_generated folder files with clickable download/view links.
+    
+    Detects patterns like:
+    - /full/path/to/project/pi_generated/filename.ext
+    - pi_generated/filename.ext
+    - Just the filename if it exists in pi_generated
+    """
+    if not project_path:
+        return messages
+    
+    pi_generated_path = os.path.join(project_path, "pi_generated")
+    
+    if not os.path.exists(pi_generated_path):
+        return messages
+    
+    # Get all files in pi_generated
+    try:
+        pi_files = os.listdir(pi_generated_path)
+    except Exception:
+        return messages
+    
+    if not pi_files:
+        return messages
+    
+    # Build a mapping of filenames to full paths
+    file_map = {}
+    for filename in pi_files:
+        full_path = os.path.join(pi_generated_path, filename)
+        if os.path.isfile(full_path):
+            file_map[filename] = full_path
+    
+    if not file_map:
+        return messages
+    
+    # Process each message
+    for message in messages:
+        content = message.get("content", "")
+        if not content or not isinstance(content, str):
+            continue
+        
+        # Skip messages that already have file links (run_python_code output)
+        if 'pi-generated-content' in content:
+            continue
+        
+        # Replace file references
+        for filename, full_path in file_map.items():
+            # Patterns to match:
+            # 1. Full absolute path
+            # 2. Relative path with pi_generated/
+            # 3. Just the filename (word boundary)
+            
+            # Build replacement HTML based on file type
+            ext = os.path.splitext(filename)[1].lower()
+            
+            if ext in ['.csv']:
+                # CSV: view + download buttons
+                replacement = (
+                    f'<span class="pi-file-link">'
+                    f'<span class="pi-file-name">{filename}</span>'
+                    f'<span class="pi-file-buttons">'
+                    f'<button class="icon-button" onclick="viewCSV(\'download/{full_path}\')"><i class="fa fa-eye"></i></button>'
+                    f'<a href="/download/{full_path}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>'
+                    f'</span></span>'
+                )
+            elif ext in ['.json']:
+                # JSON: view + download buttons
+                replacement = (
+                    f'<span class="pi-file-link">'
+                    f'<span class="pi-file-name">{filename}</span>'
+                    f'<span class="pi-file-buttons">'
+                    f'<button class="icon-button" onclick="viewJSON(\'download/{full_path}\')"><i class="fa fa-eye"></i></button>'
+                    f'<a href="/download/{full_path}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>'
+                    f'</span></span>'
+                )
+            elif ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
+                # Images: view inline + download
+                replacement = (
+                    f'<span class="pi-file-link">'
+                    f'<span class="pi-file-name">{filename}</span>'
+                    f'<span class="pi-file-buttons">'
+                    f'<a href="/download/{full_path}" target="_blank" class="icon-button"><i class="fa fa-eye"></i></a>'
+                    f'<a href="/download/{full_path}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>'
+                    f'</span></span>'
+                )
+            else:
+                # Other files: just download
+                replacement = (
+                    f'<span class="pi-file-link">'
+                    f'<span class="pi-file-name">{filename}</span>'
+                    f'<span class="pi-file-buttons">'
+                    f'<a href="/download/{full_path}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>'
+                    f'</span></span>'
+                )
+            
+            # Replace full path references
+            content = content.replace(full_path, replacement)
+            
+            # Replace relative path references (pi_generated/filename)
+            relative_path = f"pi_generated/{filename}"
+            content = content.replace(relative_path, replacement)
+            
+            # Replace just the filename (with word boundaries to avoid partial matches)
+            # Use regex for word boundary matching
+            # Only replace if the filename appears as a standalone reference (not already replaced)
+            if replacement not in content:
+                # Match filename surrounded by whitespace, punctuation, or HTML tags
+                # But NOT if it's part of a URL or already in an HTML attribute
+                # Make underscores optional to match text where underscores may have been omitted
+                escaped_filename = re.escape(filename)
+                # Replace escaped underscores with optional underscore/space pattern
+                flexible_filename = escaped_filename.replace(r'\_', r'[_ ]?')
+                pattern = re.compile(
+                    r'(?<![a-zA-Z0-9_/"\'])' + flexible_filename + r'(?![a-zA-Z0-9_/"\'])',
+                    re.IGNORECASE
+                )
+                content = pattern.sub(replacement, content)
+        
+        message["content"] = content
+    
+    return messages
 
 
 
@@ -484,20 +684,32 @@ def discussion(ws):
     if not database:
         return script_to_return_to_menu
     messages = database.get_database_chat()
+    
+    # Emit initial context usage on connect and get percentage
+    context_percentage = calculate_and_emit_context_from_messages(messages)
+    can_compress = can_compress_context(messages)
+    
     if len(messages) == 0:
         current = str(uuid.uuid4())
     else:
         current = str(hash(str(database.get_database_chat())))
         filtered_messages = filter_intermediate_messages(messages.copy())
-        ws.send(render_template('chat.html', messages=convert_markdown(filtered_messages)))
+        processed_messages = convert_markdown(replace_pi_generated_file_links(filtered_messages, database.project_path))
+        ws.send(render_template('chat.html', messages=processed_messages, context_percentage=context_percentage, can_compress=can_compress))
     while True:
-        asyncio.run(database.await_update(timeout=60))
+        asyncio.run(database.await_update(timeout=20))
+        if not database:
+            break
         messages = database.get_database_chat()
         new = str(hash(str(database.get_database_chat())))
         if new != current:
             current = new
+            # Update context usage when chat changes
+            context_percentage = calculate_and_emit_context_from_messages(messages)
+            can_compress = can_compress_context(messages)
             filtered_messages = filter_intermediate_messages(messages.copy())
-            ws.send(render_template('chat.html', messages=convert_markdown(filtered_messages)))
+            processed_messages = convert_markdown(replace_pi_generated_file_links(filtered_messages, database.project_path))
+            ws.send(render_template('chat.html', messages=processed_messages, context_percentage=context_percentage, can_compress=can_compress))
 
 
 @app.route('/send_message', methods=['POST'])
@@ -512,6 +724,17 @@ def send_message():
     return render_template('chat_update.html')
 
 
+@app.route('/compress_context', methods=['POST'])
+def compress_context():
+    from flask import jsonify
+    if not database or not message_queue:
+        return jsonify({"success": False, "error": "No project loaded"}), 400
+    
+    # Send compress command to the backend thread
+    message_queue.put({"COMPRESS_CONTEXT": True})
+    return jsonify({"success": True, "message": "Compression started"})
+
+
 @sock.route('/papers')
 def papers(ws):
     if not database:
@@ -523,7 +746,9 @@ def papers(ws):
         current = str(hash(str(database.get_database_papers())))
         ws.send(render_template('papers.html', papers=papers_dict))
     while True:
-        asyncio.run(database.await_update(timeout=60))
+        asyncio.run(database.await_update(timeout=20))
+        if not database:
+            break
         new = str(hash(str(database.get_database_papers())))
         if new != current:
             papers_dict = database.get_database_papers()
@@ -551,6 +776,28 @@ def progress(ws):
         with progress_lock:
             if ws in progress_connections:
                 progress_connections.remove(ws)
+
+
+@sock.route('/context')
+def context(ws):
+    """WebSocket endpoint for context usage updates"""
+    global context_connections, current_context
+    with context_lock:
+        context_connections.append(ws)
+        # Send current context immediately if available
+        if current_context:
+            try:
+                ws.send(current_context)
+            except:
+                pass
+    try:
+        while True:
+            # Keep connection alive, actual updates sent via emit_context()
+            time.sleep(1)
+    finally:
+        with context_lock:
+            if ws in context_connections:
+                context_connections.remove(ws)
 
 
 @app.route('/close_project')

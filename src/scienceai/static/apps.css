@@ -885,7 +885,7 @@ select:focus {
 
 /* Typing Indicator */
 .typing-indicator {
-    display: flex;
+    display: none;
     gap: 4px;
     padding: 0.5rem;
     justify-content: center;
@@ -1155,4 +1155,196 @@ details div:not(.nested) {
         transform: scale(1.02);
         box-shadow: 0 10px 15px -3px rgb(2 132 199 / 0.2), 0 4px 6px -4px rgb(2 132 199 / 0.2);
     }
+}
+
+/* Context Usage Indicator */
+.context-indicator {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface-alt) 100%);
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    box-shadow: var(--shadow-sm);
+    opacity: 0.7;
+    transition: all 0.3s ease;
+    cursor: help;
+}
+
+.context-indicator:hover {
+    opacity: 1;
+    box-shadow: var(--shadow-md);
+}
+
+.context-indicator::before {
+    content: '🧠';
+    font-size: 0.8rem;
+}
+
+.context-indicator.context-warning {
+    color: var(--warning);
+    border-color: var(--warning);
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+}
+
+.context-indicator.context-warning::before {
+    content: '⚠️';
+}
+
+.context-indicator.context-critical {
+    color: var(--danger);
+    border-color: var(--danger);
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    animation: contextPulse 2s ease-in-out infinite;
+}
+
+.context-indicator.context-critical::before {
+    content: '🔴';
+}
+
+@keyframes contextPulse {
+    0%, 100% {
+        opacity: 0.8;
+        transform: translateY(-50%) scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: translateY(-50%) scale(1.05);
+    }
+}
+
+/* Context Limit Reached Banner */
+.context-limit-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 2px solid var(--warning);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+}
+
+.context-limit-icon {
+    font-size: 2.5rem;
+    flex-shrink: 0;
+}
+
+.context-limit-text {
+    flex: 1;
+}
+
+.context-limit-text strong {
+    display: block;
+    font-size: 1.1rem;
+    color: #92400e;
+    margin-bottom: 0.5rem;
+}
+
+.context-limit-text p {
+    margin: 0.5rem 0;
+    color: #78350f;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.context-limit-text ul {
+    margin: 0.75rem 0;
+    padding-left: 1.25rem;
+    color: #78350f;
+}
+
+.context-limit-text li {
+    margin: 0.35rem 0;
+    font-size: 0.9rem;
+}
+
+.context-compress-section {
+    margin-top: 0.5rem;
+}
+
+.context-compress-section strong {
+    color: #92400e;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.compress-context-btn {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 0.5rem;
+}
+
+.compress-context-btn:hover {
+    background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.compress-context-btn:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* PI Generated File Links */
+.pi-file-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.65rem;
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface-alt) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease;
+    margin: 0.25rem 0.125rem;
+    vertical-align: middle;
+}
+
+.pi-file-link:hover {
+    border-color: var(--primary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+.pi-file-name {
+    color: var(--text-main);
+    font-weight: 500;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pi-file-buttons {
+    display: inline-flex;
+    gap: 0.25rem;
+    align-items: center;
+    margin-left: 0.25rem;
+    padding-left: 0.5rem;
+    border-left: 1px solid var(--border);
+}
+
+.pi-file-buttons .icon-button {
+    padding: 0.2rem 0.35rem;
+    font-size: 0.85rem;
+    border-radius: var(--radius-sm);
 }

@@ -1,6 +1,137 @@
 import traceback
 
 
+async def compress_conversation_context(dm):
+    """
+    Compress the conversation by summarizing the first 50% of tool calls and tool responses.
+    Each tool message is summarized into a few sentences and replaced with an assistant message.
+    """
+    from .llm import client
+    from datetime import datetime
+    import dictdatabase as DDB
+    
+    # Add user request message as pending (marked internal so PI won't include in context)
+    user_request_msg = {
+        "content": "🗜️ Please compress the conversation to free up context space.",
+        "role": "user",
+        "status": "Pending",
+        "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z'),
+        "internal": True  # Flag to exclude from PI context
+    }
+    dm.add_chat(user_request_msg)
+    
+    messages = dm.get_database_chat()
+    
+    # Find all tool-related messages that haven't been compressed yet
+    tool_indices = []
+    for i, msg in enumerate(messages):
+        # Skip already compressed messages
+        if msg.get("compressed"):
+            continue
+        if msg.get("role") == "tool" or msg.get("tool_calls"):
+            tool_indices.append(i)
+    
+    if len(tool_indices) == 0:
+        print("No tool messages to compress")
+        return
+    
+    # Get the first 50% of tool messages to compress (round up so odd numbers eventually reach 0)
+    import math
+    compress_count = math.ceil(len(tool_indices) / 2)
+    
+    indices_to_compress = tool_indices[:compress_count]
+    print(f"Compressing {len(indices_to_compress)} tool messages out of {len(tool_indices)} total")
+    
+    # Process each message to compress
+    compressed_messages = []
+    for idx in sorted(indices_to_compress, reverse=True):  # Process in reverse to maintain indices
+        msg = messages[idx]
+        original_content = msg.get("content", "")
+        original_role = msg.get("role", "")
+        
+        # Skip if content is too short
+        if len(original_content) < 100:
+            continue
+        
+        # Summarize with gpt-4.1-mini
+        try:
+            summary_prompt = [
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that summarizes tool call results concisely. "
+                               "Summarize the following tool output in 2-3 sentences, preserving key data points and findings. "
+                               "Be factual and concise."
+                },
+                {
+                    "role": "user", 
+                    "content": f"Summarize this tool output:\n\n{original_content[:8000]}"  # Limit input size
+                }
+            ]
+            
+            response = client.chat.completions.create(
+                model="gpt-5-mini",
+                messages=summary_prompt,
+                max_completion_tokens=1000
+            )
+            
+            summary = response.choices[0].message.content
+            
+            # Create replacement message
+            compressed_content = (
+                f"[📦 Compressed Tool Output]\n\n"
+                f"{summary}\n\n"
+                f"---\n"
+                f"*This message was automatically summarized to free up context space. "
+                f"Original content was {len(original_content)} characters.*"
+            )
+            
+            # Replace the message in place
+            messages[idx] = {
+                "content": compressed_content,
+                "role": "assistant",
+                "status": "Processed",
+                "time": msg.get("time", datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')),
+                "compressed": True,
+                "original_role": original_role
+            }
+            
+            print(f"Compressed message at index {idx}: {len(original_content)} -> {len(compressed_content)} chars")
+            
+        except Exception as e:
+            print(f"Failed to compress message at index {idx}: {e}")
+            continue
+    
+    # Remove the CONTEXT_LIMIT_REACHED message if present
+    messages = [m for m in messages if m.get("content") != "CONTEXT_LIMIT_REACHED"]
+    
+    # Mark user's compression request as processed and add assistant response
+    # Find the user request message and mark it processed
+    for msg in reversed(messages):
+        if msg.get("content") == "🗜️ Please compress the conversation to free up context space." and msg.get("status") == "Pending":
+            msg["status"] = "Processed"
+            break
+    
+    # Add assistant response as pending (marked internal so PI won't include in context)
+    compression_response = {
+        "content": f"🗜️ **Conversation Compressed**\n\nI've summarized {len(indices_to_compress)} older tool outputs to free up context space. You can now continue the discussion.",
+        "role": "assistant",
+        "status": "Pending",
+        "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z'),
+        "internal": True  # Flag to exclude from PI context
+    }
+    messages.append(compression_response)
+    
+    # Save the compressed messages back to the database
+    with DDB.at("chat").session() as (session, chat):
+        chat["messages"] = messages
+        session.write()
+    
+    # Mark the assistant response as processed
+    dm.update_last_chat("Processed")
+    
+    print(f"Context compression complete. Compressed {len(indices_to_compress)} messages.")
+
+
 def run_backend(folder, project_path, storage_path, message_queue, stop_event, ingest=True, error_queue=None):
     import asyncio
     
@@ -15,8 +146,49 @@ def run_backend(folder, project_path, storage_path, message_queue, stop_event, i
             import sys
             import time
             import dictdatabase as DDB
+            from datetime import datetime
+            import re
             start = time.time()
             dm = DatabaseManager(folder, process_paper, project_path, storage_path=storage_path)
+            
+            # Check if last message indicates an interrupted paper upload BEFORE PI initialization
+            messages = dm.get_database_chat()
+            if len(messages) > 0:
+                last_msg = messages[-1]
+                content = last_msg.get("content", "")
+                # Check for pattern: "I am uploading X new papers..."
+                match = re.match(r"I am uploading (\d+) new papers\.\.\.", content)
+                if match:
+                    print("Detected interrupted paper upload. Resuming ingest...")
+                    num_files = int(match.group(1))
+                    
+                    # Ingest and process papers
+                    dm.ingest_papers()
+                    await dm.process_all_papers()
+                    
+                    # Update uploading message to Processed
+                    for msg in reversed(messages):
+                        if msg["content"] == content and msg.get("status") == "Pending":
+                            msg["status"] = "Processed"
+                            break
+                    with DDB.at("chat").session() as (session, chat):
+                        chat["messages"] = messages
+                        session.write()
+                    
+                    # Add completion message (no IDs since we can't accurately track them after interruption)
+                    # Include total paper count in the system
+                    total_papers = len(dm.get_database_papers())
+                    completion_msg = {
+                        "content": f"Uploaded {num_files} papers. There are now {total_papers} papers in the system.\n\n**Warning:** These papers have been added to the database, but previous analyses have NOT been updated to include them. You must explicitly ask me to re-run any analysis if you want these new papers included.",
+                        "role": "user",
+                        "status": "Processed",
+                        "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')
+                    }
+                    
+                    dm.add_chat(completion_msg)
+                    dm.update_last_chat("Processed")
+                    print("Interrupted upload recovery complete.")
+            
             pi = PrincipalInvestigator(dm)
             await pi.initialize(ingest=ingest)
             
@@ -51,9 +223,10 @@ def run_backend(folder, project_path, storage_path, message_queue, stop_event, i
                         # Mark processing message as processed
                         dm.update_last_chat("Processed")
                         
-                        # Add completion message
+                        # Add completion message with paper count
+                        total_papers = len(dm.get_database_papers())
                         completion_msg = {
-                            "content": "All papers have been loaded into the system.",
+                            "content": f"All {total_papers} papers have been loaded into the system.",
                             "role": "system",
                             "status": "Processed",
                             "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')
@@ -99,12 +272,20 @@ def run_backend(folder, project_path, storage_path, message_queue, stop_event, i
 
                         # 5. Add completion message
                         if "completion_msg" in message:
-                            # Update the paper count in the completion message if needed
-                            # But the message was pre-formatted.
+                            # Get total paper count and update the message
+                            total_papers = len(dm.get_database_papers())
+                            # Replace the uploaded count with "uploaded X papers. There are now Y papers in the system."
+                            import re as re_msg
+                            original_content = message["completion_msg"]["content"]
+                            upload_match = re_msg.match(r"Uploaded (\d+) papers\.", original_content)
+                            if upload_match:
+                                num_uploaded = upload_match.group(1)
+                                new_prefix = f"Uploaded {num_uploaded} papers. There are now {total_papers} papers in the system."
+                                message["completion_msg"]["content"] = original_content.replace(f"Uploaded {num_uploaded} papers.", new_prefix)
                             
                             # Append new IDs to the content
                             if new_ids:
-                                # only incldue the first 10 digits of each ID
+                                # only include the first 10 digits of each ID
                                 new_ids = [pid[:10] for pid in new_ids]
                                 ids_str = ", ".join(new_ids)
                                 message["completion_msg"]["content"] += f"\n\n**New Paper IDs:** {ids_str}"
@@ -113,6 +294,11 @@ def run_backend(folder, project_path, storage_path, message_queue, stop_event, i
                             dm.update_last_chat("Processed")
                         
                         print("Add papers complete.")
+                        continue
+                    elif message.get("COMPRESS_CONTEXT"):
+                        print("Compressing conversation context...")
+                        await compress_conversation_context(dm)
+                        print("Context compression complete.")
                         continue
                     elif stop_event.is_set():
                         print("Stop event set. Terminating backend")

@@ -1,9 +1,10 @@
 import time
+import openai
 from datetime import datetime
 
 from .llm import client, use_tools_sync as use_tools
 from .database_manager import DatabaseManager
-from .data_extractor import generate_schema, extract_data, schema_to_tool
+from .data_extractor import generate_schema, extract_data, schema_to_tool, ExtractionMode
 import os
 
 short_id = {}
@@ -558,7 +559,20 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         return output
 
     def create_data_collection_request(self, collection_name="", collection_goal="",
-                                       target_list=None, return_tool=False):
+                                       target_list=None, extraction_mode="focused", return_tool=False):
+        """
+        Extract structured data from research papers.
+        
+        Args:
+            collection_name: Unique name for this data collection
+            collection_goal: Detailed description of what data to extract
+            target_list: Name of paper list to extract from, or 'ALL PAPERS'
+            extraction_mode: One of 'exploratory', 'focused', or 'rigid'
+                - exploratory: Lenient mode for discovery. Returns partial data on validation failures.
+                - focused: Default balanced mode. Uses convergence detection.
+                - rigid: Strict mode. All fields required, fails if data missing.
+            return_tool: If True, returns the tool schema instead of executing
+        """
         if return_tool:
             return {
                 "type": "function",
@@ -590,13 +604,29 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                                 "type": "string",
                                 "description": "Name of paper list to extract from, or 'ALL PAPERS' for entire database. "
                                                "Extraction runs on ALL papers in this list—there's no per-paper filtering in the schema."
+                            },
+                            "extraction_mode": {
+                                "type": "string",
+                                "enum": ["exploratory", "focused", "rigid"],
+                                "description": "Extraction strictness mode. "
+                                               "'exploratory': Lenient - returns partial data if validation fails, good for discovery. "
+                                               "'focused': Balanced (default) - uses convergence detection, retries intelligently. "
+                                               "'rigid': Strict - all fields required, fails extraction if data missing."
                             }
                         },
                         "additionalProperties": False,
-                        "required": ["collection_name", "collection_goal", "target_list"]
+                        "required": ["collection_name", "collection_goal", "target_list", "extraction_mode"]
                     }
                 }
             }
+        
+        # Convert string mode to enum
+        mode_map = {
+            "exploratory": ExtractionMode.EXPLORATORY,
+            "focused": ExtractionMode.FOCUSED,
+            "rigid": ExtractionMode.RIGID
+        }
+        mode = mode_map.get(extraction_mode.lower(), ExtractionMode.FOCUSED)
 
         if target_list:
             try:
@@ -611,10 +641,10 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         summaries = ""
         for paper in papers:
             summaries += paper["metadata"]["title"][0] + "\n\nSummary: " + paper["summary"] + "\n\n\n"
-        schema = generate_schema(summaries, goal=collection_name+" - "+collection_goal)
+        schema = generate_schema(summaries, goal=collection_name+" - "+collection_goal, mode=mode)
         if not schema:
             raise ValueError("Could not generate schema for data collection, be more specific in your goal.")
-        tool = schema_to_tool(schema)
+        tool = schema_to_tool(schema, mode=mode)
         print("Tool:", tool)
         results = {}
         tracker = self.db.add_analyst_tool_tracker(self.name, collection_name, datetime.now().strftime("%Y-%m-%d_%H_%M_%S"))
@@ -647,8 +677,8 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             short_paper_id = paper_id[:10]
             print(f"*** Extracting from Paper: {short_paper_id}")
             
-            # Run async extract_data
-            result = await extract_data(tool, paper["cleaned_text"])
+            # Run async extract_data with the specified mode
+            result = await extract_data(tool, paper["cleaned_text"], mode=mode)
             
             # Update tracker immediately after extraction
             self.db.update_analyst_tool_tracker(tracker, paper_id, result)
@@ -698,12 +728,39 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         print(f"Received results for {len(extraction_results)} papers, building output...")
         
         # Build results dict (tracker already updated during extraction)
+        failed_extractions = []
         for short_paper_id, paper_id, result in extraction_results:
             short_id[short_paper_id] = paper_id
             results[short_paper_id] = result
+            # Track failed extractions
+            if isinstance(result, dict) and 'failed_extraction' in result:
+                failed_extractions.append(short_paper_id)
         
         self.db.convert_analyst_tool_tracker(self.name, collection_name)
         print(f"Data collection complete, returning results.")
+        
+        # Add extraction summary with warnings about failures
+        total_papers = len(extraction_results)
+        successful = total_papers - len(failed_extractions)
+        
+        # Add summary as a special key in results so analyst sees it
+        results["_EXTRACTION_SUMMARY"] = {
+            "total_papers": total_papers,
+            "successful": successful,
+            "failed": len(failed_extractions),
+            "failed_paper_ids": failed_extractions
+        }
+        
+        if failed_extractions:
+            results["_WARNING"] = (
+                f"⚠️ {len(failed_extractions)}/{total_papers} papers FAILED extraction and have incomplete data. "
+                f"Failed papers: {', '.join(failed_extractions)}. "
+                f"The CSV '{collection_name}' will have NaN/empty values for these rows. "
+                f"Options: (1) Review failure reasons in each paper's 'failed_extraction' field, "
+                f"(2) Re-run extraction with refined schema, or (3) Proceed with partial data. "
+                f"This warning will be shown to the user when you complete your goal."
+            )
+        
         return results
 
     def save_metadata_as_collection(self, collection_name, metadata_results, return_tool=False):
@@ -823,6 +880,39 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                     "Please create a data collection using create_data_collection_request, then reference it "
                     "using the data_collection_names parameter. Do not attempt to complete without attaching files.")
         
+        # Check for failed extractions in data collections BEFORE proceeding
+        failed_extraction_warnings = []
+        if data_collection_names:
+            for collection_name in data_collection_names:
+                try:
+                    csv_path = self.db.convert_analyst_tool_tracker(self.name, collection_name)
+                    df = pd.read_csv(csv_path)
+                    
+                    # Check for failed_extraction column
+                    if 'failed_extraction' in df.columns:
+                        failed_rows = df[df['failed_extraction'].notna()]
+                        if len(failed_rows) > 0:
+                            total_rows = len(df)
+                            failed_count = len(failed_rows)
+                            failed_ids = failed_rows['id'].tolist() if 'id' in failed_rows.columns else failed_rows.index.tolist()
+                            
+                            # Get paper titles if available
+                            failed_papers_info = []
+                            for idx, row in failed_rows.iterrows():
+                                paper_id = row.get('id', f'row_{idx}')
+                                paper_title = row.get('paper_title', 'Unknown title')
+                                failed_papers_info.append(f"  - {paper_id}: {paper_title[:60]}...")
+                            
+                            warning = (f"\n\n⚠️ **WARNING: {failed_count}/{total_rows} papers failed extraction in '{collection_name}'**\n"
+                                      f"These papers have incomplete data (mostly NaN values):\n" + 
+                                      "\n".join(failed_papers_info[:10]))  # Limit to first 10
+                            if failed_count > 10:
+                                warning += f"\n  ... and {failed_count - 10} more"
+                            
+                            failed_extraction_warnings.append(warning)
+                except Exception as e:
+                    print(f"Warning: Could not check for failed extractions in {collection_name}: {e}")
+        
         # Handle data_collection_names if provided
         if data_collection_names:
             download_links = []
@@ -872,13 +962,19 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             # Add download links to answer
             answer = answer + "\n\n**Data collections attached**: " + ", ".join(data_collection_names) + "\n\n" + "\n".join(download_links)
         
+        # Add failed extraction warnings to answer (prominently displayed)
+        if failed_extraction_warnings:
+            answer = answer + "\n\n" + "\n".join(failed_extraction_warnings)
+            answer += "\n\n**Note:** The CSV file contains incomplete data for the papers listed above. You may want to review the extraction failures and decide whether to re-run the extraction or proceed with partial data."
+        
         # Run the standard goal checker (backward compatible)
         thoughts = reflect_on_evidence(self.goal, answer, evidence)
         self.answer_attempts += 1
         if thoughts == "":
             self.answer = answer
             self.evidence = evidence
-            return "Goal achieved:\n" + answer + "\n\nEvidence:\n" + evidence
+            load_calls = [ "pd.read_csv(load_analyst_data('"+self.name+"', '"+collection_name+"'))" for collection_name in data_collection_names ]
+            return "Goal achieved:\n" + answer + "\n\nAnalyst Extraction Files - Inorder to access data extraction files to perform your required standardization before analysis, you can use the following python code to load the data: " + "\n\n".join(load_calls)
         return ("Goal not achieved. Here are some thoughts on why: " + thoughts + "\n\n" +
                 "Consider refining your data collection request with this in mind, and trying again.")
 
@@ -942,7 +1038,33 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         while not self.answer:
             messages = self.db.get_analyst_context(self.name)
             arguments = {"messages": messages, "model": "gpt-5.1", 'reasoning_effort': 'medium', "tools": self.tools, "parallel_tool_calls": False}
-            chat_response = client.chat.completions.create(**arguments)
+            
+            # Try to make API call, catch context limit errors
+            try:
+                chat_response = client.chat.completions.create(**arguments)
+            except openai.BadRequestError as e:
+                error_str = str(e)
+                # Check for context length errors - OpenAI returns "maximum context length" in the message
+                if 'maximum context length' in error_str.lower():
+                    self.answer = (f"⚠️ CONTEXT LIMIT EXCEEDED: The analyst '{self.name}' hit the context window limit. "
+                                   f"The conversation grew too large ({len(messages)} messages) to continue processing. "
+                                   f"Consider breaking this task into smaller sub-tasks or being more specific with the goal "
+                                   f"to reduce the amount of data the analyst needs to process.")
+                    self.evidence = f"Error details: {error_str}\n\nNumber of messages in context: {len(messages)}"
+                    # Store the failure reason in metadata
+                    self.db.add_analyst_metadata(self.name, {
+                        "goal_achieved": False, 
+                        "failure_reason": "context_limit_exceeded",
+                        "error": error_str,
+                        "message_count": len(messages),
+                        "answer": self.answer, 
+                        "evidence": self.evidence
+                    })
+                    return  # Exit the loop
+                else:
+                    # Re-raise non-context BadRequestErrors
+                    raise
+            
             new_history = use_tools(chat_response, arguments, function_dict=self.tool_callables)
             for call in new_history:
                 self.db.add_analyst_context(self.name, call)

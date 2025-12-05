@@ -335,5 +335,364 @@
         "type": "range_value"
       }
     ]
+  },
+  "effect_estimate": {
+    "description": "Data Type: effect_estimate\nDescription: An effect estimate captures a statistical measure of association (hazard ratio, odds ratio, risk ratio, incidence rate ratio, mean difference, etc.) with its confidence interval and p-value. Use for single comparisons like 'HR = 1.52 (95% CI: 1.12-2.08), p = 0.008'.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of what effect is being estimated and the comparison being made.\n  - effect_type (string): The type of effect measure (e.g., HR, OR, RR, IRR, MD, SMD, beta).\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "effect_estimate",
+        "description": "Incidence rate ratio of developing acute lung inflammation among workers exposed to aerosolized nanoparticles compared to unexposed controls",
+        "effect_type": "IRR",
+        "required": true,
+        "type": "effect_estimate"
+      },
+      {
+        "name": "effect_estimate",
+        "description": "Odds ratio for remission in patients receiving the novel monoclonal antibody therapy versus placebo",
+        "effect_type": "OR",
+        "required": true,
+        "type": "effect_estimate"
+      },
+      {
+        "name": "effect_estimate",
+        "description": "Mean difference in systolic blood pressure reduction between participants following the low-sodium DASH diet and those on a standard diet",
+        "effect_type": "MD",
+        "required": true,
+        "type": "effect_estimate"
+      }
+    ]
+  },
+  "effect_estimate_list": {
+    "description": "Data Type: effect_estimate_list\nDescription: A list of effect estimates for multiple comparisons or groups. Use when extracting multiple HRs, ORs, etc. from the same analysis (e.g., multiple exposure levels vs reference).\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of what effects are being estimated.\n  - effect_type (string): The type of effect measure (e.g., HR, OR, RR, IRR, MD, SMD, beta).\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "effect_estimate_list",
+        "description": "Hazard ratios for different doses of a novel immunotherapy compared to placebo over a 12-month follow-up.",
+        "effect_type": "HR",
+        "required": true,
+        "type": "effect_estimate_list"
+      },
+      {
+        "name": "env_exposure_ORs",
+        "description": "Odds ratios for developing asthma across quartiles of long-term air pollutant exposure compared to the lowest quartile.",
+        "effect_type": "OR",
+        "required": false,
+        "type": "effect_estimate_list"
+      },
+      {
+        "name": "dose_response_RRs",
+        "description": "Relative risks of cardiovascular events at incremental plasma cholesterol lowering by statin therapy versus placebo across three reduction tiers.",
+        "effect_type": "RR",
+        "required": true,
+        "type": "effect_estimate_list"
+      }
+    ]
+  },
+  "measurement_with_error": {
+    "description": "Data Type: measurement_with_error\nDescription: A measurement with associated uncertainty/error, such as '15.3 \u00b1 2.1 mm' or '42.5 (SE: 3.2)'. Use for single measurements with standard deviation, standard error, or other error terms.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of what is being measured.\n  - unit (string): The unit of measurement.\n  - error_type (string): The type of error (SD, SE, 95% CI, IQR, range).\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "mean_neuron_firing_rate",
+        "description": "Average firing rate of hippocampal neurons during maze navigation",
+        "unit": "Hz",
+        "error_type": "SD",
+        "required": true,
+        "type": "measurement_with_error"
+      },
+      {
+        "name": "spectral_absorbance_peak",
+        "description": "Peak wavelength absorbance of engineered fluorescent protein under UV excitation",
+        "unit": "nm",
+        "error_type": "SE",
+        "required": false,
+        "type": "measurement_with_error"
+      },
+      {
+        "name": "particle_diameter_distribution",
+        "description": "Average diameter of synthesized polymer nanoparticles",
+        "unit": "\u03bcm",
+        "error_type": "95% CI",
+        "required": true,
+        "type": "measurement_with_error"
+      }
+    ]
+  },
+  "measurement_with_error_list": {
+    "description": "Data Type: measurement_with_error_list\nDescription: A list of measurements with associated uncertainty/error. Use when extracting multiple measurements with their error terms.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of what is being measured.\n  - unit (string): The unit of measurement.\n  - error_type (string): The type of error (SD, SE, 95% CI, IQR, range).\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "enzyme_activity_rates",
+        "description": "Measured rates of enzyme-catalyzed reactions under varied temperature conditions",
+        "unit": "\u03bcmol/min/mg",
+        "error_type": "SD",
+        "required": false,
+        "type": "measurement_with_error_list"
+      },
+      {
+        "name": "soil_nitrogen_concentration_series",
+        "description": "Serial measurements of soil nitrate concentration in agricultural plots across growth season",
+        "unit": "mg/kg",
+        "error_type": "95% CI",
+        "required": false,
+        "type": "measurement_with_error_list"
+      },
+      {
+        "name": "atmospheric_co2_readings",
+        "description": "Hourly atmospheric CO2 concentration measurements at urban monitoring station",
+        "unit": "ppm",
+        "error_type": "IQR",
+        "required": true,
+        "type": "measurement_with_error_list"
+      }
+    ]
+  },
+  "sample_statistics": {
+    "description": "Data Type: sample_statistics\nDescription: Descriptive statistics for a sample including count, central tendency, and spread. Use for extracting summary statistics like 'n=42, mean 15.3 (SD 2.1)' or 'n=50, median 12 (IQR 8-16)'.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of the sample and what is being measured.\n  - unit (string): The unit of measurement for the variable.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "Postoperative Pain Scores",
+        "description": "Descriptive statistics of patient\u2010reported pain levels in the first 24 hours after laparoscopic cholecystectomy",
+        "unit": "VAS score (0\u201310)",
+        "required": true,
+        "type": "sample_statistics"
+      },
+      {
+        "name": "Vegetation Chlorophyll Content",
+        "description": "Descriptive statistics of foliar chlorophyll concentration in leaves sampled from urban maple trees",
+        "unit": "\u00b5g/cm\u00b2",
+        "required": true,
+        "type": "sample_statistics"
+      },
+      {
+        "name": "Soil Microbial Biomass",
+        "description": "Summary of microbial biomass carbon in agricultural soil samples after compost amendment",
+        "unit": "mg C/kg soil",
+        "required": true,
+        "type": "sample_statistics"
+      }
+    ]
+  },
+  "sample_statistics_list": {
+    "description": "Data Type: sample_statistics_list\nDescription: A list of sample statistics for multiple groups or variables. Use when extracting summary statistics across multiple groups (e.g., treatment vs control).\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of what is being measured across groups.\n  - unit (string): The unit of measurement.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "sample_statistics_list",
+        "description": "Comparison of systolic blood pressure readings between intervention and control groups at 6-month follow-up",
+        "unit": "mmHg",
+        "required": false,
+        "type": "sample_statistics_list"
+      },
+      {
+        "name": "sample_statistics_list",
+        "description": "Mean concentrations of airborne particulate matter (PM2.5) in urban, suburban, and rural sampling sites over 24-hour periods",
+        "unit": "\u00b5g/m\u00b3",
+        "required": true,
+        "type": "sample_statistics_list"
+      },
+      {
+        "name": "sample_statistics_list",
+        "description": "Baseline and 12-month follow-up serum cholesterol levels across diet intervention, exercise intervention, and combined intervention groups",
+        "unit": "mg/dL",
+        "required": false,
+        "type": "sample_statistics_list"
+      }
+    ]
+  },
+  "regression_coefficient": {
+    "description": "Data Type: regression_coefficient\nDescription: A regression coefficient with standard error, confidence interval, and p-value. Use for extracting beta coefficients from linear, logistic, or other regression models.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of the predictor variable and outcome.\n  - coefficient_type (string): The type of coefficient (beta, B, log-odds, etc.).\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "regression_coefficient",
+        "description": "Association between daily high-intensity interval training and systolic blood pressure reduction over 12 weeks",
+        "coefficient_type": "beta",
+        "required": true,
+        "type": "regression_coefficient"
+      },
+      {
+        "name": "coeff_smoking",
+        "description": "Effect of cigarette smoking frequency on log-odds of developing chronic bronchitis",
+        "coefficient_type": "log-odds",
+        "required": false,
+        "type": "regression_coefficient"
+      },
+      {
+        "name": "bmi_weight_interaction",
+        "description": "Interaction term between BMI and physical activity level predicting insulin sensitivity index",
+        "coefficient_type": "B",
+        "required": true,
+        "type": "regression_coefficient"
+      }
+    ]
+  },
+  "regression_coefficient_list": {
+    "description": "Data Type: regression_coefficient_list\nDescription: A list of regression coefficients from a model. Use when extracting multiple predictors from the same regression analysis.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of the regression model and outcome.\n  - coefficient_type (string): The type of coefficient (beta, B, log-odds, etc.).\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "regression_coefficient_list",
+        "description": "Multivariate linear regression predicting systolic blood pressure reduction (mmHg) at 6 months based on baseline characteristics and treatment adherence",
+        "coefficient_type": "\u03b2",
+        "required": true,
+        "type": "regression_coefficient_list"
+      },
+      {
+        "name": "regression_coefficient_list",
+        "description": "Logistic regression model predicting 30-day readmission risk among heart failure patients based on demographic, clinical, and lab variables",
+        "coefficient_type": "log-odds",
+        "required": false,
+        "type": "regression_coefficient_list"
+      },
+      {
+        "name": "regression_coefficient_list",
+        "description": "Cox proportional hazards regression assessing hazard ratios for mortality in patients with metastatic melanoma under immunotherapy, adjusting for age, sex, and tumor burden",
+        "coefficient_type": "hazard ratio (HR)",
+        "required": true,
+        "type": "regression_coefficient_list"
+      }
+    ]
+  },
+  "statistical_test": {
+    "description": "Data Type: statistical_test\nDescription: A statistical test result including test statistic, degrees of freedom, and p-value. Use for chi-square, t-tests, F-tests, ANOVA, etc.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of what is being tested.\n  - test_type (string): The type of statistical test (chi-square, t-test, F-test, Mann-Whitney, etc.).\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "statistical_test",
+        "description": "Comparison of average viral load reduction between treatment and control groups in an HIV study.",
+        "test_type": "t-test",
+        "required": true,
+        "type": "statistical_test"
+      },
+      {
+        "name": "statistical_test",
+        "description": "ANOVA to assess differences in photosynthetic efficiency across three algal species under varying light intensities.",
+        "test_type": "F-test",
+        "required": false,
+        "type": "statistical_test"
+      },
+      {
+        "name": "statistical_test",
+        "description": "Mann-Whitney test comparing median soil moisture levels between irrigated and non-irrigated plots.",
+        "test_type": "Mann-Whitney",
+        "required": true,
+        "type": "statistical_test"
+      }
+    ]
+  },
+  "contingency_table_2x2": {
+    "description": "Data Type: contingency_table_2x2\nDescription: A 2x2 contingency table for binary exposure and binary outcome. Use for extracting data needed for odds ratios, risk ratios, chi-square tests. Cells are: [exposed+outcome, exposed+no_outcome, unexposed+outcome, unexposed+no_outcome].\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of the exposure and outcome being cross-tabulated.\n  - exposure_label (string): Label for the exposure/row variable.\n  - outcome_label (string): Label for the outcome/column variable.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "hfcs_nash_2x2",
+        "description": "Association between high fructose corn syrup (HFCS) consumption and nonalcoholic steatohepatitis (NASH) development in adults.",
+        "exposure_label": "High HFCS intake",
+        "outcome_label": "NASH diagnosis",
+        "required": true,
+        "type": "contingency_table_2x2"
+      },
+      {
+        "name": "pesticide_parkinson_2x2",
+        "description": "Relationship between occupational pesticide exposure and Parkinson's disease occurrence among agricultural workers.",
+        "exposure_label": "Pesticide exposure",
+        "outcome_label": "Parkinson's disease",
+        "required": false,
+        "type": "contingency_table_2x2"
+      },
+      {
+        "name": "uv_exposure_skincancer_2x2",
+        "description": "Cross-tabulation of chronic UV radiation exposure and incidence of basal cell skin carcinoma in lifeguards.",
+        "exposure_label": "Chronic UV exposure",
+        "outcome_label": "Basal cell carcinoma",
+        "required": true,
+        "type": "contingency_table_2x2"
+      }
+    ]
+  },
+  "named_number_set": {
+    "description": "Data Type: named_number_set\nDescription: A flexible set of related named numbers extracted together from the same source. Use when you need to extract multiple related numeric values that don't fit standard statistical patterns, such as study characteristics, multiple time points, or custom metrics. Specify the expected field names in the description.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): Description including the names and meanings of each number to extract (e.g., 'Extract: follow_up_months, total_n, dropout_n, completion_rate').\n  - field_names (array): List of field names to extract (e.g., ['follow_up_months', 'total_n', 'dropout_n']).\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "tumor_growth_metrics",
+        "description": "Extract: baseline_volume_mm3, mid_treatment_volume_mm3, post_treatment_volume_mm3, relative_volume_change_percent",
+        "field_names": [
+          "baseline_volume_mm3",
+          "mid_treatment_volume_mm3",
+          "post_treatment_volume_mm3",
+          "relative_volume_change_percent"
+        ],
+        "required": true,
+        "type": "named_number_set"
+      },
+      {
+        "name": "cognitive_performance_scores",
+        "description": "Extract: pre_intervention_score, post_intervention_score, one_month_followup_score, score_change_absolute",
+        "field_names": [
+          "pre_intervention_score",
+          "post_intervention_score",
+          "one_month_followup_score",
+          "score_change_absolute"
+        ],
+        "required": false,
+        "type": "named_number_set"
+      },
+      {
+        "name": "vascular_resistance_parameters",
+        "description": "Extract: baseline_resistance_dyn_s_cm5, peak_exercise_resistance_dyn_s_cm5, post_exercise_recovery_resistance_dyn_s_cm5, resistance_reduction_percentage",
+        "field_names": [
+          "baseline_resistance_dyn_s_cm5",
+          "peak_exercise_resistance_dyn_s_cm5",
+          "post_exercise_recovery_resistance_dyn_s_cm5",
+          "resistance_reduction_percentage"
+        ],
+        "required": true,
+        "type": "named_number_set"
+      }
+    ]
+  },
+  "proportion_with_ci": {
+    "description": "Data Type: proportion_with_ci\nDescription: A proportion or percentage with confidence interval. Use for prevalence, incidence rates, or any percentage with uncertainty bounds.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of what proportion is being reported.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "Hypertension_prevalence_in_adults",
+        "description": "Prevalence of hypertension among adults aged 40\u201360 years in urban settings over a 12-month period (95% CI).",
+        "required": true,
+        "type": "proportion_with_ci"
+      },
+      {
+        "name": "Diabetes_incidence_rate",
+        "description": "Annual incidence rate of type 2 diabetes among individuals with BMI \u226530 in suburban populations (95% CI).",
+        "required": false,
+        "type": "proportion_with_ci"
+      },
+      {
+        "name": "Vaccine_efficacy_in_elderly",
+        "description": "Proportionate reduction in symptomatic influenza cases among elderly participants after vaccination (95% CI).",
+        "required": true,
+        "type": "proportion_with_ci"
+      }
+    ]
+  },
+  "survival_analysis_result": {
+    "description": "Data Type: survival_analysis_result\nDescription: Results from survival/time-to-event analysis including median survival, rates at specific time points, and comparison statistics. Use for Kaplan-Meier, Cox regression summaries.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of the survival outcome and groups being compared.\n  - time_unit (string): Unit of time for survival analysis (days, months, years).\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "Postoperative Overall Survival",
+        "description": "Comparison of overall survival after HepatoCellular Carcinoma resection between patients receiving adjuvant immunotherapy vs. standard care",
+        "time_unit": "months",
+        "required": true,
+        "type": "survival_analysis_result"
+      },
+      {
+        "name": "Disease-Free Survival",
+        "description": "Time to recurrence comparison between hormone therapy group and placebo after mastectomy in early-stage breast cancer",
+        "time_unit": "years",
+        "required": false,
+        "type": "survival_analysis_result"
+      },
+      {
+        "name": "Progression-Free Survival",
+        "description": "Kaplan-Meier analysis comparing PFS between novel tyrosine kinase inhibitor and standard chemotherapy in advanced non-small cell lung cancer",
+        "time_unit": "months",
+        "required": true,
+        "type": "survival_analysis_result"
+      }
+    ]
   }
 }

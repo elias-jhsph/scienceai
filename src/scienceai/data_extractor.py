@@ -1,10 +1,29 @@
 import json
 import os
 import re
+from enum import Enum
 
 from num2words import num2words
 
 from .llm import client, async_client, use_tools_sync as use_tools
+
+
+class ExtractionMode(Enum):
+    """
+    Extraction modes that control strictness and retry behavior.
+    
+    EXPLORATORY: Lenient mode for discovery. Disables convergence detection and early exit.
+                 On last retry, removes problem fields and returns partial data.
+                 
+    FOCUSED: Default balanced mode. Uses convergence detection and early exit.
+             Full retry logic with validation.
+             
+    RIGID: Strict mode for precise extraction. All schema fields forced to required.
+           Uses convergence detection and early exit.
+    """
+    EXPLORATORY = "exploratory"
+    FOCUSED = "focused"
+    RIGID = "rigid"
 
 
 data_types = None
@@ -136,12 +155,15 @@ def generate_description(data_type_key, data_type_value, all_keys):
     retry = 0
     valid_calls = []
     output_dictionary = None
+    last_tool_call_id = None
     while len(examples) < 3 and retry < 3:
         while valid_calls == [] and retry < 3:
             if retry > 0:
                 print("Retrying...")
             chat_response = client.chat.completions.create(**arguments)
             if chat_response.choices[0].message.tool_calls:
+                # Store the tool_call_id for later use
+                last_tool_call_id = chat_response.choices[0].message.tool_calls[0].id
                 valid_calls = use_tools(chat_response, arguments, call_functions=False)
                 if valid_calls:
                     for call in valid_calls:
@@ -156,12 +178,32 @@ def generate_description(data_type_key, data_type_value, all_keys):
             else:
                 print("No tool calls used")
             retry += 1
-        if valid_calls and output_dictionary:
+        if valid_calls and output_dictionary and last_tool_call_id:
             retry = 0
-            messages += [{"role": "function", "name": valid_calls[0]["name"], "content": "valid"},
-                                       {"role": "user", "content": user_message_prefix + message}]
+            # Build assistant message with tool_calls for the tools API format
+            assistant_message = {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": last_tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": valid_calls[0]["name"],
+                        "arguments": json.dumps(output_dictionary)
+                    }
+                }]
+            }
+            # Use role='tool' with tool_call_id (not the deprecated role='function')
+            tool_response = {
+                "role": "tool",
+                "tool_call_id": last_tool_call_id,
+                "content": "valid"
+            }
+            messages += [assistant_message, tool_response,
+                         {"role": "user", "content": user_message_prefix + message}]
             examples.append(output_dictionary)
             valid_calls = []
+            last_tool_call_id = None
 
     return message, examples
 
@@ -175,10 +217,38 @@ for data_type in data_types:
             json.dump(data_types_docs, file, indent=2)
 
 
-def generate_schema(corpus, goal=None, retries=5):
+def generate_schema(corpus, goal=None, retries=5, mode=ExtractionMode.FOCUSED):
+    """
+    Generate a data extraction schema for a corpus.
+    
+    Args:
+        corpus: Sample text from the papers
+        goal: The extraction goal
+        retries: Number of generation attempts
+        mode: ExtractionMode controlling schema strictness:
+              - EXPLORATORY: More text_block types, all fields optional
+              - FOCUSED: Balanced approach (default)
+              - RIGID: All fields required
+    """
+    # Mode-specific guidance
+    mode_guidance = ""
+    if mode == ExtractionMode.EXPLORATORY:
+        mode_guidance = ("\n\n**EXTRACTION MODE: EXPLORATORY**\n"
+                        "This is a discovery/exploratory extraction. Prioritize:\n"
+                        "- Use `text_block` liberally for descriptive fields\n"
+                        "- Mark ALL fields as required: false (data may be missing)\n"
+                        "- Prefer broader, flexible schemas over precise numeric types\n"
+                        "- Goal is to see what's available across papers, not precise numbers\n\n")
+    elif mode == ExtractionMode.RIGID:
+        mode_guidance = ("\n\n**EXTRACTION MODE: RIGID**\n"
+                        "This is a strict extraction requiring precise data. Prioritize:\n"
+                        "- Use structured numeric types (effect_estimate, sample_statistics, etc.)\n"
+                        "- Mark core fields as required: true (extraction should fail if missing)\n"
+                        "- Only request data that MUST be present in qualifying papers\n\n")
+    
     # Construct the system message
     system_message = ("You are an expert data schema designer. Create a structured schema to extract specific "
-                      "information from research papers.\n\n"
+                      "information from research papers.\n\n" + mode_guidance +
                       "CRITICAL: You must ONLY use these valid data types: " + ", ".join(data_types.keys()) + "\n\n"
                       "DO NOT use 'list', 'object_list', or any other data type not in the list above. "
                       "For multiple items, use types ending in '_list' like 'number_list', 'text_block', 'date_list', etc.\n\n"
@@ -226,6 +296,24 @@ def generate_schema(corpus, goal=None, retries=5):
                       "**DEFAULT BEHAVIOR:**\n"
                       "  - If goal is vague/exploratory → prefer text_block (safe for discovery)\n"
                       "  - If goal explicitly mentions needing numbers for analysis → use numeric types\n\n"
+                      "**REQUIRED vs OPTIONAL FIELDS:**\n"
+                      "Each field needs a 'required' boolean. Choose wisely:\n\n"
+                      "✅ required: true - Data explicitly requested in the goal that SHOULD be in every paper:\n"
+                      "  - Core data points directly mentioned in the goal\n"
+                      "  - Essential identifiers (exposure definition, outcome definition)\n"
+                      "  - Primary numeric data requested for analysis\n\n"
+                      "✅ required: false - Supplementary data or data that may not exist in all papers:\n"
+                      "  - Contextual/background information not explicitly requested\n"
+                      "  - Statistical details that aren't always reported (CIs, p-values, subgroup data)\n"
+                      "  - Fields where absence is informative, not an error\n"
+                      "  - When unsure if data will be in every paper → use required: false\n\n"
+                      "Example: Goal is 'extract sample sizes and primary outcomes'\n"
+                      "  - sample_size: required: true (explicitly requested)\n"
+                      "  - primary_outcome_definition: required: true (explicitly requested)\n"
+                      "  - secondary_outcomes: required: false (not requested, may not exist)\n"
+                      "  - funding_source: required: false (helpful context, not requested)\n\n"
+                      "PRINCIPLE: required: false is safer - extraction won't fail if data is missing. "
+                      "Only use required: true for data that MUST be in every paper for the analysis to work.\n\n"
                       "Design your schema to be specific and extractable from the papers. "
                       "Focus on: " + (goal if goal else "extracting relevant structured data") + "\n\n")
 
@@ -336,13 +424,25 @@ def generate_schema(corpus, goal=None, retries=5):
     return None
 
 
-def schema_to_tool(schema):
+def schema_to_tool(schema, mode=ExtractionMode.FOCUSED):
+    """
+    Convert a schema to an OpenAI function tool.
+    
+    Args:
+        schema: The extraction schema
+        mode: ExtractionMode controlling required field behavior
+              - RIGID: All fields forced to required
+              - FOCUSED/EXPLORATORY: Respect schema's required settings
+    """
     def camel_to_snake(s):
         return ''.join(['_' + c.lower() if c.isupper() else c for c in s]).lstrip('_')
 
     selected_data_types_full = {}
 
     required_full = []
+    
+    # In RIGID mode, override all required fields to True
+    rigid_mode = (mode == ExtractionMode.RIGID)
 
     for data_type_requested in schema:
         required = []
@@ -373,7 +473,9 @@ def schema_to_tool(schema):
                 "total_exposed", "total_unexposed",
             ]
             for key in required_keys:
-                if data_type_requested["required"]:
+                # In RIGID mode, all fields are required; otherwise respect schema
+                is_required = rigid_mode or data_type_requested["required"]
+                if is_required:
                     # Only make core value fields required, not metadata or optional stats
                     if key not in optional_fields:
                         required.append(name + "_" + key)
@@ -395,10 +497,19 @@ def schema_to_tool(schema):
                         "additionalProperties": False
                     }
                 else:
-                    selected_data_types[name + "_" + key] = {"type": new_type, "description": new_description}
+                    # Make optional fields nullable so LLM can use null for unreported values
+                    if key in optional_fields and new_type == "number":
+                        selected_data_types[name + "_" + key] = {
+                            "type": ["number", "null"],
+                            "description": new_description + " Use null if not reported."
+                        }
+                    else:
+                        selected_data_types[name + "_" + key] = {"type": new_type, "description": new_description}
         if data_type_def["mode"] == "array":
             name = data_type_requested["name"].replace(" ", "_")
-            if data_type_requested["required"]:
+            # In RIGID mode, all fields are required; otherwise respect schema
+            is_required = rigid_mode or data_type_requested["required"]
+            if is_required:
                 required.append(name)
             new_description = data_type_def["description"]
             for spec_key in data_types[data_type_requested["type"]]["spec"]:
@@ -427,7 +538,14 @@ def schema_to_tool(schema):
                         "additionalProperties": False
                     }
                 else:
-                    item_properties[key] = {"type": new_type, "description": new_description}
+                    # Make optional fields nullable so LLM can use null for unreported values
+                    if key in optional_fields and new_type == "number":
+                        item_properties[key] = {
+                            "type": ["number", "null"],
+                            "description": new_description + " Use null if not reported."
+                        }
+                    else:
+                        item_properties[key] = {"type": new_type, "description": new_description}
 
             selected_data_types[name] = {"type": "array", "description": new_description,
                                          "items": {"type": "object", "properties": item_properties,
@@ -445,6 +563,18 @@ def schema_to_tool(schema):
                        "without forcing incorrect extractions."
     }
     # Note: data_discrepancy_notes is NOT added to required_full - it's optional
+
+    # Add early exit field for fundamentally inappropriate extractions
+    selected_data_types_full["totally_inappropriate_extraction"] = {
+        "type": "string",
+        "description": "ONLY fill this if the extraction request is FUNDAMENTALLY inappropriate for this paper. "
+                       "Examples: paper is about completely different topic, paper is not a research study, "
+                       "paper doesn't contain ANY of the requested data types (not just some missing fields). "
+                       "If filled, the entire extraction is marked invalid. "
+                       "Leave EMPTY for normal extractions, even partial ones. "
+                       "Use this ONLY when extraction makes no sense, not for difficult or incomplete extractions."
+    }
+    # Note: totally_inappropriate_extraction is NOT added to required_full - it's optional
 
     selected_data_types_full["successfully_extracted"] = \
         {"type": "boolean", "description": "Was the data successfully extracted and were all required fields populated "
@@ -541,7 +671,7 @@ def verify_computation(derivation, expected_value):
         return True  # Be lenient on verification errors
 
 
-async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_corpus=True, justification=None):
+async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_corpus=True, justification=None, return_problem_fields=False):
     """
     Validates data extraction results against source corpus with support for both direct quotes
     and derived/summarized information.
@@ -551,6 +681,8 @@ async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_c
         corpus: Original text source
         retries: Number of reflection attempts
         limit_corpus: Whether to include full corpus in reflection prompt
+        justification: Optional justification from extractor for borderline cases
+        return_problem_fields: If True, returns (error_msg, [field_names]) tuple instead of just error_msg
     """
 
     def replace_numbers_with_words(text):
@@ -574,6 +706,12 @@ async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_c
                 return (f"Source not found: {source}")
         return None
 
+    # Helper to format returns based on return_problem_fields setting
+    def make_return(error_msg, problem_fields=None):
+        if return_problem_fields:
+            return (error_msg, problem_fields or [])
+        return error_msg
+    
     # Pre-process corpus for comparison
     pre_processed_corpus = corpus.lower()
     pre_processed_corpus = replace_numbers_with_words(pre_processed_corpus)
@@ -581,7 +719,7 @@ async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_c
     pre_processed_corpus = ''.join(e for e in pre_processed_corpus if e.isalnum())
 
     if not extraction_dict.get("successfully_extracted", False):
-        return "Data not successfully extracted: " + str(extraction_dict)
+        return make_return("Data not successfully extracted: " + str(extraction_dict))
 
     # Validate source quotes OR derivations
     for key, value in extraction_dict.items():
@@ -595,17 +733,20 @@ async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_c
                 
                 # CRITICAL: Validate that derivation is a dict, not a string
                 if not isinstance(derivation, dict):
-                    return f"Derivation field '{derivation_key}' must be an object/dictionary with operation, sources, computation, etc. Got type {type(derivation).__name__} instead. Value: {derivation}"
+                    field_base = key.replace("_source_quote", "")
+                    return make_return(f"Derivation field '{derivation_key}' must be an object/dictionary with operation, sources, computation, etc. Got type {type(derivation).__name__} instead. Value: {derivation}", [field_base])
                 
                 # 1. Validate all source quotes in derivation exist in corpus
                 for source_idx, source_obj in enumerate(derivation.get("sources", [])):
                     quote = source_obj.get("quote")
                     if not quote:
-                        return f"Derivation {key}: source {source_idx} missing quote"
+                        field_base = key.replace("_source_quote", "")
+                        return make_return(f"Derivation {key}: source {source_idx} missing quote", [field_base])
                     
                     quote_check = check_source(quote, pre_processed_corpus)
                     if quote_check is not None:
-                        return f"Derivation {key}: {quote_check} (source {source_idx})"
+                        field_base = key.replace("_source_quote", "")
+                        return make_return(f"Derivation {key}: {quote_check} (source {source_idx})", [field_base])
                 
                 # 2. Verify computation is correct
                 value_key = key.replace("_source_quote", "_value")
@@ -614,7 +755,7 @@ async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_c
                     
                 if value_key in extraction_dict:
                     if not verify_computation(derivation, extraction_dict[value_key]):
-                        return f"Derivation computation incorrect for {value_key}: expected {extraction_dict[value_key]}, check {derivation.get('computation')}"
+                        return make_return(f"Derivation computation incorrect for {value_key}: expected {extraction_dict[value_key]}, check {derivation.get('computation')}", [value_key.replace("_value", "")])
                 
                 print(f"Validated derivation for {value_key}")
             
@@ -622,7 +763,8 @@ async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_c
                 # DIRECT QUOTE path - existing validation
                 source_check = check_source(value, pre_processed_corpus)
                 if source_check is not None:
-                    return "The value of '" + key + "' not found in corpus, update this value so its contents can be found verbatim in the corpus (seperate sections broken up by '...'): " + str(value)
+                    field_base = key.replace("_source_quote", "")
+                    return make_return("The value of '" + key + "' not found in corpus, update this value so its contents can be found verbatim in the corpus (seperate sections broken up by '...'): " + str(value), [field_base])
                 
                 # NEW: Check if the extracted VALUE is actually supported by this quote
                 # This prevents using a quote like "10...13" to justify a value of "23" without a derivation
@@ -632,8 +774,12 @@ async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_c
                 
                 if value_key in extraction_dict:
                     extracted_val = extraction_dict[value_key]
+                    # Skip validation for booleans - they represent interpretations, not literal values
+                    # Note: must check bool BEFORE int because bool is a subclass of int in Python
+                    if isinstance(extracted_val, bool):
+                        pass  # Booleans are inferences from quotes, not literal matches
                     # Only check numeric values or short strings to avoid false positives on long text
-                    if isinstance(extracted_val, (int, float)) or (isinstance(extracted_val, str) and len(extracted_val) < 20):
+                    elif isinstance(extracted_val, (int, float)) or (isinstance(extracted_val, str) and len(extracted_val) < 20):
                         # Normalize quote and value for comparison
                         norm_quote = str(value).lower()
                         norm_val = str(extracted_val).lower()
@@ -652,15 +798,17 @@ async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_c
                         
                         if not val_in_quote and isinstance(extracted_val, (int, float)):
                             # If value is a number and NOT in the quote, it likely requires derivation (sum/calc)
-                            return (f"Value {extracted_val} for '{value_key}' is NOT found in the source quote '{value}'. "
+                            field_base = value_key.replace("_value", "")
+                            return make_return(f"Value {extracted_val} for '{value_key}' is NOT found in the source quote '{value}'. "
                                     f"If this value was calculated (e.g., sum of multiple numbers), you MUST use '_derivation' "
-                                    f"instead of '_source_quote'.")
+                                    f"instead of '_source_quote'.", [field_base])
 
                 print(f"Validated source for {key}")
                 
             elif value == "":
-                return ("If a property/parameter is not required and you can not find information for it, "
-                        "exclude it completely DO NOT leave it blank. ") + str(key)
+                field_base = key.replace("_source_quote", "")
+                return make_return("If a property/parameter is not required and you can not find information for it, "
+                        "exclude it completely DO NOT leave it blank. " + str(key), [field_base])
             # else: value is None and no derivation - field might be optional, let it pass
 
         if isinstance(value, list):
@@ -668,11 +816,13 @@ async def reflect_on_data_extraction(extraction_dict, corpus, retries=3, limit_c
                 for k in item:
                     if k.endswith("_source_quote"):
                         if check_source(item[k], pre_processed_corpus) is not None:
-                            return "Source was not found in corpus: (" + k + ") " + str(extraction_dict[k])
+                            field_base = k.replace("_source_quote", "")
+                            return make_return("Source was not found in corpus: (" + k + ") " + str(item[k]), [field_base])
                         print(f"Validated source for {k}")
                         if item[k] == "":
-                            return ("If a property/parameter is not required and you can not find information for it, "
-                                    "exclude it completely DO NOT leave it blank. ") + str(k)
+                            field_base = k.replace("_source_quote", "")
+                            return make_return("If a property/parameter is not required and you can not find information for it, "
+                                    "exclude it completely DO NOT leave it blank. " + str(k), [field_base])
 
     system_message = """You are a careful data analyst validating information extraction results.
 Your task is to verify that all extracted DATA VALUES are justified by the source material.
@@ -760,9 +910,14 @@ by the source material alone.""",
                     "reason": {
                         "type": "string",
                         "description": "Detailed explanation of validation result, especially if invalid"
+                    },
+                    "problem_fields": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of field names (without _value/_source_quote suffix) that have validation issues. Empty if valid=true."
                     }
                 },
-                "required": ["valid", "reason"],
+                "required": ["valid", "reason", "problem_fields"],
                 "additionalProperties": False
             }
         }
@@ -791,14 +946,34 @@ by the source material alone.""",
                     if call["name"] == "check_extracted_data":
                         if call["parameters"]["valid"]:
                             print("Data extraction validated successfully")
+                            if return_problem_fields:
+                                return (None, [])
                             return None
                         else:
-                            return f"Data extraction failed validation: {call['parameters']['reason']}"
+                            problem_fields = call["parameters"].get("problem_fields", [])
+                            return make_return(f"Data extraction failed validation: {call['parameters']['reason']}", problem_fields)
         retry += 1
-    return "Data extraction validation failed to complete"
+    return make_return("Data extraction validation failed to complete")
 
 
-async def extract_data(tool, corpus, retries=5):
+async def extract_data(tool, corpus, retries=4, mode=ExtractionMode.FOCUSED, inappropriate_exit_threshold=2):
+    """
+    Extract data from a corpus using the provided tool.
+    
+    Args:
+        tool: The extraction tool schema
+        corpus: The source text to extract from
+        retries: Number of retry attempts
+        mode: ExtractionMode controlling strictness:
+              - EXPLORATORY: Lenient, removes problem fields on last retry, no early exit
+              - FOCUSED: Default balanced mode with convergence detection
+              - RIGID: Strict mode (all fields required in schema)
+        inappropriate_exit_threshold: Number of consecutive 'totally_inappropriate_extraction' 
+                                     signals before early exit (only in FOCUSED/RIGID modes)
+    
+    Returns:
+        dict: Extracted data or {"failed_extraction": reason}
+    """
 
     system_message = """You are a careful data analyst. Dutifully find the data in the provided research paper.
 
@@ -859,6 +1034,12 @@ IMPORTANT INSTRUCTIONS FOR DATA EXTRACTION:
    When conflicts exist, extract the most reliable source (typically Tables > Abstract > Text) 
    and document the discrepancy.
 
+6. TOTALLY INAPPROPRIATE EXTRACTION:
+   If this paper is FUNDAMENTALLY inappropriate for this extraction (completely different topic, 
+   not a research study, contains NONE of the requested data types), fill in the 
+   'totally_inappropriate_extraction' field explaining why. This will end the extraction early.
+   Use this ONLY for fundamental mismatches, NOT for difficult or partial extractions.
+
 DO NOT provide derivation as a string - it must be a structured object as shown above."""
 
     user_message = "Extract the requested data using the extract_data tool:\n\n" + corpus + "\n"
@@ -879,6 +1060,15 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
 
     retry = 0
     output_dictionary = None
+    explanation = None
+    
+    # Track attempts and feedback for convergence detection
+    attempts = []
+    feedbacks = []
+    inappropriate_count = 0
+    convergence_retry_used = False
+    last_problem_fields = []
+    
     while not output_dictionary and retry < retries:
         if retry > 0:
             print("Retrying...")
@@ -889,9 +1079,41 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
                 for call in valid_calls:
                     if call["name"] == tool["function"]["name"]:
                         output_dictionary = call["parameters"]
-                        check = await reflect_on_data_extraction(output_dictionary, corpus)
+                        
+                        # Check for totally_inappropriate_extraction (FOCUSED/RIGID modes only)
+                        inappropriate_msg = output_dictionary.get("totally_inappropriate_extraction", "")
+                        if inappropriate_msg and mode != ExtractionMode.EXPLORATORY:
+                            inappropriate_count += 1
+                            print(f"Inappropriate extraction signal ({inappropriate_count}/{inappropriate_exit_threshold}): {inappropriate_msg[:100]}...")
+                            if inappropriate_count >= inappropriate_exit_threshold:
+                                # Early exit - paper is not appropriate for this extraction
+                                return {"failed_extraction": f"Paper inappropriate for extraction: {inappropriate_msg}"}
+                        else:
+                            inappropriate_count = 0  # Reset if extraction proceeds normally
+                        
+                        # Track this attempt
+                        attempts.append(output_dictionary.copy())
+                        
+                        # Validate - in EXPLORATORY mode on last retry, get problem field names
+                        is_last_retry = (retry + 1 >= retries)
+                        use_field_tracking = (mode == ExtractionMode.EXPLORATORY and is_last_retry)
+                        
+                        check_result = await reflect_on_data_extraction(
+                            output_dictionary, corpus, 
+                            return_problem_fields=use_field_tracking
+                        )
+                        
+                        # Handle return format based on mode
+                        if use_field_tracking:
+                            check, problem_fields = check_result
+                            last_problem_fields = problem_fields
+                        else:
+                            check = check_result
+                        
+                        feedbacks.append(check if check else "Success")
+                        
                         if check is not None:
-                            if retry + 1 >= retries and not check.startswith("The value of '"):
+                            if is_last_retry and not check.startswith("The value of '"):
                                 print("Data extraction failed (last):", check)
                                 new_message = {
                                     "role": "system",
@@ -912,12 +1134,24 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
                                     justification = chat_response.choices[0].message.content
                                     check = await reflect_on_data_extraction(output_dictionary, corpus, justification=justification)
                                     if check is not None:
-                                        explanation = check + "\n\nLast attempt:\n\n" + str(output_dictionary)
-                                        output_dictionary = None
+                                        # EXPLORATORY mode: remove problem fields and return partial data
+                                        if mode == ExtractionMode.EXPLORATORY and last_problem_fields:
+                                            print(f"Exploratory mode: removing problem fields {last_problem_fields}")
+                                            output_dictionary = _remove_problem_fields(output_dictionary, last_problem_fields)
+                                            # Continue to success path
+                                        else:
+                                            explanation = check + "\n\nLast attempt:\n\n" + str(output_dictionary)
+                                            output_dictionary = None
                                     else:
                                         print("Data extraction successful at last attempt")
-                            elif retry + 1 >= retries:
-                                explanation = check
+                            elif is_last_retry:
+                                # EXPLORATORY mode: remove problem fields and return partial data
+                                if mode == ExtractionMode.EXPLORATORY and last_problem_fields:
+                                    print(f"Exploratory mode: removing problem fields {last_problem_fields}")
+                                    output_dictionary = _remove_problem_fields(output_dictionary, last_problem_fields)
+                                    # Continue to success path
+                                else:
+                                    explanation = check
                             else:
                                 print("Data extraction failed:", check, "Retrying...")
                                 new_message = {
@@ -932,13 +1166,186 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
         else:
             print("No tool calls used")
         retry += 1
+        
+        # Check for convergence after normal retries exhausted (FOCUSED/RIGID modes only)
+        if retry >= retries and output_dictionary is None and not convergence_retry_used:
+            if mode != ExtractionMode.EXPLORATORY and len(attempts) >= 2:
+                print("Checking for convergence...")
+                convergence = await detect_convergence(attempts, feedbacks)
+                if convergence.get("converging", False):
+                    print(f"Convergence detected: {convergence['reason']} - granting retry extension")
+                    retries += retries  # Double the retries for one more round
+                    convergence_retry_used = True
+                    # Restore tools if they were removed during justification flow
+                    if "tools" not in arguments:
+                        arguments["tools"] = [tool]
+                        arguments["tool_choice"] = {"type": "function", "function": {"name": tool["function"]["name"]}}
+                else:
+                    print(f"Not converging: {convergence['reason']} - ending extraction")
+    
     if output_dictionary is not None:
         del output_dictionary["successfully_extracted"]
-        # Remove empty discrepancy notes (keep if populated)
+        # Remove metadata fields
         if "data_discrepancy_notes" in output_dictionary and not output_dictionary["data_discrepancy_notes"]:
             del output_dictionary["data_discrepancy_notes"]
+        if "totally_inappropriate_extraction" in output_dictionary:
+            del output_dictionary["totally_inappropriate_extraction"]
+        # Clean up null values that indicate "not reported"
+        output_dictionary = clean_missing_values(output_dictionary)
         return output_dictionary.copy()
     if explanation:
         return {"failed_extraction": explanation}
     return {}
+
+
+def _remove_problem_fields(extraction_dict, problem_fields):
+    """
+    Remove fields identified as problematic from the extraction dictionary.
+    
+    Args:
+        extraction_dict: The extraction dictionary
+        problem_fields: List of field base names (without _value/_source_quote suffix)
+        
+    Returns:
+        dict: Extraction with problem fields removed
+    """
+    if not problem_fields:
+        return extraction_dict
+    
+    cleaned = {}
+    for key, value in extraction_dict.items():
+        # Check if this key belongs to a problem field
+        is_problem = False
+        for problem_field in problem_fields:
+            if key.startswith(problem_field + "_") or key == problem_field:
+                is_problem = True
+                break
+        
+        if not is_problem:
+            cleaned[key] = value
+    
+    return cleaned
+
+
+def clean_missing_values(data):
+    """
+    Recursively remove null values from extraction results.
+    
+    - For dicts: removes keys where value is null/None
+    - For lists: processes each item recursively
+    - Preserves actual data (including 0 and False)
+    """
+    if isinstance(data, dict):
+        cleaned = {}
+        for key, value in data.items():
+            if value is None:
+                continue
+            elif isinstance(value, (dict, list)):
+                cleaned_value = clean_missing_values(value)
+                if cleaned_value or cleaned_value == 0 or cleaned_value is False:
+                    cleaned[key] = cleaned_value
+            else:
+                cleaned[key] = value
+        return cleaned
+    elif isinstance(data, list):
+        cleaned_list = []
+        for item in data:
+            if item is None:
+                continue
+            elif isinstance(item, (dict, list)):
+                cleaned_item = clean_missing_values(item)
+                if cleaned_item or cleaned_item == 0 or cleaned_item is False:
+                    cleaned_list.append(cleaned_item)
+            else:
+                cleaned_list.append(item)
+        return cleaned_list
+    else:
+        return data
+
+
+async def detect_convergence(attempts, feedbacks):
+    """
+    Analyze extraction attempts to determine if the process is converging or diverging.
+    
+    Args:
+        attempts: List of extraction dictionaries from each attempt
+        feedbacks: List of validation feedback strings from each attempt
+        
+    Returns:
+        dict: {"converging": bool, "reason": str}
+    """
+    if len(attempts) < 2:
+        return {"converging": False, "reason": "Not enough attempts to analyze"}
+    
+    system_message = """You are analyzing a data extraction process that has gone through multiple attempts.
+Each attempt has produced an extraction and received feedback.
+
+Your job is to determine if the extraction is CONVERGING (getting better, fixing issues) or DIVERGING (stuck, cycling, or getting worse).
+
+Signs of CONVERGENCE:
+- Error messages are changing (addressing previous issues)
+- Number of errors is decreasing
+- Extraction quality is improving
+- The model is making meaningful corrections
+
+Signs of DIVERGENCE:
+- Same errors appearing repeatedly
+- Errors cycling back and forth
+- Quality getting worse or staying the same
+- Model seems confused or stuck
+
+Return your assessment via the tool."""
+
+    # Format the attempts and feedbacks for analysis
+    analysis_content = "Here are the extraction attempts and their feedback:\n\n"
+    for i, (attempt, feedback) in enumerate(zip(attempts, feedbacks)):
+        analysis_content += f"=== ATTEMPT {i + 1} ===\n"
+        analysis_content += f"Extraction (summarized): {str(attempt)[:500]}...\n"
+        analysis_content += f"Feedback: {feedback}\n\n"
+    
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": analysis_content}
+    ]
+    
+    tools = [{
+        "type": "function",
+        "function": {
+            "strict": True,
+            "name": "assess_convergence",
+            "description": "Report whether the extraction process is converging or diverging",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "converging": {
+                        "type": "boolean",
+                        "description": "True if the extraction is improving/converging, False if stuck/diverging"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Brief explanation of the assessment"
+                    }
+                },
+                "required": ["converging", "reason"],
+                "additionalProperties": False
+            }
+        }
+    }]
+    
+    try:
+        response = await async_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            tools=tools,
+            tool_choice={"type": "function", "function": {"name": "assess_convergence"}}
+        )
+        
+        if response.choices[0].message.tool_calls:
+            call = response.choices[0].message.tool_calls[0]
+            result = json.loads(call.function.arguments)
+            return result
+    except Exception as e:
+        print(f"Convergence detection error: {e}")
+    
+    return {"converging": False, "reason": "Could not assess convergence"}
 

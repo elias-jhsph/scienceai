@@ -7,6 +7,7 @@ import io
 import re
 import asyncio
 import requests
+from difflib import SequenceMatcher
 
 import fitz
 from PIL import Image
@@ -18,6 +19,25 @@ from pprint import pprint as print
 
 from habanero import Crossref
 cr = Crossref()
+
+
+def normalize_title(title: str) -> str:
+    """Normalize a title for comparison by lowercasing and removing punctuation."""
+    title = title.lower()
+    # Remove common punctuation and extra whitespace
+    title = re.sub(r'[^\w\s]', ' ', title)
+    title = re.sub(r'\s+', ' ', title).strip()
+    return title
+
+
+def title_similarity(title1: str, title2: str) -> float:
+    """
+    Calculate similarity between two titles using SequenceMatcher.
+    Returns a value between 0 and 1, where 1 is an exact match.
+    """
+    norm1 = normalize_title(title1)
+    norm2 = normalize_title(title2)
+    return SequenceMatcher(None, norm1, norm2).ratio()
 
 
 async def summarize_paper(text):
@@ -507,7 +527,28 @@ async def confirm_doi(title, images):
     if not title_found:
         return False
 
-    system_message = ("Are these titles likely to be the same?")
+    # First, do a quick programmatic similarity check
+    sim_score = title_similarity(title, stored_title)
+    print(f"Title similarity score: {sim_score:.3f}")
+    
+    # If similarity is very low, reject without LLM call
+    if sim_score < 0.5:
+        print(f"Title similarity too low ({sim_score:.3f} < 0.5), rejecting match")
+        return False
+    
+    # If similarity is very high, accept without LLM call
+    if sim_score > 0.95:
+        print(f"Title similarity very high ({sim_score:.3f} > 0.95), accepting match")
+        return True
+
+    system_message = (
+        "Determine if these two titles refer to THE SAME academic paper (not just similar topics). "
+        "Papers can have slightly different title formatting but must be the EXACT same study. "
+        "Be STRICT: papers on similar topics but different populations, different methods, "
+        "or with different qualifiers (e.g., 'open fractures' vs general fractures, "
+        "'rural Indian population' vs other populations) are DIFFERENT papers. "
+        "Only return True if you are confident these are the SAME paper."
+    )
 
     tools = [
         {
@@ -515,13 +556,13 @@ async def confirm_doi(title, images):
             "function": {
                 "strict": True,
                 "name": "store_title_similar",
-                "description": "Store the title similarity in the database",
+                "description": "Store whether the titles refer to the same paper",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "titles_similar": {
                             "type": "boolean",
-                            "description": "Are the titles similar?",
+                            "description": "True ONLY if both titles refer to the exact same paper, not just similar topics",
                         },
                     },
                     "additionalProperties": False, "required": ["titles_similar"],
@@ -532,25 +573,25 @@ async def confirm_doi(title, images):
 
     arguments = {"messages": [{"role": "system", "content": system_message},
                               {"role": "user", "content": "Title 1: " + title + "\nTitle 2: " + stored_title}],
-                 "model": "gpt-4.1", "temperature": 0.2, "tools": tools,
+                 "model": "gpt-4.1", "temperature": 0.0, "tools": tools,
                  "tool_choice": {"type": "function", "function": {"name": "store_title_similar"}}}
 
-    print("Checking title similarity... "
+    print("Checking title similarity with LLM... "
           "Title 1: " + title + "\nTitle 2: " + stored_title)
 
     retry = 0
-    title_similarity = None
-    while title_similarity is None and retry < 3:
+    is_title_match = None
+    while is_title_match is None and retry < 3:
         chat_response = await client.chat.completions.create(**arguments)
         if chat_response.choices[0].message.tool_calls:
             valid_calls = await use_tools(chat_response, arguments, call_functions=False)
             if valid_calls:
                 for call in valid_calls:
                     if call["name"] == "store_title_similar":
-                        title_similarity = call["parameters"]["titles_similar"]
+                        is_title_match = call["parameters"]["titles_similar"]
         retry += 1
 
-    return title_similarity
+    return is_title_match
 
 
 async def extract_title_and_authors(images):
@@ -821,19 +862,43 @@ async def gather_metadata(pdf_path, pages):
             
             print(f"Searching Crossref for: {search_query}")
             try:
-                res = cr.works(query=search_query, limit=1)
+                # Fetch multiple results to find the best match
+                res = cr.works(query=search_query, limit=10)
                 if res['message']['items']:
-                    item = res['message']['items'][0]
-                    found_title = item['title'][0]
-                    print(f"Found potential match: {found_title}")
+                    # Score all results by title similarity
+                    scored_results = []
+                    for item in res['message']['items']:
+                        if 'title' in item and item['title']:
+                            found_title = item['title'][0]
+                            sim_score = title_similarity(title_extracted, found_title)
+                            scored_results.append((sim_score, found_title, item))
+                            print(f"  Candidate: '{found_title}' (similarity: {sim_score:.3f})")
                     
-                    # Verify if the found title matches our extracted title
-                    # If we searched with author, we can be more confident, but still good to verify title
-                    is_match = await confirm_doi(found_title, pages)
-                    if is_match:
-                        print("Title match confirmed!")
-                        crossref_data = {'message': item}
-                        found_doi = True # Treat it as found for metadata extraction purposes
+                    # Sort by similarity score (descending)
+                    scored_results.sort(key=lambda x: x[0], reverse=True)
+                    
+                    # Only consider results with reasonable similarity
+                    MIN_SIMILARITY_THRESHOLD = 0.6
+                    
+                    for sim_score, found_title, item in scored_results:
+                        if sim_score < MIN_SIMILARITY_THRESHOLD:
+                            print(f"Remaining candidates below threshold ({MIN_SIMILARITY_THRESHOLD}), stopping search")
+                            break
+                        
+                        print(f"Checking best match: '{found_title}' (similarity: {sim_score:.3f})")
+                        
+                        # Verify if the found title matches our extracted title
+                        is_match = await confirm_doi(found_title, pages)
+                        if is_match:
+                            print("Title match confirmed!")
+                            crossref_data = {'message': item}
+                            found_doi = True  # Treat it as found for metadata extraction purposes
+                            break
+                        else:
+                            print(f"Title match rejected: '{found_title}'")
+                    
+                    if not found_doi:
+                        print("No matching paper found in Crossref results")
             except Exception as e:
                 print(f"Error searching Crossref by title/author: {e}")
 

@@ -1,7 +1,14 @@
 <div id="chat" class="panel">
     <div id="chat-panel-messages" class="panel-messages">
+        {% set context_limit_hit = namespace(value=false) %}
+        {# Check if context percentage is at or above 100% #}
+        {% if context_percentage is defined and context_percentage >= 100 %}
+            {% set context_limit_hit.value = true %}
+        {% endif %}
         {% for message in messages %}
-        {% if message.role == 'user' %}
+        {% if message.content == 'CONTEXT_LIMIT_REACHED' %}
+            {% set context_limit_hit.value = true %}
+        {% elif message.role == 'user' %}
         <div class="chat-bubble-area-user">
             <div class="chat-bubble-user">
                 <span>{{ message.content | safe }}</span>
@@ -25,6 +32,33 @@
         </div>
         {% endif %}
         {% endfor %}
+        
+        {% if context_limit_hit.value %}
+        <div class="context-limit-banner">
+            <div class="context-limit-icon">⚠️</div>
+            <div class="context-limit-text">
+                <strong>Context Limit Reached</strong>
+                <p>I'm sorry, but you have reached the context limit of this Science Discussion. The conversation has grown too large for me to continue processing.</p>
+                <p>You can still:</p>
+                <ul>
+                    <li>📊 Extract and download your data from the Analysts panel</li>
+                    <li>📁 Browse your Analysis database</li>
+                    <li>💾 Save a checkpoint of your project</li>
+                </ul>
+                <p>To continue discussing, please <strong>create a new project</strong> with your papers.</p>
+                {% if can_compress is not defined or can_compress %}
+                <div class="context-compress-section">
+                    <hr style="margin: 1rem 0; border-color: #d97706;">
+                    <strong>🗜️ Want to try compressing the conversation?</strong>
+                    <p>This will summarize the first 50% of tool calls and responses to free up context space. <strong>Save a checkpoint first!</strong> This cannot be undone.</p>
+                    <button class="compress-context-btn" onclick="compressContext()">
+                        Compress Conversation
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
 
         <script>
             function toggleContent(element) {
@@ -40,6 +74,18 @@
             }
         </script>
     </div>
+    {% if context_limit_hit.value %}
+    <script>
+        // Context limit reached - hide all input elements
+        document.getElementById('typing-indicator').style.display = 'none';
+        document.getElementById('chat-input').style.display = 'none';
+        document.getElementById('send-message').style.display = 'none';
+        var progressContainer = document.getElementById('progress-wheel-container');
+        if (progressContainer) {
+            progressContainer.style.display = 'none';
+        }
+    </script>
+    {% elif messages %}
     {% set last = messages|last %}
     {% if last.status == 'Pending' %}
     <script>
@@ -57,6 +103,13 @@
         document.getElementById('chat-input').style.display = 'none';
         document.getElementById('send-message').style.display = 'none';
     </script>
+    {% else %}
+    <script>
+        document.getElementById('typing-indicator').style.display = 'none';
+        document.getElementById('chat-input').style.display = 'flex';
+        document.getElementById('send-message').style.display = 'flex';
+    </script>
+    {% endif %}
     {% else %}
     <script>
         document.getElementById('typing-indicator').style.display = 'none';
@@ -96,9 +149,34 @@
         var chat = document.getElementById('chat');
         chat.scrollTop = chat.scrollHeight;
 
-        document.getElementById('chat-heading').innerHTML = '&#x21bb; Science Discussion &#x21bb;';
-        setTimeout(() => {
-            document.getElementById('chat-heading').innerHTML = 'Science Discussion';
-        }, 500);
+        // Update heading text without destroying the context indicator
+        (function() {
+            var heading = document.getElementById('chat-heading');
+            var contextIndicator = document.getElementById('context-indicator');
+            if (heading) {
+                // Find the text node (first non-element child with text content)
+                var textNode = null;
+                for (var i = 0; i < heading.childNodes.length; i++) {
+                    if (heading.childNodes[i].nodeType === Node.TEXT_NODE && 
+                        heading.childNodes[i].textContent.trim().length > 0) {
+                        textNode = heading.childNodes[i];
+                        break;
+                    }
+                }
+                if (textNode) {
+                    textNode.textContent = ' ↻ Science Discussion ↻ ';
+                    setTimeout(function() {
+                        textNode.textContent = ' Science Discussion ';
+                    }, 500);
+                }
+            }
+        })();
+        
+        {% if context_percentage is defined %}
+        // Update context indicator with server-calculated percentage
+        if (typeof updateContext === 'function') {
+            updateContext({{ context_percentage }});
+        }
+        {% endif %}
     </script>
 </div>

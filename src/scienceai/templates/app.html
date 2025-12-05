@@ -28,6 +28,8 @@
 <body>
     <!-- WebSocket connection for progress updates -->
     <div hx-ext="ws" ws-connect="/progress" style="display: none;"></div>
+    <!-- WebSocket connection for context usage updates -->
+    <div hx-ext="ws" ws-connect="/context" style="display: none;"></div>
 
     <div id="container">
         <div class="resize-section glass-panel" id="left-section">
@@ -60,7 +62,11 @@
         </div>
         <div class="resize-section glass-panel" id="middle-section">
             <div class="resize-section-internal" id="middle-section-internal">
-                <h2 style="text-align: center;" xmlns="http://www.w3.org/1999/html" id="chat-heading">Science Discussion
+                <h2 style="text-align: center; position: relative;" xmlns="http://www.w3.org/1999/html" id="chat-heading">
+                    Science Discussion
+                    <span id="context-indicator" class="context-indicator" title="Context window usage">
+                        <span id="context-percentage">0%</span>
+                    </span>
                 </h2>
                 <div hx-ext="ws" ws-connect="/discussion">
                     <div id="chat" class="panel">

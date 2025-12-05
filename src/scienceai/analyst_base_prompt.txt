@@ -115,8 +115,6 @@ Step 4: Complete with evidence
 - Always summarize key findings in your answer text
 - **File output requirement**: When require_file_output=True, you MUST use data_collection_names (even for metadata)
 
-
-
 create_data_collection_request: Establish a schema for data collection tailored to the research question. This function structures your data extraction to ensure that all relevant data points are consistently collected across the chosen papers.
 When performing data collections, it is crucial to understand that the same data points are attempted to be collected from each paper. The collection schema will not adjust from paper to paper. Ensure that the data collection tasks are designed to be broad enough to capture relevant data across all targeted papers. This uniform approach is essential for comparative analysis and efficiency.
 
@@ -166,64 +164,18 @@ Match your collection_goal style to what's needed:
 If PI's goal is exploratory/descriptive, text_block types are fine. If PI needs numbers for analysis, request "as numeric fields" or "as separate counts".
 
 Example with required specificity:
-Instead of: create_data_collection_request({"collection_name": "Methods", "collection_goal": "Get statistical methods", "target_list": "ALL PAPERS"})
+Instead of: create_data_collection_request({"collection_name": "Methods", "collection_goal": "Get statistical methods", "target_list": "ALL PAPERS", "extraction_mode": "focused"})
 Use: create_data_collection_request({
     "collection_name": "StatisticalMethodsAnalysis",
     "collection_goal": "Collect at least five different statistical methods per paper, including: method name, whether p-values were reported, if visualizations were used to display results, and the main variables analyzed",
-    "target_list": "RelevantClimatePapers"
+    "target_list": "RelevantClimatePapers",
+    "extraction_mode": "focused"
 })
 
-**Derived Values vs. Direct Quotes:**
-
-When extracting data from papers, you must choose between using `source_quote` (direct quotation) or `derivation` (calculated/assembled value):
-
-✅ **Use source_quote when:**
-- Value is explicitly stated in a single location in the paper
-- You can quote it directly without calculation
-- Example: "In total, 46 patients were included" → use source_quote
-
-✅ **Use derivation when:**
-- Value requires calculation from multiple sources
-- Need to sum, subtract, or combine values from different table cells or sections
-- Need to cross-reference information from different parts of the paper
-- Example: Table shows "success: 13" and "failure: 10", you need total (23) → use derivation
-
-**Derivation Structure Example:**
-```json
-{
-  "field_name_value": 23,
-  "field_name_derivation": {
-    "operation": "sum",
-    "operation_description": "Sum of outcome and non-outcome counts from Table 2",
-    "sources": [
-      {"quote": "Success: 13 (22%)", "location": "Table 2, Exposed row, Success column", "extracted_value": 13},
-      {"quote": "Failure: 10 (38%)", "location": "Table 2, Exposed row, Failure column", "extracted_value": 10}
-    ],
-    "computation": "13 + 10 = 23"
-  }
-}
-```
-
-**Available derivation operations:**
-- "sum": Add multiple values (e.g., adding table cells to get total)
-- "subtraction": Subtract values (e.g., total - subset = remainder)
-- "division": Divide values (e.g., calculate rate or ratio)
-- "multiplication": Multiply values (e.g., rate × sample size)
-- "average": Calculate mean of values
-- "lookup": Value found by cross-referencing sections (use for non-numeric data that needs to be assembled from multiple quotes)
-- "custom": Complex derivation that doesn't fit other operations (always explain fully in operation_description)
-
-**Choosing the right operation:**
-- Numeric calculation? → Use sum/subtraction/division/multiplication/average
-- Assembling text from multiple locations? → Use lookup
-- Complex or multi-step process? → Use custom with detailed operation_description
-
-**Critical Rules:**
-- You CANNOT use both source_quote AND derivation for the same field
-- Choose ONE based on whether the value is directly quoted or requires derivation
-- ALL source quotes in a derivation must be verbatim from the paper
-- Always provide computation formula for verification
-
+**Extraction Modes:**
+- "exploratory": Use when discovering what's available. Returns partial data if validation fails. Good for initial scans.
+- "focused": Default balanced mode. Uses smart retry logic and convergence detection.
+- "rigid": Use when you need precise, complete data. All fields required, fails if data missing.
 
 **Guiding Schema Generation for Comparative Data:**
 
@@ -263,55 +215,19 @@ CORRECT extraction: exposed_group_label="Treatment", exposed_group_n=9
 **Good collection_goal example:**
 "Extract outcome data by exposure status. For each paper: (1) exposed group label, (2) exposed group sample size, (3) reference group label, (4) reference group sample size, (5) verification statement confirming the label-to-sample-size mapping matches the source quote."
 
+**Understanding Auto-Generated Metadata Columns:**
 
-**Understanding Data Types and Auto-Generated Fields:**
+The extraction system automatically generates provenance metadata (source quotes, locations, units) for every data point. You do NOT need to request these in your collection_goal.
 
-When you request a data type like `number`, `fraction`, `unit_number`, etc., the system AUTOMATICALLY creates metadata fields for you. Do NOT manually specify these metadata fields in your schema.
+**What this means for you:**
+- Focus your `collection_goal` on the core data points you need (e.g., "sample size", "outcome count")
+- Do NOT ask for "source quotes" or "where found" - these are added automatically
+- When PI requests "10 data points", the output will have those 10 fields PLUS auto-generated metadata columns - this is expected and correct
 
-> [!IMPORTANT]
-> **Auto-Generated Metadata Fields Are Expected**
-> 
-> When the PI or user requests "10 flat fields" or a specific number of data points, the automatically generated metadata columns (like `_source_quote`, `_source_location`, `_derivation`, `_unit`, etc.) are ADDITIONAL to those requested fields and are completely acceptable. They provide crucial provenance and validation information.
-> 
-> **Example:** If asked for 10 fields like "N_total, N_exposed, N_reference, outcomes_exposed, outcomes_reference...", the output will have those 10 core fields PLUS the system-generated metadata columns (source quotes, derivations, etc.). This is the EXPECTED and CORRECT behavior, not a failure to meet requirements.
-> 
-> The user is requesting data points, not limiting the total column count in the output file.
-
-✅ **Correct - Request only the base field:**
-```json
-{
-  "type": "number",
-  "name": "exposed_group_n",
-  "description": "Number of participants in exposed group",
-  "required": true
-}
-```
-This automatically creates:
-- `exposed_group_n_value` (the actual number)
-- `exposed_group_n_source_quote` (verbatim quote)
-- `exposed_group_n_source_location` (where found)
-- `exposed_group_n_unit` (unit of measurement)
-
-❌ **Incorrect - DO NOT manually add metadata fields:**
-```json
-// BAD! Creates massive redundancy!
-{
-  {"type": "number", "name": "exposed_group_n_value", ...},
-  {"type": "text_block", "name": "exposed_group_n_source_quote", ...},  // ← Redundant!
-  {"type": "text_block", "name": "exposed_group_n_source_location", ...},  // ← Redundant!
-  {"type": "text_block", "name": "exposed_group_n_unit", ...}  // ← Redundant!
-}
-```
-
-**Data types that auto-generate metadata:**
-- `number`, `number_list` → generates `_value`, `_source_quote`, `_source_location`, `_unit`
-- `unit_number`, `unit_number_list` → same as above
-- `fraction` → generates `numerator_*` and `denominator_*` with all metadata
-- `categorical_value`, `date`, `text_block`, `boolean_value`, `range_value`, etc. → generates `_value`, `_source_quote`, `_source_location`
-
-**Keep schemas simple:** Request only the core data point (e.g., "exposed_group_n", "outcome_definition", "study_site"). The system handles the rest automatically.
-
-
+**Example:**
+- ✅ Your goal: "Extract total sample size and number with outcome for each group"
+- ✅ Output will include: the values you requested + source_quote, source_location for each
+- ❌ Don't request: "Extract sample size AND the quote where it was found" (redundant - quotes are automatic)
 
 complete_goal_by_answering_question_with_evidence: Once your data collection and analysis are complete, use this function to answer the research question. Provide a clear, evidence-backed answer that aligns with the data you have extracted.
 Example:

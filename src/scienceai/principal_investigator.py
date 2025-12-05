@@ -1,14 +1,17 @@
 from datetime import datetime
 from scienceai.analyst import Analyst
 from .database_manager import DatabaseManager
-from .llm import client, use_tools_sync as use_tools
+from .llm import client, use_tools_sync as use_tools, enc
 from .reasoning import add_reasoning_to_context
+from .bundle_validator import validate_bundle, validate_bundle_tool_schema
+import openai
 import os
 import io
 import contextlib
 import traceback
 import sys
 import shutil
+import json
 from time import sleep
 
 
@@ -32,7 +35,8 @@ class PrincipalInvestigator:
             "reflect_on_delegations": self.reflect_on_delegations,
             "create_arbitrary_csv": self.create_arbitrary_csv,
             "get_analyst_data_link": self.get_analyst_data_link,
-            "view_image": self.view_image
+            "view_image": self.view_image,
+            "validate_analytic_bundle": self.validate_analytic_bundle
         }
         self.tools = [
             self.delegate_research_schema(), 
@@ -40,7 +44,8 @@ class PrincipalInvestigator:
             self.create_arbitrary_csv(None, None, return_tool=True),
             self.get_analyst_data_link(None, None, return_tool=True),
             self.run_python_code(None, return_tool=True),
-            self.view_image(None, return_tool=True)
+            self.view_image(None, return_tool=True),
+            validate_bundle_tool_schema()
         ]
         self.tool_callables["run_python_code"] = self.run_python_code
         self.system_message = system_message
@@ -50,9 +55,16 @@ class PrincipalInvestigator:
         first_message = ("Hello, I am ScienceAI. I first need to make sure all your papers are loaded into the system "
                          "before I can help you. I will let you know when I am ready to answer your questions. "
                          "This may take a long time if you uploaded many papers.")
-        second_message = "All papers have been loaded into the system."
-        defaults = [first_message, second_message]
+        second_message_base = "All papers have been loaded into the system."
+        # For matching old messages without paper count
+        defaults = [first_message, second_message_base]
         self.db.remove_old_default_messages(defaults)
+        
+        def get_second_message_with_count():
+            """Get the second message with paper count included."""
+            paper_count = len(self.db.get_database_papers())
+            return f"All {paper_count} papers have been loaded into the system."
+        
         if len(chat_db) > 0:
             last_chat = chat_db[-1]
             if last_chat["content"] == first_message:
@@ -61,11 +73,11 @@ class PrincipalInvestigator:
                     self.db.ingest_papers()
                     await self.db.process_all_papers()
                     self.db.update_last_chat("Processed")
-                    second = {"content": second_message, "role": "system", "status": "Pending",
+                    second = {"content": get_second_message_with_count(), "role": "system", "status": "Pending",
                               "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')}
                     self.db.add_chat(second)
                     self.db.update_last_chat("Processed")
-            elif last_chat["content"] == second_message:
+            elif last_chat["content"] == second_message_base or last_chat["content"].startswith("All ") and "papers have been loaded" in last_chat["content"]:
                 self.db.update_last_chat("Processed")
             else:
                 if last_chat["status"] == "Pending":
@@ -82,7 +94,7 @@ class PrincipalInvestigator:
                 self.db.ingest_papers()
                 await self.db.process_all_papers()
                 self.db.update_last_chat("Processed")
-                second = {"content": second_message, "role": "system", "status": "Pending",
+                second = {"content": get_second_message_with_count(), "role": "system", "status": "Pending",
                           "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z')}
                 self.db.add_chat(second)
                 self.db.update_last_chat("Processed")
@@ -460,6 +472,40 @@ class PrincipalInvestigator:
             return result
         return "Delegation reflected upon."
 
+    def validate_analytic_bundle(self, zip_path):
+        """
+        Validate an analytic bundle before delivery.
+        
+        Runs an AI agent that checks for:
+        - Failed extractions that aren't properly documented
+        - Outcome directionality issues (inverted outcomes)
+        - Data dictionary completeness
+        - Code errors
+        - README completeness
+        - Image/figure quality
+        
+        Args:
+            zip_path: Path to the bundle zip file
+            
+        Returns:
+            Detailed validation feedback with pass/fail status
+        """
+        # Try to find the zip file - check both the given path and pi_generated
+        if os.path.exists(zip_path):
+            resolved_path = zip_path
+        else:
+            # Try pi_generated folder
+            workspace_dir = os.path.join(self.db.project_path, "pi_generated")
+            pi_generated_path = os.path.join(workspace_dir, zip_path)
+            if os.path.exists(pi_generated_path):
+                resolved_path = pi_generated_path
+            else:
+                # Neither exists - let validate_bundle handle the error
+                resolved_path = zip_path
+        
+        # validate_bundle now returns a string directly (agent-based)
+        return validate_bundle(resolved_path)
+
     def tool_callback(self, response, function_name=None):
         self.messages.append(response)
         self.db.update_last_chat("Processed")
@@ -471,6 +517,29 @@ class PrincipalInvestigator:
     def tool_error_callback(response):
         from pprint import pprint as pp
         pp(response)
+
+    def _calculate_and_emit_context(self, messages):
+        """Calculate token count for messages and emit context usage update."""
+        try:
+            # Calculate tokens for all messages
+            total_tokens = 0
+            for msg in messages:
+                content = msg.get("content", "")
+                if content:
+                    total_tokens += len(enc.encode(str(content)))
+                # Account for tool calls if present
+                if msg.get("tool_calls"):
+                    total_tokens += len(enc.encode(json.dumps(msg.get("tool_calls"))))
+            
+            # Add overhead for message structure (roughly 4 tokens per message)
+            total_tokens += len(messages) * 4
+            
+            # Emit context update
+            from .__main__ import emit_context
+            emit_context(total_tokens)
+        except Exception as e:
+            # Don't let context tracking break the main flow
+            pass
 
     async def process_message(self, content, role, status, time, store_message=True):
         if status != "Pending":
@@ -489,9 +558,35 @@ class PrincipalInvestigator:
             no_final_content = True
             loop_iteration += 1
             called_tools = False
-            temp_messages = [{"content": self.system_message, "role": "system"}] + self.db.get_database_chat()
+            # Get chat history, filtering out internal messages (like compression requests)
+            chat_history = [m for m in self.db.get_database_chat() if not m.get("internal")]
+            temp_messages = [{"content": self.system_message, "role": "system"}] + chat_history
+            
+            # Calculate and emit context usage
+            self._calculate_and_emit_context(temp_messages)
+            
             arguments = {"messages": temp_messages, "model": "gpt-5.1", 'reasoning_effort': 'high', "tools": self.tools, "parallel_tool_calls": False}
-            chat_response = client.chat.completions.create(**arguments)
+            
+            # Try to make API call, catch context limit errors
+            try:
+                chat_response = client.chat.completions.create(**arguments)
+            except openai.BadRequestError as e:
+                error_str = str(e)
+                # Check for context length errors
+                if 'maximum context length' in error_str.lower():
+                    # Add a special message that the frontend will detect
+                    context_limit_message = {
+                        "content": "CONTEXT_LIMIT_REACHED",
+                        "role": "system",
+                        "status": "Processed",
+                        "time": datetime.now().strftime('%B %d, %Y %I:%M:%S %p %Z'),
+                        "context_limit_exceeded": True
+                    }
+                    self.db.add_chat(context_limit_message)
+                    self.db.update_last_chat("Processed")
+                    return  # Exit processing
+                else:
+                    raise
 
             if chat_response.choices[0].message.tool_calls:
                 called_tools = True

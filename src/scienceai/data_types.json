@@ -1624,35 +1624,35 @@
       },
       "mean": {
         "type": "number",
-        "description": "Mean value for NAME in UNIT (use -999 if not reported, use median instead)."
+        "description": "Mean value for NAME in UNIT (null if not reported)."
       },
       "sd": {
         "type": "number",
-        "description": "Standard deviation for NAME in UNIT (use -999 if not reported)."
+        "description": "Standard deviation for NAME in UNIT (null if not reported)."
       },
       "se": {
         "type": "number",
-        "description": "Standard error for NAME in UNIT (use -999 if not reported)."
+        "description": "Standard error for NAME in UNIT (null if not reported)."
       },
       "median": {
         "type": "number",
-        "description": "Median value for NAME in UNIT (use -999 if not reported, use mean instead)."
+        "description": "Median value for NAME in UNIT (null if not reported)."
       },
       "q1": {
         "type": "number",
-        "description": "First quartile/25th percentile for NAME in UNIT (use -999 if not reported)."
+        "description": "First quartile/25th percentile for NAME in UNIT (null if not reported)."
       },
       "q3": {
         "type": "number",
-        "description": "Third quartile/75th percentile for NAME in UNIT (use -999 if not reported)."
+        "description": "Third quartile/75th percentile for NAME in UNIT (null if not reported)."
       },
       "min": {
         "type": "number",
-        "description": "Minimum value for NAME in UNIT (use -999 if not reported)."
+        "description": "Minimum value for NAME in UNIT (null if not reported)."
       },
       "max": {
         "type": "number",
-        "description": "Maximum value for NAME in UNIT (use -999 if not reported)."
+        "description": "Maximum value for NAME in UNIT (null if not reported)."
       }
     }
   },
@@ -1720,35 +1720,35 @@
         },
         "mean": {
           "type": "number",
-          "description": "Mean value (use -999 if not reported)"
+          "description": "Mean value (null if not reported)"
         },
         "sd": {
           "type": "number",
-          "description": "Standard deviation (use -999 if not reported)"
+          "description": "Standard deviation (null if not reported)"
         },
         "se": {
           "type": "number",
-          "description": "Standard error (use -999 if not reported)"
+          "description": "Standard error (null if not reported)"
         },
         "median": {
           "type": "number",
-          "description": "Median (use -999 if not reported)"
+          "description": "Median (null if not reported)"
         },
         "q1": {
           "type": "number",
-          "description": "First quartile (use -999 if not reported)"
+          "description": "First quartile (null if not reported)"
         },
         "q3": {
           "type": "number",
-          "description": "Third quartile (use -999 if not reported)"
+          "description": "Third quartile (null if not reported)"
         },
         "min": {
           "type": "number",
-          "description": "Minimum (use -999 if not reported)"
+          "description": "Minimum (null if not reported)"
         },
         "max": {
           "type": "number",
-          "description": "Maximum (use -999 if not reported)"
+          "description": "Maximum (null if not reported)"
         }
       }
     }
@@ -1823,7 +1823,7 @@
       },
       "t_statistic": {
         "type": "number",
-        "description": "T-statistic for NAME (use -999 if not reported)."
+        "description": "T-statistic for NAME (null if not reported)."
       },
       "p_value": {
         "type": "number",
@@ -1907,7 +1907,7 @@
         },
         "t_statistic": {
           "type": "number",
-          "description": "T-statistic (use -999 if not reported)"
+          "description": "T-statistic (null if not reported)"
         },
         "p_value": {
           "type": "number",
@@ -1974,15 +1974,15 @@
       },
       "df": {
         "type": "number",
-        "description": "Degrees of freedom for NAME (use -999 if not applicable or not reported)."
+        "description": "Degrees of freedom for NAME (null if not applicable or not reported)."
       },
       "df_numerator": {
         "type": "number",
-        "description": "Numerator df for F-tests (use -999 if not applicable)."
+        "description": "Numerator df for F-tests (null if not applicable)."
       },
       "df_denominator": {
         "type": "number",
-        "description": "Denominator df for F-tests (use -999 if not applicable)."
+        "description": "Denominator df for F-tests (null if not applicable)."
       },
       "p_value": {
         "type": "number",
@@ -2290,7 +2290,7 @@
       },
       "median_survival": {
         "type": "number",
-        "description": "Median survival time in TIME_UNIT for NAME (use -999 if not reached or not reported)."
+        "description": "Median survival time in TIME_UNIT for NAME (null if not reached or not reported)."
       },
       "median_survival_ci_lower": {
         "type": "number",
@@ -2310,7 +2310,7 @@
       },
       "log_rank_p": {
         "type": "number",
-        "description": "Log-rank test p-value for NAME comparison (use -999 if not applicable)."
+        "description": "Log-rank test p-value for NAME comparison (null if not applicable)."
       }
     }
   }
