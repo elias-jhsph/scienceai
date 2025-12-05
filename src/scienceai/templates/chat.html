@@ -32,7 +32,7 @@
         </div>
         {% endif %}
         {% endfor %}
-        
+
         {% if context_limit_hit.value %}
         <div class="context-limit-banner">
             <div class="context-limit-icon">⚠️</div>
@@ -157,7 +157,7 @@
                 // Find the text node (first non-element child with text content)
                 var textNode = null;
                 for (var i = 0; i < heading.childNodes.length; i++) {
-                    if (heading.childNodes[i].nodeType === Node.TEXT_NODE && 
+                    if (heading.childNodes[i].nodeType === Node.TEXT_NODE &&
                         heading.childNodes[i].textContent.trim().length > 0) {
                         textNode = heading.childNodes[i];
                         break;
@@ -171,7 +171,7 @@
                 }
             }
         })();
-        
+
         {% if context_percentage is defined %}
         // Update context indicator with server-calculated percentage
         if (typeof updateContext === 'function') {

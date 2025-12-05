@@ -1,0 +1,81 @@
+# Pre-commit hooks for ScienceAI
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: debug-statements
+
+  # Ruff - Fast Python linter and formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      # Run the linter
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+      # Run the formatter
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  # Type checking with mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - types-Flask
+          - pandas-stubs
+        args: [--ignore-missing-imports]
+        # Only check files that have been modified
+        pass_filenames: true
+        # Don't run on test files
+        exclude: ^tests/
+
+  # Check for security issues
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.6
+    hooks:
+      - id: bandit
+        args: ["-c", "pyproject.toml"]
+        additional_dependencies: ["bandit[toml]"]
+        exclude: ^tests/
+
+  # Local hooks for long-running verification
+  - repo: local
+    hooks:
+      # - id: verify-interface
+      #   name: Verify Interface (Manual)
+      #   entry: python3 tests/test_interface_manual.py
+      #   language: system
+      #   pass_filenames: false
+      #   always_run: true
+
+      - id: verify-error-handling
+        name: Verify Error Handling
+        entry: python3 tests/test_error_handling_verification.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: verify-load-data
+        name: Verify Load Data
+        entry: python3 tests/test_load_data_verification.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+# Configuration for specific hooks
+default_language_version:
+  python: python3.11

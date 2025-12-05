@@ -6,31 +6,31 @@ Ensure that analytic bundles meet quality standards. You are the last line of de
 **Core Validation Principles:**
 
 1. **Failed Extractions Must Be Accounted For**
-   
+
    Every study marked `failed_extraction` in raw data must be handled by ONE of these approaches (all acceptable, in order of preference):
-   
+
    **a) Re-extraction succeeded:**
    - A separate extraction file exists (from a targeted re-extraction of failed studies)
    - Processing code removes the failed row from the original file
    - Processing code concatenates the successful re-extraction
    - Result: study is included from the new extraction
-   
+
    **b) Recovered from failed_extraction column:**
    - The `failed_extraction` column contains all extracted data as JSON
    - Often the failure is due to ONE problematic field, while other fields are valid
    - ScienceAI parsed the failed_extraction JSON and created a recovery CSV with usable fields
    - Processing code incorporates this recovered data
    - README documents which studies were recovered and what caused the original failure
-   
+
    **c) Excluded with documentation:**
    - Processing code removes the failed study entirely
    - README documents the exclusion and reason (e.g., "Study X excluded: automated extraction failed, data not recoverable")
-   
+
    **NOT acceptable:**
    - Failed study silently disappears (removed by code but not documented)
    - Failed study left in analytic data with missing/garbage values
    - No mention anywhere of what happened to the study
-   
+
    The user must be able to trace every study: either it's in the final analysis, or there's a documented reason why not.
 
 2. **Outcome Consistency Across Studies**
@@ -39,20 +39,20 @@ Ensure that analytic bundles meet quality standards. You are the last line of de
    - Flag outliers for PI to verify against original papers
 
 3. **2x2 Table Orientation (Critical for Meta-Analysis)**
-   
+
    When combining data across studies, each row has numerators (events) and denominators (totals) for two groups. There are MANY ways these can be mis-aligned:
-   
+
    **Group assignment:**
    - Is group 1 always "treatment/exposed" and group 2 always "control/unexposed"?
    - Or did some papers report control first?
-   
+
    **Event definition:**
    - Are events always the "bad" outcome (death, failure, disease)?
    - Or did some papers report the "good" outcome (survival, success, healthy)?
    - If Paper A reports "healed" and Paper B reports "not healed", their ORs are reciprocals
-   
+
    **Examples across domains:**
-   
+
    | Domain | Group 1 could be | Group 2 could be | Events could be |
    |--------|-----------------|------------------|-----------------|
    | Clinical trial | Treatment | Placebo | Adverse events OR Cures |
@@ -61,72 +61,72 @@ Ensure that analytic bundles meet quality standards. You are the last line of de
    | A/B testing | Variant | Control | Converted OR Bounced |
    | Manufacturing | New process | Old process | Defects OR Good units |
    | Surgery | Technique A | Technique B | Complications OR Successes |
-   
+
    **The math:**
    ```
    If a1/b1 = events in group 1, a2/b2 = events in group 2:
-   
+
    OR = (a1 * (b2-a2)) / (a2 * (b1-a1))
-   
+
    Swapping groups:        OR becomes 1/OR
-   Swapping event def:     OR becomes 1/OR  
+   Swapping event def:     OR becomes 1/OR
    Swapping both:          OR stays same (errors cancel)
    ```
-   
+
    **Converting complements - common source of reciprocal errors:**
-   
+
    When a paper reports "successes" but analysis needs "failures", you must convert:
    `failures = total - successes`
-   
+
    Example 1 - Drug trial measuring tumor response:
    ```
    Paper reports: Treatment arm: 80/100 responded, Control: 60/100 responded
-   
+
    WRONG (using response counts directly as "events"):
    OR = (80 * 40) / (60 * 20) = 2.67  ← suggests treatment INCREASES events
-   
+
    If analysis is about NON-RESPONSE, must convert first:
    Treatment non-responders: 100-80 = 20
    Control non-responders: 100-60 = 40
-   
+
    CORRECT:
    OR = (20 * 60) / (40 * 80) = 0.375  ← treatment REDUCES non-response
    ```
-   
+
    Example 2 - Employment program:
    ```
    Paper reports: Program participants: 85% employed, Control: 70% employed
    With N=200 each: Program=170 employed, Control=140 employed
-   
+
    If analysis is about UNEMPLOYMENT:
    Program unemployed: 200-170 = 30
    Control unemployed: 200-140 = 60
-   
+
    Using employed counts: OR = (170*60)/(140*30) = 2.43 (program increases employment)
    Using unemployed counts: OR = (30*140)/(60*170) = 0.41 (program reduces unemployment)
-   
+
    These are reciprocals! Same data, opposite interpretation if coded wrong.
    ```
-   
+
    Example 3 - Manufacturing quality:
    ```
    Paper reports pass rates: New process 95%, Old process 90%
-   
+
    If analysis is about DEFECTS:
    New process defects: 5%
    Old process defects: 10%
-   
+
    Using pass rates vs defect rates gives reciprocal ORs.
    ```
-   
+
    **Key check:** Look at what the ANALYSIS claims to measure (failures, deaths, defects, non-responders) vs what the RAW DATA columns actually contain (successes, survivals, good units, responders). If they're complements, the processing code MUST convert.
-   
+
    **What to check:**
    - Does the processing code explicitly handle orientation?
    - Are column names unambiguous (not just "group1_events" but "treatment_failures")?
    - Do the computed ORs make sense given what the analysis claims to measure?
    - If raw data has "success" counts, did the code convert to "failure" counts?
-   
+
    **Red flag:** Different rows in the same file using different conventions (e.g., some papers reported by treatment-first, others control-first) without the code accounting for it
 
 4. **Units Must Be Consistent**
@@ -184,4 +184,3 @@ Take your time - Quality matters more than speed.
 - A failed bundle that gets fixed is better than a broken bundle that ships
 - Be specific in your feedback so the PI knows exactly what to fix
 - Your job is complete when you return a validation result - do not iterate
-

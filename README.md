@@ -1,5 +1,11 @@
 # ScienceAI
 
+[![PyPI version](https://badge.fury.io/py/scienceai-llm.svg)](https://badge.fury.io/py/scienceai-llm)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Tests](https://github.com/elias-jhsph/scienceai/actions/workflows/test.yml/badge.svg)](https://github.com/elias-jhsph/scienceai/actions/workflows/test.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+
 **An AI-Powered Research Assistant for Systematic Literature Analysis**
 
 ScienceAI is a Python application that transforms how researchers analyze scientific literature. Unlike a standard LLM chatbot, ScienceAI is specifically designed to handle complex, multi-paper research tasks through an intelligent agent-based architecture.
@@ -92,7 +98,7 @@ You can upload PDFs individually or as a zip folder during project creation.
 
 **Science Discussion Panel (Right Side)**: This is where you interact with the Principal Investigator (PI). The PI:
 - Understands complex research questions
-- Plans multi-step analysis strategies  
+- Plans multi-step analysis strategies
 - Creates and manages Analyst Agents to accomplish your goals
 - Presents synthesized findings with evidence
 
@@ -395,16 +401,16 @@ See LICENSE file for details.
 
 ## 🆘 Troubleshooting
 
-**Papers not processing?**  
+**Papers not processing?**
 Check that PDFs are valid and not password-protected.
 
-**API errors?**  
+**API errors?**
 Verify your OpenAI API key is valid and has available credits.
 
-**Analyst not completing?**  
+**Analyst not completing?**
 Check the chat panel for error messages—the PI will explain any issues.
 
-**Cannot download data?**  
+**Cannot download data?**
 Ensure analysts have completed their data collections before exporting.
 
 ---

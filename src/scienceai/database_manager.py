@@ -1,21 +1,22 @@
+import asyncio
+import hashlib
 import os
 import shutil
 import time
 from datetime import datetime
-import asyncio
-import hashlib
+
+import dictdatabase as DDB
 import pandas as pd
 from pandas import json_normalize
-import dictdatabase as DDB
 
 lock_files = []
 
 
 def sha256sum(filename):
     h = hashlib.sha256()
-    b = bytearray(128*1024)
+    b = bytearray(128 * 1024)
     mv = memoryview(b)
-    with open(filename, 'rb', buffering=0) as f:
+    with open(filename, "rb", buffering=0) as f:
         while n := f.readinto(mv):
             h.update(mv[:n])
     return h.hexdigest()
@@ -35,8 +36,16 @@ def get_projects(storage_path):
 
 # Paper Manager
 class DatabaseManager:
-    def __init__(self, input_pdf_directory, processor, project_name, storage_path=None, auto_prune=False,
-                 read_only_mode=False, lock_timeout=60):
+    def __init__(
+        self,
+        input_pdf_directory,
+        processor,
+        project_name,
+        storage_path=None,
+        auto_prune=False,
+        read_only_mode=False,
+        lock_timeout=60,
+    ):
         if read_only_mode:
             self.auto_prune = False
         else:
@@ -73,7 +82,8 @@ class DatabaseManager:
         self.project_name = project_name
         if not read_only_mode:
             self.__initialize_db__()
-    
+
+    @staticmethod
     def log_update(func):
         def wrapper(self, *args, **kwargs):
             if self.read_only_mode:
@@ -87,6 +97,7 @@ class DatabaseManager:
                     session.write()
             result = func(self, *args, **kwargs)
             return result
+
         return wrapper
 
     async def await_update(self, timeout=None):
@@ -94,21 +105,22 @@ class DatabaseManager:
         start = time.time()
         original_update_time = self.update_time
         while timeout is None or time.time() - start < timeout:
-            await asyncio.sleep(.3)
+            await asyncio.sleep(0.3)
             if not DDB.at("update_time").exists():
                 DDB.at("update_time").create({self.project_name: original_update_time})
                 update_time = original_update_time
             else:
                 update_time = DDB.at("update_time").read().get(self.project_name, "")
-            if len(update_time) > 11:
-                if update_time != original_update_time:
-                    self.update_time = update_time
-                    break
+            if len(update_time) > 11 and update_time != original_update_time:
+                self.update_time = update_time
+                break
 
     def update_update_time(self):
-        temp_update_time = DDB.at("update_time").read().get(self.project_name, "")
-        if len(temp_update_time) > 11:
-            self.update_time = temp_update_time
+        data = DDB.at("update_time").read()
+        if data:
+            temp_update_time = data.get(self.project_name, "")
+            if len(temp_update_time) > 11:
+                self.update_time = temp_update_time
 
     def get_update_time(self):
         self.update_update_time()
@@ -140,8 +152,8 @@ class DatabaseManager:
             last_message = current_messages[index:]
             last_content = [message["content"] for message in last_message]
             if last_content == default_messages:
-                with DDB.at("chat", key="messages").session() as (session, messages):
-                    messages = current_messages[:index]
+                with DDB.at("chat", key="messages").session() as (session, _messages):
+                    current_messages[:index]
                     session.write()
 
     @log_update
@@ -153,9 +165,9 @@ class DatabaseManager:
         stored_pdf_path = os.path.join(self.papers_pdf_path, filename)
         if not os.path.exists(stored_pdf_path):
             shutil.copy(pdf_path, stored_pdf_path)
-        if not DDB.at('papers').exists():
-            DDB.at('papers').create({})
-        with DDB.at('papers').session() as (session, papers):
+        if not DDB.at("papers").exists():
+            DDB.at("papers").create({})
+        with DDB.at("papers").session() as (session, papers):
             if paper_id not in papers:
                 papers[paper_id] = {"pdf_path": stored_pdf_path, "paper_id": paper_id}
             else:
@@ -167,28 +179,32 @@ class DatabaseManager:
         found_papers = []
         pdf_files = [f for f in os.listdir(self.input_pdf_directory) if f.endswith(".pdf")]
         total_papers = len(pdf_files)
-        
+
         # Emit initial progress
         try:
             from .__main__ import emit_progress
+
             emit_progress(0, total_papers, "Ingesting papers")
-        except:
+        except Exception:  # nosec
+            # Ignore errors during progress emission
             pass
-        
+
         for idx, file in enumerate(pdf_files, 1):
             pdf_path = os.path.join(self.input_pdf_directory, file)
             found_papers.append(self.ingest_paper(pdf_path))
-            
+
             # Emit progress after each paper
             try:
                 from .__main__ import emit_progress
+
                 emit_progress(idx, total_papers, "Ingesting papers")
-            except:
+            except Exception:  # nosec
+                # Ignore errors during progress emission
                 pass
-        
+
         if self.auto_prune and DDB.at("papers").exists():
             papers = DDB.at("papers").read()
-            prune_papers = [paper['paper_id'] for paper in papers if paper['paper_id'] not in found_papers]
+            prune_papers = [paper["paper_id"] for paper in papers if paper["paper_id"] not in found_papers]
             for paper_id in prune_papers:
                 self.prune_paper(paper_id)
         return found_papers
@@ -198,10 +214,10 @@ class DatabaseManager:
         if DDB.at("papers", key=paper_id).exists():
             with DDB.at("papers").session() as (session, papers):
                 paths = papers[paper_id]
-                if 'pdf_path' in paths and os.path.exists(paths['pdf_path']):
-                    os.remove(paths['pdf_path'])
-                if 'json_path' in paths and os.path.exists(paths['json_path']):
-                    os.remove(paths['json_path'])
+                if "pdf_path" in paths and os.path.exists(paths["pdf_path"]):
+                    os.remove(paths["pdf_path"])
+                if "json_path" in paths and os.path.exists(paths["json_path"]):
+                    os.remove(paths["json_path"])
                 del papers[paper_id]
                 session.write()
 
@@ -243,14 +259,15 @@ class DatabaseManager:
                 if dict_data["metadata"].get("created") and dict_data["metadata"]["created"].get("date-time"):
                     added["Date"] = dict_data["metadata"]["created"]["date-time"][:10]
                 if dict_data["metadata"].get("author"):
-                    added["Authors"] = dict_data["metadata"]["author"][0]["given"] + " " + dict_data["metadata"]["author"][0][
-                        "family"]
+                    added["Authors"] = (
+                        dict_data["metadata"]["author"][0]["given"] + " " + dict_data["metadata"]["author"][0]["family"]
+                    )
                 papers[paper_id].update(added)
             session.write()
         return True
 
     async def process_paper(self, paper_id, semaphore):
-        """ Processes the paper asynchronously with a semaphore """
+        """Processes the paper asynchronously with a semaphore"""
         async with semaphore:
             pdf_path = self.get_paper_pdf(paper_id)
             if not DDB.at(paper_id).exists():
@@ -264,35 +281,39 @@ class DatabaseManager:
                     self.update_paper(paper_id, {"status": "failed", "error": str(e)})
 
     async def process_all_papers(self):
-        """ Processes all the papers in parallel """
+        """Processes all the papers in parallel"""
         print("Processing all papers")
         paper_ids = list(DDB.at("papers").read().keys())
         total_papers = len(paper_ids)
-        
+
         # Track completed papers
         completed_count = [0]
-        
+
         # Emit initial progress
         try:
             from .__main__ import emit_progress
+
             emit_progress(0, total_papers, "Processing papers")
-        except:
+        except Exception:  # nosec
+            # Ignore errors during progress emission
             pass
-        
+
         # Limit concurrency to avoid hitting rate limits too hard
         # 5 concurrent papers * ~10 concurrent pages per paper = ~50 concurrent requests
-        semaphore = asyncio.Semaphore(5) 
-        
+        semaphore = asyncio.Semaphore(5)
+
         async def process_with_progress(paper_id):
             result = await self.process_paper(paper_id, semaphore)
             completed_count[0] += 1
             try:
                 from .__main__ import emit_progress
+
                 emit_progress(completed_count[0], total_papers, "Processing papers")
-            except:
+            except Exception:  # nosec
+                # Ignore errors during progress emission
                 pass
             return result
-        
+
         tasks = [process_with_progress(paper_id) for paper_id in paper_ids]
         await asyncio.gather(*tasks)
         return True
@@ -317,7 +338,9 @@ class DatabaseManager:
         return True
 
     @log_update
-    def create_analyst(self, name, goal, other={}):
+    def create_analyst(self, name, goal, other=None):
+        if other is None:
+            other = {}
         if not DDB.at("Analysts").exists():
             DDB.at("Analysts").create({})
         if not DDB.at(name).exists():
@@ -343,8 +366,10 @@ class DatabaseManager:
         return True
 
     @log_update
-    def add_analyst_tool_tracker(self, analyst_name, tool_name, tool_time, json_data={}):
-        tool_fullname = analyst_name+"_/"+tool_name + "_" + tool_time
+    def add_analyst_tool_tracker(self, analyst_name, tool_name, tool_time, json_data=None):
+        if json_data is None:
+            json_data = {}
+        tool_fullname = analyst_name + "_/" + tool_name + "_" + tool_time
         if not DDB.at(tool_fullname).exists():
             DDB.at(tool_fullname).create(json_data)
         else:
@@ -357,10 +382,11 @@ class DatabaseManager:
                 raise ValueError(f"Analyst {analyst_name} not found")
             if "tools" not in analysts[analyst_name]:
                 analysts[analyst_name]["tools"] = []
-            analysts[analyst_name]["tools"].append({"tool_name": tool_name, "json_path": tool_fullname + ".json", "hidden": True})
+            analysts[analyst_name]["tools"].append(
+                {"tool_name": tool_name, "json_path": tool_fullname + ".json", "hidden": True}
+            )
             session.write()
         return tool_fullname
-
 
     @log_update
     def create_pi_arbitrary_csv(self, csv_name, csv_str):
@@ -372,18 +398,16 @@ class DatabaseManager:
             f.write(csv_str)
         # then store a link to the csv in the database
         if not DDB.at("pi_arbitrary_csv").exists():
-            DDB.at("pi_arbitrary_csv").create({}) 
+            DDB.at("pi_arbitrary_csv").create({})
         with DDB.at("pi_arbitrary_csv").session() as (session, pi_arbitrary_csv):
             pi_arbitrary_csv[csv_name] = csv_path
             session.write()
         return True
 
-
     def get_pi_arbitrary_csv(self, csv_name):
         if not DDB.at("pi_arbitrary_csv", key=csv_name).exists():
             raise ValueError(f"CSV {csv_name} not found")
         return DDB.at("pi_arbitrary_csv", key=csv_name).read()
-
 
     @log_update
     def convert_analyst_tool_tracker(self, analyst_name, tool_name):
@@ -395,7 +419,7 @@ class DatabaseManager:
                 if tool["tool_name"] == tool_name:
                     data_path = tool["json_path"]
                     data = DDB.at(data_path.replace(".json", "")).read()
-                    
+
                     # Normalize data for CSV
                     # Handle both extraction results (with source_quote etc) and metadata results (flat key-value)
                     normalized_items = []
@@ -403,7 +427,7 @@ class DatabaseManager:
                         # Skip system keys (like _system_note)
                         if k.startswith("_"):
                             continue
-                            
+
                         item = {"id": k[:10]}
                         if isinstance(v, dict):
                             # Filter out error fields if present
@@ -417,14 +441,13 @@ class DatabaseManager:
                                     item[f"{field_key}_operation"] = field_val.get("operation", "")
                                     item[f"{field_key}_description"] = field_val.get("operation_description", "")
                                     item[f"{field_key}_computation"] = field_val.get("computation", "")
-                                    
+
                                     # Concatenate source quotes for readability
                                     sources = field_val.get("sources", [])
                                     if sources:
-                                        sources_text = " | ".join([
-                                            f"{s.get('location', '')}: {s.get('quote', '')}"
-                                            for s in sources
-                                        ])
+                                        sources_text = " | ".join(
+                                            [f"{s.get('location', '')}: {s.get('quote', '')}" for s in sources]
+                                        )
                                         item[f"{field_key}_sources"] = sources_text
                                     else:
                                         item[f"{field_key}_sources"] = ""
@@ -434,11 +457,11 @@ class DatabaseManager:
                             # Handle simple value case (unlikely but possible)
                             item["value"] = v
                         normalized_items.append(item)
-                        
+
                     flat_data = json_normalize(normalized_items)
-                    
+
                     # Auto-add paper_title column from metadata if 'id' column exists
-                    if 'id' in flat_data.columns:
+                    if "id" in flat_data.columns:
                         papers = DDB.at("papers").read()
                         # Create title lookup - match on beginning of paper ID (truncated in CSV)
                         title_map = {}
@@ -446,8 +469,8 @@ class DatabaseManager:
                             truncated_id = pid[:10]
                             title_map[truncated_id] = paper.get("Title", "")
                         # Insert paper_title as the second column (after id)
-                        flat_data.insert(1, 'paper_title', flat_data['id'].map(title_map))
-                    
+                        flat_data.insert(1, "paper_title", flat_data["id"].map(title_map))
+
                     csv_path = data_path.replace(".json", ".csv")
                     csv_folder = os.path.join(self.project_path, "csv_files")
                     if not os.path.exists(csv_folder):
@@ -463,9 +486,15 @@ class DatabaseManager:
 
     def combine_analyst_tool_trackers(self):
         if not DDB.at("Analysts").exists():
-            df = pd.DataFrame({"Notes": ["No Analysts have been created yet. After they are created, results of their"
-                                         " data extraction will be combined and accessible under the "
-                                         "'Extracted Data' tab."]})
+            df = pd.DataFrame(
+                {
+                    "Notes": [
+                        "No Analysts have been created yet. After they are created, results of their"
+                        " data extraction will be combined and accessible under the "
+                        "'Extracted Data' tab."
+                    ]
+                }
+            )
             df.to_csv(os.path.join(self.project_path, "merged_analyst_tools.csv"), index=False)
             return os.path.join(self.project_path, "merged_analyst_tools.csv")
         csv_paths = {}
@@ -476,8 +505,14 @@ class DatabaseManager:
                     if "csv_path" in tool:
                         csv_paths[tool["csv_path"]] = {"name": tool["tool_name"], "analyst": analyst_name}
         if not csv_paths:
-            df = pd.DataFrame({"Notes": ["No Analysts have extracted data yet. After they do, the results will be "
-                                         "combined and accessible under the 'Extracted Data' tab."]})
+            df = pd.DataFrame(
+                {
+                    "Notes": [
+                        "No Analysts have extracted data yet. After they do, the results will be "
+                        "combined and accessible under the 'Extracted Data' tab."
+                    ]
+                }
+            )
             df.to_csv(os.path.join(self.project_path, "merged_analyst_tools.csv"), index=False)
             return os.path.join(self.project_path, "merged_analyst_tools.csv")
 
@@ -485,7 +520,7 @@ class DatabaseManager:
         double_columns = {}
         triple_columns = []
         bad_paths = []
-        for csv in csv_paths.keys():
+        for csv in csv_paths:
             try:
                 df = pd.read_csv(csv)
             except Exception as e:
@@ -499,7 +534,7 @@ class DatabaseManager:
                     columns.append(col)
                 elif col in columns:
                     if col not in double_columns:
-                        double_columns[col+"_"+csv_paths[csv]["analyst"]] = col
+                        double_columns[col + "_" + csv_paths[csv]["analyst"]] = col
                     else:
                         triple_columns.append(col)
         double_columns = list(double_columns.values())
@@ -526,7 +561,7 @@ class DatabaseManager:
         papers = self.get_database_papers()
         papers = [{k: v for k, v in paper.items() if "_path" not in k} for paper in papers]
         papers = [{k if k != "paper_id" else "id": v for k, v in paper.items()} for paper in papers]
-        papers = [{k: (v[:10] if k == 'id' else v) for k, v in paper.items()} for paper in papers]
+        papers = [{k: (v[:10] if k == "id" else v) for k, v in paper.items()} for paper in papers]
 
         papers_df = pd.DataFrame(papers)
 
@@ -639,7 +674,7 @@ class DatabaseManager:
     def get_analyst_metadata(self, name):
         if not DDB.at("Analysts", key=name).exists():
             raise ValueError(f"Analyst {name} not found")
-        with DDB.at("Analysts").session() as (session, analysts):
+        with DDB.at("Analysts").session() as (_session, analysts):
             return analysts[name]
 
     def get_all_analysts(self):
@@ -647,14 +682,14 @@ class DatabaseManager:
             return []
         else:
             all = []
-            for name in DDB.at("Analysts").read().keys():
+            for name in DDB.at("Analysts").read():
                 temp = self.get_analyst_metadata(name).copy()
                 temp["name"] = name
                 all.append(temp)
             return all
 
     def get_all_papers(self, analyst=None, named_list=None):
-        if (named_list and not analyst):
+        if named_list and not analyst:
             raise ValueError("If named_list is provided, analyst must also be provided")
         papers = DDB.at("papers").read()
         if analyst and named_list:
@@ -664,7 +699,7 @@ class DatabaseManager:
 
     @log_update
     def remove_all_analyst_lists(self, analyst):
-        with DDB.at("papers").session() as (session, papers):
+        with DDB.at("papers").session() as (_session, papers):
             for paper_id in papers:
                 self.remove_paper_from_list(paper_id, analyst)
         return True
@@ -719,7 +754,7 @@ class DatabaseManager:
             if len(path_parts) == 3:
                 if not results:
                     return {}
-                return {os.path.basename(tool)[:-25]: {} for tool in results.keys()}
+                return {os.path.basename(tool)[:-25]: {} for tool in results}
             if len(path_parts) == 4:
                 for json_path, csv_path in results.items():
                     if os.path.basename(json_path)[:-25] == path_parts[3]:
@@ -741,7 +776,12 @@ class DatabaseManager:
         full = DDB.at("papers").read()
         if not full:
             return []
-        return [{**paper, **{"json_path": os.path.join(self.project_path, "scienceai_ddb", paper["paper_id"] + ".json")}} if "Title" in paper else paper for paper in full.values()]
+        return [
+            {**paper, **{"json_path": os.path.join(self.project_path, "scienceai_ddb", paper["paper_id"] + ".json")}}
+            if "Title" in paper
+            else paper
+            for paper in full.values()
+        ]
 
     def get_database_chat(self):
         full = DDB.at("chat", key="messages").read()
@@ -767,11 +807,10 @@ class DatabaseManager:
     def get_last_save(self, path=False):
         existing_save = None
         for project in os.listdir(self.storage_path):
-            if project.find(self.project_name+"_-checkpoint-_") > -1:
+            if project.find(self.project_name + "_-checkpoint-_") > -1:
                 existing_save = project
-        if path:
-            if existing_save:
-                return os.path.join(self.storage_path, existing_save)
+        if path and existing_save:
+            return os.path.join(self.storage_path, existing_save)
         return existing_save
 
     def save_database(self):

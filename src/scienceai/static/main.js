@@ -116,11 +116,11 @@ function hideProgress() {
     const container = document.getElementById('progress-wheel-container');
     const typingIndicator = document.getElementById('typing-indicator');
     const chatInput = document.getElementById('chat-input');
-    
+
     if (container) {
         container.style.display = 'none';
     }
-    
+
     // Only show typing indicator if chat input is hidden (meaning we're in pending state)
     if (typingIndicator && chatInput && chatInput.style.display === 'none') {
         typingIndicator.style.display = 'flex';
@@ -133,18 +133,18 @@ var globalCanCompress = true;  // Track whether compression is possible
 function updateContext(percentage, canCompress) {
     const indicator = document.getElementById('context-indicator');
     const percentageEl = document.getElementById('context-percentage');
-    
+
     // Update global can_compress state
     if (canCompress !== undefined) {
         globalCanCompress = canCompress;
     }
-    
+
     if (!indicator || !percentageEl) {
         return;
     }
-    
+
     percentageEl.textContent = percentage + '%';
-    
+
     // Update color based on percentage
     if (percentage >= 80) {
         indicator.classList.add('context-critical');
@@ -155,10 +155,10 @@ function updateContext(percentage, canCompress) {
     } else {
         indicator.classList.remove('context-warning', 'context-critical');
     }
-    
+
     // Show the indicator
     indicator.style.opacity = '1';
-    
+
     // If we hit 100%, show the context limit banner and hide input
     if (percentage >= 100) {
         showContextLimitBanner(globalCanCompress);
@@ -171,17 +171,17 @@ async function compressContext() {
         btn.disabled = true;
         btn.textContent = 'Compressing... Please wait';
     }
-    
+
     try {
         const response = await fetch('/compress_context', { method: 'POST' });
         const result = await response.json();
-        
+
         if (result.success) {
             // Update button to show we're waiting
             if (btn) {
                 btn.textContent = 'Processing... This may take a minute';
             }
-            
+
             // Wait for compression to complete (poll for changes or just wait)
             // The compression needs time to summarize each message with LLM
             // We'll wait and then reload - the websocket will also update if we're patient
@@ -195,13 +195,13 @@ async function compressContext() {
                 if (dynamicBanner) {
                     dynamicBanner.remove();
                 }
-                
+
                 // Show input elements again
                 const chatInput = document.getElementById('chat-input');
                 const sendButton = document.getElementById('send-message');
                 if (chatInput) chatInput.style.display = 'flex';
                 if (sendButton) sendButton.style.display = 'flex';
-                
+
                 // Force reload the chat
                 location.reload();
             }, 10000);  // Wait 10 seconds for compression to complete
@@ -223,27 +223,27 @@ async function compressContext() {
 
 function showContextLimitBanner(canCompress) {
     // Check if banner already exists (either dynamic or server-rendered)
-    if (document.getElementById('context-limit-banner-dynamic') || 
+    if (document.getElementById('context-limit-banner-dynamic') ||
         document.querySelector('.context-limit-banner')) {
         return;
     }
-    
+
     // Default to true if not specified
     if (canCompress === undefined) {
         canCompress = globalCanCompress;
     }
-    
+
     // Hide chat input elements
     const chatInput = document.getElementById('chat-input');
     const sendButton = document.getElementById('send-message');
     const typingIndicator = document.getElementById('typing-indicator');
     const progressContainer = document.getElementById('progress-wheel-container');
-    
+
     if (chatInput) chatInput.style.display = 'none';
     if (sendButton) sendButton.style.display = 'none';
     if (typingIndicator) typingIndicator.style.display = 'none';
     if (progressContainer) progressContainer.style.display = 'none';
-    
+
     // Build compress section HTML only if compression is possible
     const compressSection = canCompress ? `
             <div class="context-compress-section">
@@ -255,7 +255,7 @@ function showContextLimitBanner(canCompress) {
                 </button>
             </div>
     ` : '';
-    
+
     // Create and inject the banner
     const banner = document.createElement('div');
     banner.id = 'context-limit-banner-dynamic';
@@ -275,7 +275,7 @@ function showContextLimitBanner(canCompress) {
             ${compressSection}
         </div>
     `;
-    
+
     // Insert banner at the end of the chat messages
     const chatPanel = document.getElementById('chat-panel-messages');
     if (chatPanel) {

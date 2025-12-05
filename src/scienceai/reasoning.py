@@ -16,9 +16,12 @@ def add_reasoning_to_context(context):
         else:
             break
 
-    final_message = {"content": "Please help me consider the information so far in this chat. Is there any issues with "
-                                "the data? Any helpful calculations to consider? Please only respond in an additive "
-                                "way, no need to repeat information already provided.", "role": "assistant"}
+    final_message = {
+        "content": "Please help me consider the information so far in this chat. Is there any issues with "
+        "the data? Any helpful calculations to consider? Please only respond in an additive "
+        "way, no need to repeat information already provided.",
+        "role": "assistant",
+    }
 
     context.append(final_message)
     try:

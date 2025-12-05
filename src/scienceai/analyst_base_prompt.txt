@@ -38,7 +38,7 @@ get_paper_metadata: Query specific metadata fields for papers. Use this to acces
 Available fields: 'authors', 'journal', 'year', 'title', 'DOI', 'citation_count', 'publication_date', 'volume', 'issue', 'pages', 'publisher', 'URL', 'type', 'ISSN', 'language', 'reference_count'
 If you don't specify fields, you'll get the essential defaults: authors, journal, year, DOI, and citation_count.
 If you don't specify paper_ids or target_list, it queries ALL PAPERS by default.
-Examples: 
+Examples:
   - Specific papers: get_paper_metadata({"paper_ids": ["abc123def4", "xyz789ghi0"], "metadata_fields": ["authors", "journal", "year"]})
   - Named list: get_paper_metadata({"target_list": "RelevantClimatePapers", "metadata_fields": ["citation_count", "year"]})
   - All papers: get_paper_metadata({"metadata_fields": ["journal", "year"]})
@@ -209,7 +209,7 @@ CORRECT extraction: exposed_group_label="Treatment", exposed_group_n=9
 
 **To prevent this, your collection_goal should request:**
 1. Explicit group labels for BOTH groups
-2. Sample sizes (n) for BOTH groups  
+2. Sample sizes (n) for BOTH groups
 3. A verification statement like: "Confirm exposed group [label] has n=[value]"
 
 **Good collection_goal example:**

@@ -1,23 +1,24 @@
-import base64
-import os
-import tempfile
-import shutil
-import warnings
-import io
-import re
 import asyncio
-import requests
+import base64
+import io
+import os
+import re
+import shutil
+import tempfile
+import warnings
 from difflib import SequenceMatcher
-
-import fitz
-from PIL import Image
-import pytesseract
 from math import atan2, degrees
-
-from .llm import async_client as client, use_tools
 from pprint import pprint as print
 
+import fitz
+import pytesseract
+import requests
 from habanero import Crossref
+from PIL import Image
+
+from .llm import async_client as client
+from .llm import use_tools
+
 cr = Crossref()
 
 
@@ -25,8 +26,8 @@ def normalize_title(title: str) -> str:
     """Normalize a title for comparison by lowercasing and removing punctuation."""
     title = title.lower()
     # Remove common punctuation and extra whitespace
-    title = re.sub(r'[^\w\s]', ' ', title)
-    title = re.sub(r'\s+', ' ', title).strip()
+    title = re.sub(r"[^\w\s]", " ", title)
+    title = re.sub(r"\s+", " ", title).strip()
     return title
 
 
@@ -41,22 +42,15 @@ def title_similarity(title1: str, title2: str) -> float:
 
 
 async def summarize_paper(text):
-    system_message = ("Given a block of text, your task is to summarize the text into a concise paragraph. "
-                      "Do not include any references or citations in the summary. "
-                      "Do not speak to the user directly, just produce the summary of the text you are given.")
+    system_message = (
+        "Given a block of text, your task is to summarize the text into a concise paragraph. "
+        "Do not include any references or citations in the summary. "
+        "Do not speak to the user directly, just produce the summary of the text you are given."
+    )
 
     user_message = "Summarize this text:\n\n" + text
 
-    messages = [
-        {
-            "role": "system",
-            "content": system_message
-        },
-        {
-            "role": "user",
-            "content": user_message
-        }
-    ]
+    messages = [{"role": "system", "content": system_message}, {"role": "user", "content": user_message}]
 
     arguments = {"messages": messages, "model": "gpt-4.1"}
 
@@ -80,9 +74,10 @@ async def extract_doi(images, incorrect_doi_list=None):
                             "description": "The DOI to store",
                         },
                     },
-                    "additionalProperties": False, "required": ["doi"],
+                    "additionalProperties": False,
+                    "required": ["doi"],
                 },
-            }
+            },
         },
         {
             "type": "function",
@@ -93,47 +88,47 @@ async def extract_doi(images, incorrect_doi_list=None):
                 "parameters": {
                     "type": "object",
                     "properties": {},
-                    "additionalProperties": False, "required": [],
+                    "additionalProperties": False,
+                    "required": [],
                 },
-            }
-        }
+            },
+        },
     ]
-    system_message = ("Given a block of text, your task is to extract the DOI from the text. "
-                      "The DOI is a unique alphanumeric string that provides a permanent link to the location of an "
-                      "online resource. It is often found in the header, footer, or metadata of a research paper. "
-                      "If the DOI is not present in the text, please use the keep_searching_for_doi function. "
-                      "If the DOI is found, please store it in the database for future reference by using the "
-                      "store_doi function. "
-                      "\nExample of DOI: '12.3456/nature123'. If the DOI is in the form of a URL, please extract the "
-                      "DOI from the URL and store the DOI without the URL format. ")
+    system_message = (
+        "Given a block of text, your task is to extract the DOI from the text. "
+        "The DOI is a unique alphanumeric string that provides a permanent link to the location of an "
+        "online resource. It is often found in the header, footer, or metadata of a research paper. "
+        "If the DOI is not present in the text, please use the keep_searching_for_doi function. "
+        "If the DOI is found, please store it in the database for future reference by using the "
+        "store_doi function. "
+        "\nExample of DOI: '12.3456/nature123'. If the DOI is in the form of a URL, please extract the "
+        "DOI from the URL and store the DOI without the URL format. "
+    )
     user_message_prefix = "Extract the DOI from this image"
 
     if incorrect_doi_list:
-        user_message_prefix = (". The DOI is not any of these '" + ", ".join(incorrect_doi_list) +
-                               "'. Extract the correct DOI from this image")
+        user_message_prefix = (
+            ". The DOI is not any of these '"
+            + ", ".join(incorrect_doi_list)
+            + "'. Extract the correct DOI from this image"
+        )
 
     # Limit to first 2 pages for DOI search
     for image in images[:2]:
         messages = [
-            {
-                "role": "system",
-                "content": system_message
-            },
+            {"role": "system", "content": system_message},
             {
                 "role": "user",
                 "content": [
-                            {
-                              "type": "image_url",
-                              "image_url": {
-                                  "url": image,
-                              }
-                            },
-                            {
-                              "type": "text",
-                              "text": user_message_prefix
-                            }
-                          ]
-            }
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image,
+                        },
+                    },
+                    {"type": "text", "text": user_message_prefix},
+                ],
+            },
         ]
 
         arguments = {"messages": messages, "tools": tools, "model": "gpt-4.1"}
@@ -142,7 +137,7 @@ async def extract_doi(images, incorrect_doi_list=None):
         valid_calls = []
         while valid_calls == [] and retry < 2:
             if retry > 0:
-                print("Retrying DOI Extraction("+str(retry)+")...")
+                print("Retrying DOI Extraction(" + str(retry) + ")...")
             chat_response = await client.chat.completions.create(**arguments)
             if chat_response.choices[0].message.tool_calls:
                 valid_calls = await use_tools(chat_response, arguments, call_functions=False)
@@ -154,27 +149,32 @@ async def extract_doi(images, incorrect_doi_list=None):
     return None
 
 
-async def process_single_page(i, image, first_page_system_message, body_system_message, figure_present_system_message, figure_system_message, figure_present_tools):
+async def process_single_page(
+    i,
+    image,
+    first_page_system_message,
+    body_system_message,
+    figure_present_system_message,
+    figure_system_message,
+    figure_present_tools,
+):
     print("Processing page " + str(i + 1))
-    
+
     page_text = "\n\n**Start of Page " + str(i + 1) + "**\n\n"
 
     messages = [
-        {
-            "role": "system",
-            "content": body_system_message
-        },
+        {"role": "system", "content": body_system_message},
         {
             "role": "user",
             "content": [
-                        {
-                          "type": "image_url",
-                          "image_url": {
-                              "url": image,
-                          }
-                        }
-                      ]
-        }
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image,
+                    },
+                }
+            ],
+        },
     ]
 
     if i == 0:
@@ -187,25 +187,27 @@ async def process_single_page(i, image, first_page_system_message, body_system_m
 
     # Start figure counting
     messages_fig = [
-        {
-            "role": "system",
-            "content": figure_present_system_message
-        },
+        {"role": "system", "content": figure_present_system_message},
         {
             "role": "user",
             "content": [
-                        {
-                          "type": "image_url",
-                          "image_url": {
-                              "url": image,
-                          }
-                        }
-                      ]
-        }
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image,
+                    },
+                }
+            ],
+        },
     ]
 
-    arguments_fig = {"messages": messages_fig, "tools": figure_present_tools, "model": "gpt-4.1", "temperature": 0.2,
-                 "tool_choice": {"type": "function", "function": {"name": "store_figure_table_count"}}}
+    arguments_fig = {
+        "messages": messages_fig,
+        "tools": figure_present_tools,
+        "model": "gpt-4.1",
+        "temperature": 0.2,
+        "tool_choice": {"type": "function", "function": {"name": "store_figure_table_count"}},
+    }
 
     fig_count_task = client.chat.completions.create(**arguments_fig)
 
@@ -213,7 +215,7 @@ async def process_single_page(i, image, first_page_system_message, body_system_m
     chat_response_body, chat_response_fig = await asyncio.gather(body_task, fig_count_task)
 
     body_content = chat_response_body.choices[0].message.content.replace("**PAGE_COMPLETE**", "")
-    
+
     # LLM-based refusal detection
     async def detect_refusal(content):
         """Use an LLM to detect if the vision model refused to process the page."""
@@ -235,44 +237,50 @@ async def process_single_page(i, image, first_page_system_message, body_system_m
                         "additionalProperties": False,
                         "required": ["is_refusal"],
                     },
-                }
+                },
             }
         ]
-        
+
         detection_messages = [
-            {"role": "system", "content": "Classify the following text as either a refusal to process or actual content."},
-            {"role": "user", "content": f"Text to classify:\n\n{content[:1000]}"}
+            {
+                "role": "system",
+                "content": "Classify the following text as either a refusal to process or actual content.",
+            },
+            {"role": "user", "content": f"Text to classify:\n\n{content[:1000]}"},
         ]
-        
+
         try:
             detection_response = await client.chat.completions.create(
                 messages=detection_messages,
                 model="gpt-4.1-mini",
                 temperature=0,
                 tools=tools,
-                tool_choice={"type": "function", "function": {"name": "classify_response"}}
+                tool_choice={"type": "function", "function": {"name": "classify_response"}},
             )
-            
+
             if detection_response.choices[0].message.tool_calls:
                 tool_call = detection_response.choices[0].message.tool_calls[0]
                 import json
+
                 args = json.loads(tool_call.function.arguments)
                 return args["is_refusal"]
             return False
-            
+
         except Exception as e:
-            warnings.warn(f"Refusal detection failed: {e}. Using fallback heuristics.")
+            warnings.warn(f"Refusal detection failed: {e}. Using fallback heuristics.", stacklevel=2)
             # Fallback to basic heuristics if LLM call fails
             refusal_phrases = ["i'm unable to", "i can't assist", "i cannot", "sorry, i can't"]
             return any(phrase in content.lower() for phrase in refusal_phrases) or len(content.strip()) < 100
-    
+
     is_refusal = await detect_refusal(body_content)
-    
+
     if is_refusal:
-        warnings.warn(f"Vision model refused to process page {i + 1}. Retrying with academic research context.")
+        warnings.warn(
+            f"Vision model refused to process page {i + 1}. Retrying with academic research context.", stacklevel=2
+        )
         print(f"⚠️  Vision model refused page {i + 1}, retrying with explicit academic context...")
         print(f"Refusal content: {body_content}")
-        
+
         # Retry with a more explicit academic research prompt
         enhanced_system_message = (
             "You are assisting with legitimate academic research involving systematic literature review. "
@@ -283,7 +291,7 @@ async def process_single_page(i, image, first_page_system_message, body_system_m
             "or reference sections. Once you have written out the text in the main body of the paper, "
             "write **PAGE_COMPLETE** and stop."
         )
-        
+
         if i == 0:
             enhanced_system_message = (
                 "You are assisting with legitimate academic research involving systematic literature review. "
@@ -294,34 +302,31 @@ async def process_single_page(i, image, first_page_system_message, body_system_m
                 "Include the abstract and any other introductory text as well as the main body of the paper. "
                 "Once you have written out the text in the main body of the paper, write **PAGE_COMPLETE** and stop."
             )
-        
+
         retry_messages = [
-            {
-                "role": "system",
-                "content": enhanced_system_message
-            },
+            {"role": "system", "content": enhanced_system_message},
             {
                 "role": "user",
                 "content": [
-                            {
-                              "type": "image_url",
-                              "image_url": {
-                                  "url": image,
-                              }
-                            }
-                          ]
-            }
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image,
+                        },
+                    }
+                ],
+            },
         ]
-        
+
         retry_arguments = {"messages": retry_messages, "model": "gpt-4.1", "temperature": 0.2}
-        
+
         try:
             retry_response = await client.chat.completions.create(**retry_arguments)
             retry_content = retry_response.choices[0].message.content.replace("**PAGE_COMPLETE**", "")
-            
+
             # Check if retry also resulted in refusal using the same robust detection
             is_retry_refusal = await detect_refusal(retry_content)
-            
+
             if not is_retry_refusal:
                 body_content = retry_content
                 print(f"✓ Retry succeeded for page {i + 1}")
@@ -330,33 +335,33 @@ async def process_single_page(i, image, first_page_system_message, body_system_m
                 print(f"⚠️  Retry also refused, falling back to OCR for page {i + 1}...")
                 print(f"Retry refusal content: {retry_content}")
                 raise Exception("Retry also refused")
-                
-        except Exception as retry_error:
+
+        except Exception:
             # Fall back to OCR
-            warnings.warn(f"Vision model retry failed for page {i + 1}. Falling back to OCR.")
+            warnings.warn(f"Vision model retry failed for page {i + 1}. Falling back to OCR.", stacklevel=2)
             try:
                 # Extract base64 data from data URI
                 if image.startswith("data:image"):
                     image_data = image.split(",", 1)[1]
                 else:
                     image_data = image
-                    
+
                 image_bytes = base64.b64decode(image_data)
                 pil_image = Image.open(io.BytesIO(image_bytes))
-                
+
                 # Use pytesseract to extract text
                 ocr_text = pytesseract.image_to_string(pil_image)
-                
+
                 if ocr_text.strip():
                     body_content = ocr_text
                     print(f"✓ OCR extracted {len(ocr_text)} characters from page {i + 1}")
                 else:
-                    warnings.warn(f"OCR also failed to extract text from page {i + 1}")
+                    warnings.warn(f"OCR also failed to extract text from page {i + 1}", stacklevel=2)
                     body_content = f"[Text extraction failed for this page]\n\nOriginal response: {body_content}"
             except Exception as e:
-                warnings.warn(f"OCR fallback failed for page {i + 1}: {e}")
+                warnings.warn(f"OCR fallback failed for page {i + 1}: {e}", stacklevel=2)
                 body_content = f"[Text extraction failed for this page]\n\nOriginal response: {body_content}"
-    
+
     page_text += body_content
 
     # Process figure count
@@ -367,29 +372,27 @@ async def process_single_page(i, image, first_page_system_message, body_system_m
             for call in valid_calls:
                 if call["name"] == "store_figure_table_count":
                     try:
-                        table_figure_count = (int(call["parameters"]["figure_count"]) +
-                                              int(call["parameters"]["table_count"]))
-                    except Exception as e:
+                        table_figure_count = int(call["parameters"]["figure_count"]) + int(
+                            call["parameters"]["table_count"]
+                        )
+                    except Exception:  # nosec
                         table_figure_count = -1
 
     # If figures/tables present, extract them
     if table_figure_count < 0 or table_figure_count > 0:
         messages_desc = [
-            {
-                "role": "system",
-                "content": figure_system_message
-            },
+            {"role": "system", "content": figure_system_message},
             {
                 "role": "user",
                 "content": [
-                            {
-                              "type": "image_url",
-                              "image_url": {
-                                  "url": image,
-                              }
-                            }
-                          ]
-            }
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image,
+                        },
+                    }
+                ],
+            },
         ]
 
         arguments_desc = {"messages": messages_desc, "model": "gpt-4.1", "temperature": 0.2}
@@ -403,9 +406,10 @@ async def process_single_page(i, image, first_page_system_message, body_system_m
 
 
 async def create_cleaned_text(images):
-
-    figure_present_system_message = ("Read the contents of the provided scan of a page from a research paper. "
-                                     "Record the number of figures and tables that are present on the page.")
+    figure_present_system_message = (
+        "Read the contents of the provided scan of a page from a research paper. "
+        "Record the number of figures and tables that are present on the page."
+    )
 
     figure_present_tools = [
         {
@@ -424,53 +428,77 @@ async def create_cleaned_text(images):
                         "table_count": {
                             "type": "integer",
                             "description": "The number of tables on the page",
-                        }
+                        },
                     },
-                    "additionalProperties": False, "required": ["figure_count", "table_count"],
+                    "additionalProperties": False,
+                    "required": ["figure_count", "table_count"],
                 },
-            }
+            },
         }
     ]
 
-    figure_system_message = ("Read the contents of the provided scan of a page from a research paper. "
-                             "For each figure and table in the paper include a '**Figure/Table Description:**' "
-                             "section that you will author. This section should include a description of what is "
-                             "being communicated in the figure or table based on your best impression as well as "
-                             "all text that is found within that figure. Make sure to lay out figure or table text "
-                             "in a manner that best communicates the intent of the author with the rest of the "
-                             "output. You should always include a '**Figure/Table Description:**' for every "
-                             "figure and table you see in the scan. Once you have written out the text for "
-                             "all figures write **FIGURES_AND_TABLES_COMPLETE**")
+    figure_system_message = (
+        "Read the contents of the provided scan of a page from a research paper. "
+        "For each figure and table in the paper include a '**Figure/Table Description:**' "
+        "section that you will author. This section should include a description of what is "
+        "being communicated in the figure or table based on your best impression as well as "
+        "all text that is found within that figure. Make sure to lay out figure or table text "
+        "in a manner that best communicates the intent of the author with the rest of the "
+        "output. You should always include a '**Figure/Table Description:**' for every "
+        "figure and table you see in the scan. Once you have written out the text for "
+        "all figures write **FIGURES_AND_TABLES_COMPLETE**"
+    )
 
-    body_system_message = ("Read the contents of the provided scan of a page from a research paper. "
-                           "Convert the tex that is in the main body of the paper to raw text. "
-                           "Do not include any tables. Do not include any figures. Do not include any footnotes. "
-                           "Do not include any reference sections. Once you have written out the text in the main "
-                           "body of the paper write  **PAGE_COMPLETE** and stop.")
+    body_system_message = (
+        "Read the contents of the provided scan of a page from a research paper. "
+        "Convert the tex that is in the main body of the paper to raw text. "
+        "Do not include any tables. Do not include any figures. Do not include any footnotes. "
+        "Do not include any reference sections. Once you have written out the text in the main "
+        "body of the paper write  **PAGE_COMPLETE** and stop."
+    )
 
-    first_page_system_message = ("Read the contents of the provided scan of a page from a research paper. "
-                                 "Convert the text of paper to raw text. Skip the title, authors, headers, footers, "
-                                 "legalese, copyrights, and references. Include the abstract and any other "
-                                 "introductory text as well as the main body of the paper. Once you have written out "
-                                 "the text in the main body of the paper write **PAGE_COMPLETE** and stop.")
+    first_page_system_message = (
+        "Read the contents of the provided scan of a page from a research paper. "
+        "Convert the text of paper to raw text. Skip the title, authors, headers, footers, "
+        "legalese, copyrights, and references. Include the abstract and any other "
+        "introductory text as well as the main body of the paper. Once you have written out "
+        "the text in the main body of the paper write **PAGE_COMPLETE** and stop."
+    )
+
+    # Limit concurrent page processing to avoid overwhelming the API
+    page_semaphore = asyncio.Semaphore(5)
+
+    async def process_page_with_limit(i, image):
+        async with page_semaphore:
+            return await process_single_page(
+                i,
+                image,
+                first_page_system_message,
+                body_system_message,
+                figure_present_system_message,
+                figure_system_message,
+                figure_present_tools,
+            )
 
     tasks = []
     for i, image in enumerate(images):
-        tasks.append(process_single_page(i, image, first_page_system_message, body_system_message, figure_present_system_message, figure_system_message, figure_present_tools))
-    
+        tasks.append(process_page_with_limit(i, image))
+
     results = await asyncio.gather(*tasks)
-    
+
     # Sort by page index to ensure correct order
     results.sort(key=lambda x: x[0])
-    
+
     cleaned_text = "".join([res[1] for res in results])
 
     return cleaned_text
 
 
 async def confirm_doi(title, images):
-    system_message = ("Read the contents of the provided scan of a page from a research paper. "
-                      "Extract the title of the paper from the text")
+    system_message = (
+        "Read the contents of the provided scan of a page from a research paper. "
+        "Extract the title of the paper from the text"
+    )
     tools = [
         {
             "type": "function",
@@ -486,29 +514,32 @@ async def confirm_doi(title, images):
                             "description": "The title to store",
                         },
                     },
-                    "additionalProperties": False, "required": ["title"],
+                    "additionalProperties": False,
+                    "required": ["title"],
                 },
-            }
+            },
         },
     ]
-    arguments = {"messages": [
-        {
-            "role": "system",
-            "content": system_message
-        },
-        {
-            "role": "user",
-            "content": [
-                        {
-                          "type": "image_url",
-                          "image_url": {
-                              "url": images[0],
-                          }
-                        }
-                      ]
-        }
-    ], "tools": tools, "model": "gpt-4.1", "temperature": 0.2,
-        "tool_choice": {"type": "function", "function": {"name": "store_title"}}}
+    arguments = {
+        "messages": [
+            {"role": "system", "content": system_message},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": images[0],
+                        },
+                    }
+                ],
+            },
+        ],
+        "tools": tools,
+        "model": "gpt-4.1",
+        "temperature": 0.2,
+        "tool_choice": {"type": "function", "function": {"name": "store_title"}},
+    }
 
     retry = 0
     title_found = False
@@ -530,12 +561,12 @@ async def confirm_doi(title, images):
     # First, do a quick programmatic similarity check
     sim_score = title_similarity(title, stored_title)
     print(f"Title similarity score: {sim_score:.3f}")
-    
+
     # If similarity is very low, reject without LLM call
     if sim_score < 0.5:
         print(f"Title similarity too low ({sim_score:.3f} < 0.5), rejecting match")
         return False
-    
+
     # If similarity is very high, accept without LLM call
     if sim_score > 0.95:
         print(f"Title similarity very high ({sim_score:.3f} > 0.95), accepting match")
@@ -565,19 +596,25 @@ async def confirm_doi(title, images):
                             "description": "True ONLY if both titles refer to the exact same paper, not just similar topics",
                         },
                     },
-                    "additionalProperties": False, "required": ["titles_similar"],
+                    "additionalProperties": False,
+                    "required": ["titles_similar"],
                 },
-            }
+            },
         },
     ]
 
-    arguments = {"messages": [{"role": "system", "content": system_message},
-                              {"role": "user", "content": "Title 1: " + title + "\nTitle 2: " + stored_title}],
-                 "model": "gpt-4.1", "temperature": 0.0, "tools": tools,
-                 "tool_choice": {"type": "function", "function": {"name": "store_title_similar"}}}
+    arguments = {
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": "Title 1: " + title + "\nTitle 2: " + stored_title},
+        ],
+        "model": "gpt-4.1",
+        "temperature": 0.0,
+        "tools": tools,
+        "tool_choice": {"type": "function", "function": {"name": "store_title_similar"}},
+    }
 
-    print("Checking title similarity with LLM... "
-          "Title 1: " + title + "\nTitle 2: " + stored_title)
+    print("Checking title similarity with LLM... " "Title 1: " + title + "\nTitle 2: " + stored_title)
 
     retry = 0
     is_title_match = None
@@ -595,8 +632,10 @@ async def confirm_doi(title, images):
 
 
 async def extract_title_and_authors(images):
-    system_message = ("Read the contents of the provided scan of a page from a research paper. "
-                      "Extract the title of the paper and the first author's name from the text.")
+    system_message = (
+        "Read the contents of the provided scan of a page from a research paper. "
+        "Extract the title of the paper and the first author's name from the text."
+    )
     tools = [
         {
             "type": "function",
@@ -616,29 +655,32 @@ async def extract_title_and_authors(images):
                             "description": "The first author's name",
                         },
                     },
-                    "additionalProperties": False, "required": ["title", "first_author"],
+                    "additionalProperties": False,
+                    "required": ["title", "first_author"],
                 },
-            }
+            },
         },
     ]
-    arguments = {"messages": [
-        {
-            "role": "system",
-            "content": system_message
-        },
-        {
-            "role": "user",
-            "content": [
-                        {
-                          "type": "image_url",
-                          "image_url": {
-                              "url": images[0],
-                          }
-                        }
-                      ]
-        }
-    ], "tools": tools, "model": "gpt-4.1", "temperature": 0.2,
-        "tool_choice": {"type": "function", "function": {"name": "store_metadata"}}}
+    arguments = {
+        "messages": [
+            {"role": "system", "content": system_message},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": images[0],
+                        },
+                    }
+                ],
+            },
+        ],
+        "tools": tools,
+        "model": "gpt-4.1",
+        "temperature": 0.2,
+        "tool_choice": {"type": "function", "function": {"name": "store_metadata"}},
+    }
 
     retry = 0
     found = False
@@ -676,11 +718,11 @@ def rotate_pdf_pages(pdf_path):
         for block in text_blocks:
             if block["type"] == 0:  # Text block
                 blocks_found = True
-                for line in block['lines']:
-                    dir_vector = line['dir']
-                    for span in line['spans']:
+                for line in block["lines"]:
+                    dir_vector = line["dir"]
+                    for span in line["spans"]:
                         angle = atan2(dir_vector[1], dir_vector[0])
-                        text_length = len(span['text'])
+                        text_length = len(span["text"])
                         total_length += text_length
                         weighted_sum_angles += degrees(angle) * text_length
                         total_weight += text_length
@@ -705,14 +747,17 @@ def rotate_pdf_pages(pdf_path):
 
             try:
                 # Use pytesseract to detect the orientation of the text in the image
-                ocr_data = pytesseract.image_to_osd(image, config='--psm 0 -c min_characters_to_try=50', output_type=pytesseract.Output.DICT)
+                ocr_data = pytesseract.image_to_osd(
+                    image, config="--psm 0 -c min_characters_to_try=50", output_type=pytesseract.Output.DICT
+                )
 
                 # Extract the rotation angle suggested by pytesseract
                 rotation_angle = ocr_data["rotate"]
 
                 # Rotate the page based on the OCR-detected angle
-                page.set_rotation(rotation_angle+page.rotation)
+                page.set_rotation(rotation_angle + page.rotation)
             except pytesseract.TesseractError:
+                # Ignore tesseract errors during rotation detection
                 pass
 
         src_rect = page.rect  # source page rect
@@ -738,27 +783,27 @@ async def gather_metadata(pdf_path, pages):
     found_doi = False
     old_doi_list = None
     crossref_data = None
-    
+
     # Limit to first 2 pages for metadata search
     for i, page in enumerate(doc):
-        if i > 1: break
-        
+        if i > 1:
+            break
+
         simple_doi_list = []
         text_blocks = page.get_text("dict")["blocks"]
         total_length = 0
         for block in text_blocks:
             if block["type"] == 0:  # Text block
-                for line in block['lines']:
+                for line in block["lines"]:
                     # use regular expression to find DOI
-                    for span in line['spans']:
-                        text = span['text']
+                    for span in line["spans"]:
+                        text = span["text"]
                         total_length += len(text)
                         if "10." in text:
                             # use a simple regular expression to find the DOI
                             simple_doi_list += re.findall(r"10\.\d{4,9}\/[-._;()/:a-zA-Z0-9]+", text)
 
         if total_length < 2000:
-
             pix = page.get_pixmap(dpi=300)
             image = Image.open(io.BytesIO(pix.tobytes()))
 
@@ -794,8 +839,9 @@ async def gather_metadata(pdf_path, pages):
                         old_doi_list = [doi]
                     else:
                         old_doi_list.append(doi)
-                except Exception as e:
+                except Exception:
                     import traceback
+
                     print(traceback.format_exc())
                     # Assume DOI is wrong if it causes an error
                     if not old_doi_list:
@@ -840,8 +886,9 @@ async def gather_metadata(pdf_path, pages):
                         old_doi_list = [doi]
                     else:
                         old_doi_list.append(doi)
-                except Exception as e:
+                except Exception:
                     import traceback
+
                     print(traceback.format_exc())
                     # Assume DOI is wrong if it causes an error
                     if not old_doi_list:
@@ -850,53 +897,52 @@ async def gather_metadata(pdf_path, pages):
                         old_doi_list.append(doi)
             retry += 1
 
-
     if not found_doi:
-        warnings.warn("DOI not found")
+        warnings.warn("DOI not found", stacklevel=2)
         # Try to search by title if DOI is missing
         title_extracted, author_extracted = await extract_title_and_authors(pages)
         if title_extracted:
             search_query = title_extracted
             if author_extracted:
                 search_query += " " + author_extracted
-            
+
             print(f"Searching Crossref for: {search_query}")
             try:
                 # Fetch multiple results to find the best match
                 res = cr.works(query=search_query, limit=10)
-                if res['message']['items']:
+                if res["message"]["items"]:
                     # Score all results by title similarity
                     scored_results = []
-                    for item in res['message']['items']:
-                        if 'title' in item and item['title']:
-                            found_title = item['title'][0]
+                    for item in res["message"]["items"]:
+                        if item.get("title"):
+                            found_title = item["title"][0]
                             sim_score = title_similarity(title_extracted, found_title)
                             scored_results.append((sim_score, found_title, item))
                             print(f"  Candidate: '{found_title}' (similarity: {sim_score:.3f})")
-                    
+
                     # Sort by similarity score (descending)
                     scored_results.sort(key=lambda x: x[0], reverse=True)
-                    
+
                     # Only consider results with reasonable similarity
                     MIN_SIMILARITY_THRESHOLD = 0.6
-                    
+
                     for sim_score, found_title, item in scored_results:
                         if sim_score < MIN_SIMILARITY_THRESHOLD:
                             print(f"Remaining candidates below threshold ({MIN_SIMILARITY_THRESHOLD}), stopping search")
                             break
-                        
+
                         print(f"Checking best match: '{found_title}' (similarity: {sim_score:.3f})")
-                        
+
                         # Verify if the found title matches our extracted title
                         is_match = await confirm_doi(found_title, pages)
                         if is_match:
                             print("Title match confirmed!")
-                            crossref_data = {'message': item}
+                            crossref_data = {"message": item}
                             found_doi = True  # Treat it as found for metadata extraction purposes
                             break
                         else:
                             print(f"Title match rejected: '{found_title}'")
-                    
+
                     if not found_doi:
                         print("No matching paper found in Crossref results")
             except Exception as e:
@@ -929,41 +975,51 @@ async def gather_metadata(pdf_path, pages):
                     try:
                         single_res = cr.works(ids=doi)
                         res.append(single_res)
-                    except Exception:
+                    except Exception:  # nosec
                         # Ignore individual reference failures (e.g. 404s)
                         continue
 
             for item in res:
                 try:
                     ref_number += 1
-                    data = item['message']
+                    data = item["message"]
                     # Format the reference string based on available fields
-                    if 'author' in data and len(data['author']) > 0:
-                        if 'given' in data['author'][0] and 'family' in data['author'][0]:
-                            author_str = ', '.join([author['given'] + ' ' + author['family'] for author in data.get('author', []) if
-                                                    'given' in author and 'family' in author])
-                        elif 'name' in data['author'][0]:
-                            author_str = ', '.join([author['name'] for author in data.get('author', []) if 'name' in author])
+                    if "author" in data and len(data["author"]) > 0:
+                        if "given" in data["author"][0] and "family" in data["author"][0]:
+                            author_str = ", ".join(
+                                [
+                                    author["given"] + " " + author["family"]
+                                    for author in data.get("author", [])
+                                    if "given" in author and "family" in author
+                                ]
+                            )
+                        elif "name" in data["author"][0]:
+                            author_str = ", ".join(
+                                [author["name"] for author in data.get("author", []) if "name" in author]
+                            )
                         else:
-                            author_str = ''
+                            author_str = ""
                     else:
-                        author_str = ''
-                        
-                    title_str = data.get('title', [''])[0] if data.get('title', None) else ''
-                    journal_str = data.get('container-title', [''])[0] if data.get('container-title', None) else ''
-                    volume_str = data.get('volume', '')
-                    page_str = data.get('page', '')
-                    year_str = str(data['issued']['date-parts'][0][0]) if data.get('issued', None) else ''
-                    doi_str = data.get('DOI', '')
-                    reference_str = f"{ref_number}. {author_str}. {title_str}. {journal_str}, {volume_str}, {page_str}, " \
-                                    f"{year_str}. DOI: {doi_str}"
+                        author_str = ""
+
+                    title_str = data.get("title", [""])[0] if data.get("title", None) else ""
+                    journal_str = data.get("container-title", [""])[0] if data.get("container-title", None) else ""
+                    volume_str = data.get("volume", "")
+                    page_str = data.get("page", "")
+                    year_str = str(data["issued"]["date-parts"][0][0]) if data.get("issued", None) else ""
+                    doi_str = data.get("DOI", "")
+                    reference_str = (
+                        f"{ref_number}. {author_str}. {title_str}. {journal_str}, {volume_str}, {page_str}, "
+                        f"{year_str}. DOI: {doi_str}"
+                    )
                     references.append(reference_str.strip())
-                except Exception:
+                except Exception:  # nosec
+                    # Skip malformed references
                     continue
     else:
-        if not title_extracted: # If we didn't extract it above
-             title_extracted, author_extracted = await extract_title_and_authors(pages)
-             
+        if not title_extracted:  # If we didn't extract it above
+            title_extracted, author_extracted = await extract_title_and_authors(pages)
+
         if title_extracted:
             metadata = {"title": [title_extracted], "metadata_status": "Title extracted, DOI not found"}
             if author_extracted:
@@ -980,7 +1036,7 @@ async def process_paper(pdf_path):
     # Open the PDF file
     # Rotate pages first (synchronous as it uses fitz/PIL)
     rotate_pdf_pages(pdf_path)
-    
+
     doc = fitz.open(pdf_path)
     # use fitz to create a clear image of each page make sure to use a high DPI
     image_list = []
@@ -988,7 +1044,7 @@ async def process_paper(pdf_path):
         page = doc[i]
         mat = fitz.Matrix(200 / 72, 200 / 72)
         image = page.get_pixmap(matrix=mat)
-        #image = page.get_pixmap()
+        # image = page.get_pixmap()
         image_bytes = image.tobytes()
         image_list.append(image_bytes)
 
@@ -999,24 +1055,23 @@ async def process_paper(pdf_path):
         page_images.append(page_image)
 
     output = {}
-    
+
     # Run metadata gathering and text cleaning in parallel
     metadata_task = gather_metadata(pdf_path, page_images)
     cleaned_text_task = create_cleaned_text(page_images)
-    
+
     results = await asyncio.gather(metadata_task, cleaned_text_task)
-    
+
     references, metadata = results[0]
     cleaned_text = results[1]
-    
+
     title = metadata.get("title", ["Unknown Title"])[0]
     if title == "Unknown Title":
         raise ValueError(f"Failed to extract title/metadata for paper: {pdf_path}")
 
     output["page_images"] = page_images
-    
-    output["cleaned_text"] = (title + "\n\n\n" +
-                              cleaned_text + "\n\n## REFERENCES\n" + "\n".join(references))
+
+    output["cleaned_text"] = title + "\n\n\n" + cleaned_text + "\n\n## REFERENCES\n" + "\n".join(references)
     output["metadata"] = metadata
 
     output["summary"] = await summarize_paper(output["cleaned_text"])

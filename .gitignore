@@ -1,11 +1,117 @@
-venv/*
-test_wd/*
-__pycache__/*
+# ============================================================================
+# Python
+# ============================================================================
 __pycache__/
-.idea/*
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============================================================================
+# Virtual Environments
+# ============================================================================
+venv/
+.venv/
+ENV/
+env/
+.env
+
+# ============================================================================
+# Testing & Coverage
+# ============================================================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# ============================================================================
+# Type Checking & Linting
+# ============================================================================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+
+# ============================================================================
+# IDEs and Editors
+# ============================================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ============================================================================
+# OS Generated Files
+# ============================================================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 */.DS_Store
-PAPERS
+
+# ============================================================================
+# Project Specific
+# ============================================================================
+# API keys and secrets
 scienceai-keys.json
-build/*
-build
+*.key
+*.pem
+secrets/
+
+# Test outputs and working directories
+test_wd/
+test_interface_storage/
+test_interface_storage_v2/
+test_ingestion/
+test_error_handling/
+test_agents/
+
+# Papers directory (user data)
+PAPERS/
+
+# Debugging artifacts
+debugging_scripts/result.json
+problem_chat.json
+*.log
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Coverage reports
+coverage.xml
+.coverage
+htmlcov/
+
+# Build artifacts
+*.whl
