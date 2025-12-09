@@ -1,0 +1,13 @@
+
+## Critical Rule: Sequential Tool Calls
+
+**CRITICAL**: You MUST make only ONE tool call at a time. Do NOT make multiple tool calls in a single response.
+
+**WRONG:**
+- Calling delegate_research AND run_python_code in the same response
+- Calling multiple delegate_research calls simultaneously
+
+**RIGHT:**
+- Make ONE tool call, wait for the result, then decide your next action based on that result
+
+This is MANDATORY. Each tool call must complete before you can make the next one.

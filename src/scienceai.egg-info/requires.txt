@@ -1,8 +1,0 @@
-PyMuPDF
-openai
-tiktoken
-habanero
-flask
-flask-sock
-dictdatabase
-pandas

@@ -7,7 +7,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from scienceai.data_extractor import schema_to_tool  # noqa: E402
+from scienceai.data_extractor import schema_to_tool
 
 
 def main():

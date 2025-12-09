@@ -1,19 +1,46 @@
 <div id="chat" class="panel">
     <div id="chat-panel-messages" class="panel-messages">
         {% set context_limit_hit = namespace(value=false) %}
+        {% set last_user_idx = namespace(value=-1) %}
+        {% set first_user_idx = namespace(value=-1) %}
         {# Check if context percentage is at or above 100% #}
         {% if context_percentage is defined and context_percentage >= 100 %}
-            {% set context_limit_hit.value = true %}
+        {% set context_limit_hit.value = true %}
         {% endif %}
+        {# Find the first and last user message indices #}
         {% for message in messages %}
-        {% if message.content == 'CONTEXT_LIMIT_REACHED' %}
-            {% set context_limit_hit.value = true %}
+        {% if message.role == 'user' %}
+        {% if first_user_idx.value == -1 %}
+        {% set first_user_idx.value = loop.index0 %}
+        {% endif %}
+        {% set last_user_idx.value = loop.index0 %}
+        {% endif %}
+        {% endfor %}
+        {% for message in messages %}
+        {% if 'CONTEXTLIMITREACHED' in message.content %}
+        {% set context_limit_hit.value = true %}
         {% elif message.role == 'user' %}
         <div class="chat-bubble-area-user">
             <div class="chat-bubble-user">
                 <span>{{ message.content | safe }}</span>
             </div>
-            <div class="chat-bubble-timestamp">Created: {{ message.time }} Status: {{ message.status }}</div>
+            <div class="chat-bubble-timestamp">
+                Created: {{ message.time }} Status: {{ message.status }}
+                {% if loop.index0 == first_user_idx.value and message.status == 'Processed' %}
+                <button class="undo-request-btn reset-btn" onclick="showResetConfirmModal()"
+                    title="Reset conversation (remove all analysts and generated files)">
+                    <i class="fas fa-trash-restore"></i> Reset All
+                </button>
+                {% endif %}
+                {% if loop.index0 == last_user_idx.value and loop.index0 != first_user_idx.value and message.status ==
+                'Processed' %}
+                <button class="undo-request-btn {% if undo_blocked %}disabled{% endif %}"
+                    onclick="{% if undo_blocked %}showUndoBlockedModal(){% else %}showUndoConfirmModal(){% endif %}"
+                    title="{% if undo_blocked %}Cannot undo (code was executed){% else %}Undo this request{% endif %}">
+                    <i class="fas fa-undo"></i> Undo
+                </button>
+                {% endif %}
+            </div>
         </div>
         {% elif message.role == 'tool' %}
         <div class="chat-bubble-area-tool" onclick="toggleContent(this)">
@@ -38,7 +65,8 @@
             <div class="context-limit-icon">⚠️</div>
             <div class="context-limit-text">
                 <strong>Context Limit Reached</strong>
-                <p>I'm sorry, but you have reached the context limit of this Science Discussion. The conversation has grown too large for me to continue processing.</p>
+                <p>I'm sorry, but you have reached the context limit of this Science Discussion. The conversation has
+                    grown too large for me to continue processing.</p>
                 <p>You can still:</p>
                 <ul>
                     <li>📊 Extract and download your data from the Analysts panel</li>
@@ -50,7 +78,9 @@
                 <div class="context-compress-section">
                     <hr style="margin: 1rem 0; border-color: #d97706;">
                     <strong>🗜️ Want to try compressing the conversation?</strong>
-                    <p>This will summarize the first 50% of tool calls and responses to free up context space. <strong>Save a checkpoint first!</strong> This cannot be undone.</p>
+                    <p>This will summarize the first 50% of tool calls and responses to free up context space.
+                        <strong>Save a checkpoint first!</strong> This cannot be undone.
+                    </p>
                     <button class="compress-context-btn" onclick="compressContext()">
                         Compress Conversation
                     </button>
@@ -87,7 +117,8 @@
     </script>
     {% elif messages %}
     {% set last = messages|last %}
-    {% if last.status == 'Pending' %}
+    {# Hide input if: last message is Pending OR last message is from user (waiting for AI response) #}
+    {% if last.status == 'Pending' or last.role == 'user' %}
     <script>
         var progressContainer = document.getElementById('progress-wheel-container');
         var typingIndicator = document.getElementById('typing-indicator');
@@ -150,7 +181,7 @@
         chat.scrollTop = chat.scrollHeight;
 
         // Update heading text without destroying the context indicator
-        (function() {
+        (function () {
             var heading = document.getElementById('chat-heading');
             var contextIndicator = document.getElementById('context-indicator');
             if (heading) {
@@ -165,7 +196,7 @@
                 }
                 if (textNode) {
                     textNode.textContent = ' ↻ Science Discussion ↻ ';
-                    setTimeout(function() {
+                    setTimeout(function () {
                         textNode.textContent = ' Science Discussion ';
                     }, 500);
                 }

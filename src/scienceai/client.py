@@ -11,10 +11,25 @@ from .database_manager import DatabaseManager
 
 
 class ScienceAI:
-    def __init__(self, project_name=None, storage_path=None, n_workers=5):
+    def __init__(self, project_name=None, storage_path=None, n_workers=5, provider=None, validate_keys=True):
+        """Initialize ScienceAI client.
+
+        Args:
+            project_name: Name of the project. If None, uses timestamp.
+            storage_path: Where to store project data. Defaults to ~/Documents/ScienceAI.
+            n_workers: Number of worker threads for processing.
+            provider: LLM provider to use ('openai', 'anthropic', 'google'). Defaults to configured provider.
+            validate_keys: Whether to validate API keys on startup. Default True.
+        """
         import tempfile
         import warnings
         from datetime import datetime
+
+        # Validate API keys if requested
+        if validate_keys:
+            self._ensure_valid_provider(provider)
+        elif provider:
+            self.set_provider(provider)
 
         if project_name is None:
             self.project_name = f"Project Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
@@ -71,6 +86,140 @@ class ScienceAI:
         self.database = DatabaseManager(
             self.ingest_folder, None, self.project_name, storage_path=self.storage_path, read_only_mode=True
         )
+
+    def _ensure_valid_provider(self, preferred_provider=None):
+        """Ensure a valid provider is configured."""
+        from .llm_providers import (
+            get_available_providers,
+            get_current_provider_name,
+            switch_provider,
+            validate_api_key,
+        )
+
+        available = get_available_providers()
+
+        # If no keys at all, raise an error
+        if not any(available.values()):
+            raise RuntimeError(
+                "No API keys configured. Please set up API keys first:\n"
+                "  - Run 'scienceai --setup-keys' in terminal, or\n"
+                "  - Use ScienceAI.set_api_key('openai', 'your-key')"
+            )
+
+        # If a specific provider was requested, validate and switch to it
+        if preferred_provider:
+            if not available.get(preferred_provider.lower(), False):
+                raise RuntimeError(
+                    f"API key for '{preferred_provider}' not configured. "
+                    f"Available providers: {[k for k, v in available.items() if v]}"
+                )
+            is_valid, msg = validate_api_key(preferred_provider)
+            if not is_valid:
+                raise RuntimeError(f"API key for '{preferred_provider}' is invalid: {msg}")
+            switch_provider(preferred_provider)
+            return
+
+        # Validate current provider
+        current = get_current_provider_name()
+        if available.get(current, False):
+            is_valid, msg = validate_api_key(current)
+            if is_valid:
+                return  # Current provider is fine
+
+        # Find a valid provider
+        for provider_name, is_available in available.items():
+            if is_available:
+                is_valid, msg = validate_api_key(provider_name)
+                if is_valid:
+                    switch_provider(provider_name)
+                    return
+
+        # No valid providers found
+        raise RuntimeError(
+            "No valid API keys found. Please check your API keys:\n"
+            "  - Run 'scienceai --validate-keys' in terminal, or\n"
+            "  - Use ScienceAI.validate_keys()"
+        )
+
+    @staticmethod
+    def get_provider():
+        """Get the current LLM provider name.
+
+        Returns:
+            str: Current provider name ('openai', 'anthropic', or 'google')
+        """
+        from .llm_providers import get_current_provider_name
+
+        return get_current_provider_name()
+
+    @staticmethod
+    def set_provider(provider_name):
+        """Set the LLM provider.
+
+        Args:
+            provider_name: Provider to use ('openai', 'anthropic', 'google')
+
+        Returns:
+            bool: True if successful
+
+        Raises:
+            RuntimeError: If provider is invalid or has no API key
+        """
+        from .llm_providers import get_available_providers, switch_provider
+
+        provider_name = provider_name.lower()
+        if provider_name not in ["openai", "anthropic", "google"]:
+            raise RuntimeError(f"Invalid provider: {provider_name}. Must be 'openai', 'anthropic', or 'google'")
+
+        available = get_available_providers()
+        if not available.get(provider_name, False):
+            raise RuntimeError(f"No API key configured for '{provider_name}'")
+
+        if not switch_provider(provider_name):
+            raise RuntimeError(f"Failed to switch to '{provider_name}'")
+
+        return True
+
+    @staticmethod
+    def get_available_providers():
+        """Get dictionary of available providers and their status.
+
+        Returns:
+            dict: Mapping of provider names to availability (True/False)
+        """
+        from .llm_providers import get_available_providers
+
+        return get_available_providers()
+
+    @staticmethod
+    def validate_keys():
+        """Validate all configured API keys.
+
+        Returns:
+            dict: Mapping of provider names to (is_valid, message) tuples
+        """
+        from .llm_providers import validate_all_configured_keys
+
+        return validate_all_configured_keys()
+
+    @staticmethod
+    def set_api_key(provider_name, api_key):
+        """Set an API key for a provider.
+
+        Args:
+            provider_name: Provider name ('openai', 'anthropic', 'google')
+            api_key: The API key string
+
+        Returns:
+            bool: True if successful
+        """
+        from .llm_providers import save_api_key
+
+        provider_name = provider_name.lower()
+        if provider_name not in ["openai", "anthropic", "google"]:
+            raise RuntimeError(f"Invalid provider: {provider_name}. Must be 'openai', 'anthropic', or 'google'")
+
+        return save_api_key(provider_name, api_key)
 
     def preprocess(self):
         """

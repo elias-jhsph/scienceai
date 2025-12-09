@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from enum import Enum
@@ -6,8 +7,10 @@ from typing import Any
 
 from num2words import num2words
 
-from .llm import async_client, client
+from .llm import MODEL_REASONING, async_client, client, get_config, get_model_for_role
 from .llm import use_tools_sync as use_tools
+
+logger = logging.getLogger(__name__)
 
 
 class ExtractionMode(Enum):
@@ -148,7 +151,7 @@ def generate_description(data_type_key, data_type_value, all_keys):
     arguments = {
         "messages": messages,
         "tools": tools,
-        "model": "o4-mini",
+        "model": get_model_for_role(MODEL_REASONING),
         "reasoning_effort": "low",
         "tool_choice": {"type": "function", "function": {"name": "generate_example_data"}},
     }
@@ -161,7 +164,7 @@ def generate_description(data_type_key, data_type_value, all_keys):
     while len(examples) < 3 and retry < 3:
         while valid_calls == [] and retry < 3:
             if retry > 0:
-                print("Retrying...")
+                logger.info("Retrying...")
             chat_response = client.chat.completions.create(**arguments)
             if chat_response.choices[0].message.tool_calls:
                 # Store the tool_call_id for later use
@@ -173,12 +176,12 @@ def generate_description(data_type_key, data_type_value, all_keys):
                             output_dictionary = call["parameters"]
                             valid, error_message = validate_data_type_spec(output_dictionary, force_type=data_type_key)
                             if not valid:
-                                print(error_message, output_dictionary)
+                                logger.warning(f"{error_message}: {output_dictionary}")
                                 valid_calls = []
                             else:
                                 output_dictionary["type"] = data_type_key
             else:
-                print("No tool calls used")
+                logger.warning("No tool calls used")
             retry += 1
         if valid_calls and output_dictionary and last_tool_call_id:
             retry = 0
@@ -373,7 +376,22 @@ def generate_schema(corpus, goal=None, retries=5, mode=ExtractionMode.FOCUSED):
                             "properties": {
                                 "name": {"type": "string"},
                                 "description": {"type": "string"},
+                                "required": {"type": "boolean"},
                                 "type": {"type": "string", "enum": list(data_types.keys())},
+                                "categories": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "Required for 'categorical_value' type. List of possible categories.",
+                                },
+                                "field_names": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "Required for 'named_number_set' type. List of field names to extract.",
+                                },
+                                "unit": {
+                                    "type": "string",
+                                    "description": "Required for 'unit_number' and 'unit_number_list' types.",
+                                },
                             },
                             "additionalProperties": True,
                             "required": ["name", "description", "required", "type"],
@@ -395,37 +413,143 @@ def generate_schema(corpus, goal=None, retries=5, mode=ExtractionMode.FOCUSED):
         try:
             o4_arguments = {
                 "messages": messages,
-                "model": "o4-mini",
+                "model": get_model_for_role(MODEL_REASONING),
                 "reasoning_effort": "high",
                 "tools": [function_schema],
                 "tool_choice": {"type": "function", "function": {"name": "define_schema"}},
             }
             response = client.chat.completions.create(**o4_arguments)
 
+            # Enhanced logging to diagnose tool call issues
+            response_content = response.choices[0].message.content if response.choices else None
+            response_tool_calls = response.choices[0].message.tool_calls if response.choices else None
+            logger.info(
+                f"generate_schema response - has_content: {bool(response_content)}, has_tool_calls: {bool(response_tool_calls)}"
+            )
+            if response_content:
+                logger.debug(f"Response content (truncated): {response_content[:500]}...")
+            if response_tool_calls:
+                logger.debug(f"Response tool_calls count: {len(response_tool_calls)}")
+            else:
+                logger.warning(
+                    "No tool_calls in response - LLM may have returned text instead of using the define_schema tool"
+                )
+
             valid_calls = use_tools(response, o4_arguments, call_functions=False)
+            logger.debug(f"valid_calls from use_tools: {valid_calls}")
+
             output_dictionary = {}
             if valid_calls:
                 for call in valid_calls:
                     output_dictionary = call["parameters"]
+                logger.debug(
+                    f"output_dictionary keys: {list(output_dictionary.keys()) if output_dictionary else 'empty'}"
+                )
+            else:
+                logger.warning("valid_calls is empty - no parseable tool calls found")
 
             # Validate the schema
-            for field in output_dictionary.get("fields", []):
-                valid, error_message = validate_data_type_spec(field)
-                if not valid:
-                    print(f"Validation Error: {error_message}")
-                    break
+            fields = output_dictionary.get("fields", [])
+            logger.info(f"Schema fields count: {len(fields)}")
+
+            # validation_error = None
+            # invalid_field = None
+            if not fields:
+                logger.warning("No fields in schema - this will cause validation to fail")
+                # validation_error = "No fields were generated. Please generate at least one field."
+            else:
+                valid = True  # Assume valid until proven otherwise
+                for field in fields:
+                    valid, error_message = validate_data_type_spec(field)
+                    if not valid:
+                        logger.warning(f"Validation Error: {error_message} - Field: {field}")
+                        # validation_error = error_message
+                        # invalid_field = field
+                        break
 
             if valid:
-                print("Schema generated successfully.", output_dictionary["fields"])
+                logger.info(f"Schema generated successfully: {output_dictionary['fields']}")
                 return output_dictionary["fields"]
 
         except (json.JSONDecodeError, KeyError) as e:
-            print(f"Error processing response: {e}")
+            logger.error(f"Error processing response: {e}")
 
         retry += 1
-        print(f"Retrying... Attempt {retry}")
+        logger.info(f"Retrying... Attempt {retry}")
 
     return None
+
+
+def _sanitize_schema_for_vertex(schema: dict[str, Any]) -> dict[str, Any]:
+    """
+    Recursively sanitize a schema to ensure Vertex AI strict validation compliance.
+
+    Vertex AI requires that every field listed in 'required' must have a
+    corresponding definition in 'properties'. This function ensures that
+    requirement is met at all levels of nesting.
+
+    Args:
+        schema: The schema dictionary to sanitize
+
+    Returns:
+        The sanitized schema
+    """
+
+    def _recursive_sanitize(obj: dict[str, Any]) -> None:
+        """Recursively process schema ensuring required fields are defined."""
+        if not isinstance(obj, dict):
+            return
+
+        # Fix list-type values for 'type' field - Vertex AI only accepts strings
+        # Convert ["number", "null"] to {"type": "number", "nullable": True} (OpenAPI 3.0.x format)
+        if "type" in obj and isinstance(obj["type"], list):
+            type_list = obj["type"]
+            # Take the first non-null type as the primary type
+            primary_type = next((t for t in type_list if t != "null"), type_list[0])
+            # If "null" was in the list, mark as nullable
+            is_nullable = "null" in type_list
+            logger.debug(f"Sanitizing schema: Converting type {type_list} to '{primary_type}' (nullable={is_nullable})")
+            obj["type"] = primary_type
+            if is_nullable:
+                obj["nullable"] = True
+
+        # If this level has both 'properties' and 'required', validate them
+        if "properties" in obj and "required" in obj:
+            properties = obj["properties"]
+            required_fields = obj["required"]
+
+            for field_name in required_fields:
+                if field_name not in properties:
+                    # Inject a default definition for the missing field
+                    # Use 'string' as a safe default type
+                    logger.warning(
+                        f"Sanitizing schema: Adding missing property definition for required field '{field_name}'"
+                    )
+                    properties[field_name] = {
+                        "type": "string",
+                        "description": f"Auto-generated definition for required field '{field_name}'",
+                    }
+
+        # Recurse into properties
+        if "properties" in obj:
+            for _prop_name, prop_schema in obj["properties"].items():
+                if isinstance(prop_schema, dict):
+                    _recursive_sanitize(prop_schema)
+
+        # Recurse into array items
+        if "items" in obj and isinstance(obj["items"], dict):
+            _recursive_sanitize(obj["items"])
+
+    # Work on a copy to avoid mutating the input
+    import copy
+
+    sanitized = copy.deepcopy(schema)
+
+    # Sanitize the top level function parameters
+    if "function" in sanitized and "parameters" in sanitized["function"]:
+        _recursive_sanitize(sanitized["function"]["parameters"])
+
+    return sanitized
 
 
 def schema_to_tool(schema, mode=ExtractionMode.FOCUSED):
@@ -439,7 +563,10 @@ def schema_to_tool(schema, mode=ExtractionMode.FOCUSED):
               - FOCUSED/EXPLORATORY: Respect schema's required settings
     """
 
+    import re
+
     def camel_to_snake(s):
+        s = re.sub(r"[^a-zA-Z0-9_.-]", "_", s)
         return "".join(["_" + c.lower() if c.isupper() else c for c in s]).lstrip("_")
 
     selected_data_types_full = {}
@@ -449,6 +576,44 @@ def schema_to_tool(schema, mode=ExtractionMode.FOCUSED):
     # In RIGID mode, override all required fields to True
     rigid_mode = mode == ExtractionMode.RIGID
 
+    # Fields that should never be marked as required in the extraction tool
+    # These are either metadata fields OR optional statistical fields that may not be reported
+    optional_fields = [
+        # Metadata fields (choose quote OR derivation)
+        "source_quote",
+        "derivation",
+        "source_location",
+        "unit",
+        "computation",
+        # Optional statistical fields that papers may not report
+        "ci_level",  # Usually 95%, often not explicitly stated
+        "is_reference",  # Only relevant for reference categories
+        "t_statistic",  # Often not reported
+        "df",
+        "df_numerator",
+        "df_denominator",  # Degrees of freedom often omitted
+        "se",  # Standard error often omitted when CI given
+        "error_lower",
+        "error_upper",  # Only for asymmetric errors
+        # Sample statistics - papers report different subsets
+        "mean",
+        "sd",
+        "median",
+        "q1",
+        "q3",
+        "min",
+        "max",
+        # Survival analysis - optional fields
+        "log_rank_p",
+        "rate_at_timepoint",
+        "rate_timepoint",
+        "median_survival_ci_lower",
+        "median_survival_ci_upper",
+        # Contingency table - totals can be computed
+        "total_exposed",
+        "total_unexposed",
+    ]
+
     for data_type_requested in schema:
         required = []
         selected_data_types = {}
@@ -456,44 +621,7 @@ def schema_to_tool(schema, mode=ExtractionMode.FOCUSED):
         if data_type_def["mode"] == "prefix":
             required_keys = list(data_type_def.keys())
             required_keys.remove("mode")
-            name = data_type_requested["name"].replace(" ", "_")
-            # Fields that should never be marked as required in the extraction tool
-            # These are either metadata fields OR optional statistical fields that may not be reported
-            optional_fields = [
-                # Metadata fields (choose quote OR derivation)
-                "source_quote",
-                "derivation",
-                "source_location",
-                "unit",
-                "computation",
-                # Optional statistical fields that papers may not report
-                "ci_level",  # Usually 95%, often not explicitly stated
-                "is_reference",  # Only relevant for reference categories
-                "t_statistic",  # Often not reported
-                "df",
-                "df_numerator",
-                "df_denominator",  # Degrees of freedom often omitted
-                "se",  # Standard error often omitted when CI given
-                "error_lower",
-                "error_upper",  # Only for asymmetric errors
-                # Sample statistics - papers report different subsets
-                "mean",
-                "sd",
-                "median",
-                "q1",
-                "q3",
-                "min",
-                "max",
-                # Survival analysis - optional fields
-                "log_rank_p",
-                "rate_at_timepoint",
-                "rate_timepoint",
-                "median_survival_ci_lower",
-                "median_survival_ci_upper",
-                # Contingency table - totals can be computed
-                "total_exposed",
-                "total_unexposed",
-            ]
+            name = camel_to_snake(data_type_requested["name"])
             for key in required_keys:
                 # In RIGID mode, all fields are required; otherwise respect schema
                 is_required = rigid_mode or data_type_requested["required"]
@@ -522,13 +650,14 @@ def schema_to_tool(schema, mode=ExtractionMode.FOCUSED):
                     # Make optional fields nullable so LLM can use null for unreported values
                     if key in optional_fields and new_type == "number":
                         selected_data_types[name + "_" + key] = {
-                            "type": ["number", "null"],
+                            "type": "number",
+                            "nullable": True,
                             "description": new_description + " Use null if not reported.",
                         }
                     else:
                         selected_data_types[name + "_" + key] = {"type": new_type, "description": new_description}
         if data_type_def["mode"] == "array":
-            name = data_type_requested["name"].replace(" ", "_")
+            name = camel_to_snake(data_type_requested["name"])
             # In RIGID mode, all fields are required; otherwise respect schema
             is_required = rigid_mode or data_type_requested["required"]
             if is_required:
@@ -563,7 +692,8 @@ def schema_to_tool(schema, mode=ExtractionMode.FOCUSED):
                     # Make optional fields nullable so LLM can use null for unreported values
                     if key in optional_fields and new_type == "number":
                         item_properties[key] = {
-                            "type": ["number", "null"],
+                            "type": "number",
+                            "nullable": True,
                             "description": new_description + " Use null if not reported.",
                         }
                     else:
@@ -629,6 +759,10 @@ def schema_to_tool(schema, mode=ExtractionMode.FOCUSED):
             },
         },
     }
+
+    # Sanitize the schema to ensure Vertex AI compliance
+    # This ensures all fields in 'required' are defined in 'properties' at all nesting levels
+    tool = _sanitize_schema_for_vertex(tool)
 
     return tool
 
@@ -696,7 +830,7 @@ def verify_computation(derivation, expected_value):
             return False
 
     except Exception as e:  # Catch any unexpected errors during verification
-        print(f"Error verifying computation:  {e}")
+        logger.warning(f"Error verifying computation:  {e}")
         return True  # Be lenient on verification errors
 
 
@@ -794,7 +928,7 @@ async def reflect_on_data_extraction(
                             [value_key.replace("_value", "")],
                         )
 
-                print(f"Validated derivation for {value_key}")
+                logger.debug(f"Validated derivation for {value_key}")
 
             elif value is not None and value != "":
                 # DIRECT QUOTE path - existing validation
@@ -852,7 +986,7 @@ async def reflect_on_data_extraction(
                                 [field_base],
                             )
 
-                print(f"Validated source for {key}")
+                logger.debug(f"Validated source for {key}")
 
             elif value == "":
                 field_base = key.replace("_source_quote", "")
@@ -872,7 +1006,7 @@ async def reflect_on_data_extraction(
                             return make_return(
                                 "Source was not found in corpus: (" + k + ") " + str(item[k]), [field_base]
                             )
-                        print(f"Validated source for {k}")
+                        logger.debug(f"Validated source for {k}")
                         if item[k] == "":
                             field_base = k.replace("_source_quote", "")
                             return make_return(
@@ -927,7 +1061,7 @@ However, do NOT fail validation just because 'Page 1' or 'Abstract' (location me
 
     messages = [{"role": "system", "content": system_message}, {"role": "user", "content": user_message}]
 
-    arguments = {"messages": messages, "model": "gpt-5-mini"}
+    arguments = {"messages": messages, "model": get_config().default_fast_model}
 
     if justification:
         arguments["messages"] += [{"role": "user", "content": "Here is the corpus:\n\n" + corpus}]
@@ -988,19 +1122,19 @@ by the source material alone.""",
 
     arguments = {
         "messages": messages,
-        "model": "gpt-5-mini",
+        "model": get_config().default_fast_model,
         "tools": tools,
         "tool_choice": {"type": "function", "function": {"name": "check_extracted_data"}},
     }
 
     if justification:
-        arguments["model"] = "o4-mini"
+        arguments["model"] = get_model_for_role(MODEL_REASONING)
         arguments["reasoning_effort"] = "high"
 
     retry = 0
     while retry < retries:
         if retry > 0:
-            print("Retrying validation...")
+            logger.info("Retrying validation...")
         chat_response = await async_client.chat.completions.create(**arguments)
         if chat_response.choices[0].message.tool_calls:
             valid_calls = use_tools(chat_response, arguments, call_functions=False)
@@ -1008,7 +1142,7 @@ by the source material alone.""",
                 for call in valid_calls:
                     if call["name"] == "check_extracted_data":
                         if call["parameters"]["valid"]:
-                            print("Data extraction validated successfully")
+                            logger.info("Data extraction validated successfully")
                             if return_problem_fields:
                                 return (None, [])
                             return None
@@ -1037,7 +1171,7 @@ async def extract_data(tool, corpus, retries=4, mode=ExtractionMode.FOCUSED, ina
                                      signals before early exit (only in FOCUSED/RIGID modes)
 
     Returns:
-        dict: Extracted data or {"failed_extraction": reason}
+        dict: Extracted data or {"failed_collection": reason}
     """
 
     system_message = """You are a careful data analyst. Dutifully find the data in the provided research paper.
@@ -1114,7 +1248,7 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
     arguments = {
         "messages": messages,
         "tools": [tool],
-        "model": "o4-mini",
+        "model": get_model_for_role(MODEL_REASONING),
         "reasoning_effort": "high",
         "tool_choice": {"type": "function", "function": {"name": tool["function"]["name"]}},
     }
@@ -1132,7 +1266,7 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
 
     while not output_dictionary and retry < retries:
         if retry > 0:
-            print("Retrying...")
+            logger.info("Retrying...")
         chat_response = await async_client.chat.completions.create(**arguments)
         if chat_response.choices[0].message.tool_calls:
             valid_calls = use_tools(chat_response, arguments, call_functions=False)
@@ -1145,12 +1279,12 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
                         inappropriate_msg = output_dictionary.get("totally_inappropriate_extraction", "")
                         if inappropriate_msg and mode != ExtractionMode.EXPLORATORY:
                             inappropriate_count += 1
-                            print(
+                            logger.warning(
                                 f"Inappropriate extraction signal ({inappropriate_count}/{inappropriate_exit_threshold}): {inappropriate_msg[:100]}..."
                             )
                             if inappropriate_count >= inappropriate_exit_threshold:
                                 # Early exit - paper is not appropriate for this extraction
-                                return {"failed_extraction": f"Paper inappropriate for extraction: {inappropriate_msg}"}
+                                return {"failed_collection": f"Paper inappropriate for extraction: {inappropriate_msg}"}
                         else:
                             inappropriate_count = 0  # Reset if extraction proceeds normally
 
@@ -1176,7 +1310,7 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
 
                         if check is not None:
                             if is_last_retry and not check.startswith("The value of '"):
-                                print("Data extraction failed (last):", check)
+                                logger.warning(f"Data extraction failed (last): {check}")
                                 new_message = {
                                     "role": "system",
                                     "content": "This data extraction may or may not have been completed successfully:\n\n"
@@ -1201,7 +1335,9 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
                                     if check is not None:
                                         # EXPLORATORY mode: remove problem fields and return partial data
                                         if mode == ExtractionMode.EXPLORATORY and last_problem_fields:
-                                            print(f"Exploratory mode: removing problem fields {last_problem_fields}")
+                                            logger.info(
+                                                f"Exploratory mode: removing problem fields {last_problem_fields}"
+                                            )
                                             output_dictionary = _remove_problem_fields(
                                                 output_dictionary, last_problem_fields
                                             )
@@ -1210,17 +1346,17 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
                                             explanation = check + "\n\nLast attempt:\n\n" + str(output_dictionary)
                                             output_dictionary = None
                                     else:
-                                        print("Data extraction successful at last attempt")
+                                        logger.info("Data extraction successful at last attempt")
                             elif is_last_retry:
                                 # EXPLORATORY mode: remove problem fields and return partial data
                                 if mode == ExtractionMode.EXPLORATORY and last_problem_fields:
-                                    print(f"Exploratory mode: removing problem fields {last_problem_fields}")
+                                    logger.info(f"Exploratory mode: removing problem fields {last_problem_fields}")
                                     output_dictionary = _remove_problem_fields(output_dictionary, last_problem_fields)
                                     # Continue to success path
                                 else:
                                     explanation = check
                             else:
-                                print("Data extraction failed:", check, "Retrying...")
+                                logger.warning(f"Data extraction failed: {check} Retrying...")
                                 new_message = {
                                     "role": "system",
                                     "content": (
@@ -1234,16 +1370,16 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
                                 arguments["messages"] += [new_message]
                                 output_dictionary = None
         else:
-            print("No tool calls used")
+            logger.warning("No tool calls used")
         retry += 1
 
         # Check for convergence after normal retries exhausted (FOCUSED/RIGID modes only)
         if retry >= retries and output_dictionary is None and not convergence_retry_used:
             if mode != ExtractionMode.EXPLORATORY and len(attempts) >= 2:
-                print("Checking for convergence...")
+                logger.debug("Checking for convergence...")
                 convergence = await detect_convergence(attempts, feedbacks)
                 if convergence.get("converging", False):
-                    print(f"Convergence detected: {convergence['reason']} - granting retry extension")
+                    logger.info(f"Convergence detected: {convergence['reason']} - granting retry extension")
                     retries += retries  # Double the retries for one more round
                     convergence_retry_used = True
                     # Restore tools if they were removed during justification flow
@@ -1251,7 +1387,7 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
                         arguments["tools"] = [tool]
                         arguments["tool_choice"] = {"type": "function", "function": {"name": tool["function"]["name"]}}
                 else:
-                    print(f"Not converging: {convergence['reason']} - ending extraction")
+                    logger.warning(f"Not converging: {convergence['reason']} - ending extraction")
 
     if output_dictionary is not None:
         del output_dictionary["successfully_extracted"]
@@ -1264,7 +1400,7 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
         output_dictionary = clean_missing_values(output_dictionary)
         return output_dictionary.copy()
     if explanation:
-        return {"failed_extraction": explanation}
+        return {"failed_collection": explanation}
     return {}
 
 
@@ -1400,7 +1536,6 @@ Return your assessment via the tool."""
 
     try:
         response = await async_client.chat.completions.create(
-            model="gpt-4o-mini",
             messages=messages,
             tools=tools,
             tool_choice={"type": "function", "function": {"name": "assess_convergence"}},
@@ -1411,6 +1546,6 @@ Return your assessment via the tool."""
             result = json.loads(call.function.arguments)
             return result
     except Exception as e:
-        print(f"Convergence detection error: {e}")
+        logger.error(f"Convergence detection error: {e}")
 
     return {"converging": False, "reason": "Could not assess convergence"}

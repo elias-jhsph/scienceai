@@ -7,6 +7,7 @@ Uses a loop with Python execution to thoroughly check data quality.
 
 import io
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -14,15 +15,17 @@ import time
 import traceback
 import zipfile
 
-from .llm import client
+from .llm import MODEL_VISION, client, get_config, get_model_for_role
+
+logger = logging.getLogger(__name__)
 
 # Safety limits
 MAX_ITERATIONS = 100  # Max tool calls before forcing completion
 MAX_NO_TOOL_RESPONSES = 5  # Max consecutive responses without tool calls before forcing
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB
 
-# Model for validation
-VALIDATOR_MODEL = "gpt-5.1"
+# Model for validation - uses the configured default model
+# This will be resolved at runtime from the config
 
 # Load the prompt
 path_to_app = os.path.dirname(os.path.abspath(__file__))
@@ -83,8 +86,8 @@ def validate_bundle(zip_path):
     return result
 
 
-def _scan_failed_extractions(workspace):
-    """Pre-scan all CSVs for failed extractions and return summary"""
+def _scan_failed_collections(workspace):
+    """Pre-scan all CSVs for failed collections and return summary"""
     import pandas as pd
 
     results = []
@@ -100,23 +103,23 @@ def _scan_failed_extractions(workspace):
             df = pd.read_csv(csv_path, low_memory=False, nrows=5000)
             rel_path = os.path.relpath(csv_path, workspace)
 
-            # Check for failed_extraction column
-            if "failed_extraction" in df.columns:
-                failed_rows = df[df["failed_extraction"].notna() & (df["failed_extraction"] != "")]
+            # Check for failed_collection column
+            if "failed_collection" in df.columns:
+                failed_rows = df[df["failed_collection"].notna() & (df["failed_collection"] != "")]
                 if len(failed_rows) > 0:
                     for _, row in failed_rows.iterrows():
                         study_id = row.get("id", row.get("paper_id", row.get("study_id", "unknown")))
-                        reason = str(row["failed_extraction"])[:150]
+                        reason = str(row["failed_collection"])[:150]
                         results.append(f"  - [{rel_path}] Study '{study_id}': {reason}")
 
-            # Also check for text containing "failed_extraction"
+            # Also check for text containing "failed_collection"
             for col in df.columns:
                 if df[col].dtype == "object":
-                    mask = df[col].astype(str).str.contains("failed_extraction", case=False, na=False)
+                    mask = df[col].astype(str).str.contains("failed_collection", case=False, na=False)
                     if mask.any():
                         count = mask.sum()
                         results.append(
-                            f"  - [{rel_path}] Column '{col}' has {count} rows containing 'failed_extraction' text"
+                            f"  - [{rel_path}] Column '{col}' has {count} rows containing 'failed_collection' text"
                         )
 
         except Exception as e:
@@ -125,7 +128,7 @@ def _scan_failed_extractions(workspace):
     if results:
         return "**⚠️ FAILED EXTRACTIONS DETECTED:**\n" + "\n".join(results)
     else:
-        return "**✓ No failed extractions detected in CSV files.**"
+        return "**✓ No failed collections detected in CSV files.**"
 
 
 def _check_bundle_structure(workspace):
@@ -288,9 +291,9 @@ def _run_validator_agent(workspace, file_list, original_zip_path):
 
     # Run pre-checks and gather info for the agent
     try:
-        failed_extraction_scan = _scan_failed_extractions(workspace)
+        failed_collection_scan = _scan_failed_collections(workspace)
     except Exception as e:
-        failed_extraction_scan = f"**Failed extraction scan error:** {e!s}"
+        failed_collection_scan = f"**Failed extraction scan error:** {e!s}"
 
     try:
         structure_check = _check_bundle_structure(workspace)
@@ -396,7 +399,7 @@ def _run_validator_agent(workspace, file_list, original_zip_path):
 
 {structure_check}
 
-{failed_extraction_scan}
+{failed_collection_scan}
 
 {effect_direction_check}
 
@@ -422,14 +425,14 @@ Call report_validation_result when done."""
     final_result = None
     consecutive_no_tools = 0
 
-    print("[Bundle Validator] Starting validation loop...")
+    logger.info("Starting validation loop...")
 
     while not validation_complete and iteration < MAX_ITERATIONS:
         iteration += 1
 
         try:
             response = client.chat.completions.create(
-                model=VALIDATOR_MODEL, messages=messages, tools=tools, tool_choice="auto"
+                model=get_config().default_model, messages=messages, tools=tools, tool_choice="auto"
             )
 
             assistant_message = response.choices[0].message
@@ -449,11 +452,11 @@ Call report_validation_result when done."""
 
             if not assistant_message.tool_calls:
                 consecutive_no_tools += 1
-                print(f"[Bundle Validator] Iteration {iteration}: No tool calls (consecutive: {consecutive_no_tools})")
+                logger.info(f"Iteration {iteration}: No tool calls (consecutive: {consecutive_no_tools})")
 
                 # If too many consecutive no-tool responses, force completion
                 if consecutive_no_tools >= MAX_NO_TOOL_RESPONSES:
-                    print("[Bundle Validator] Too many no-tool responses, forcing completion request")
+                    logger.warning("Too many no-tool responses, forcing completion request")
                     messages.append(
                         {
                             "role": "user",
@@ -478,7 +481,7 @@ Call report_validation_result when done."""
             # Process tool calls
             for tool_call in assistant_message.tool_calls:
                 function_name = tool_call.function.name
-                print(f"[Bundle Validator] Iteration {iteration}: Calling {function_name}")
+                logger.info(f"Iteration {iteration}: Calling {function_name}")
 
                 try:
                     arguments = json.loads(tool_call.function.arguments)
@@ -502,7 +505,7 @@ Call report_validation_result when done."""
                     messages.append(
                         {"role": "tool", "tool_call_id": tool_call.id, "content": "Validation result recorded."}
                     )
-                    print(f"[Bundle Validator] Validation complete after {iteration} iterations")
+                    logger.info(f"Validation complete after {iteration} iterations")
                     break
                 else:
                     messages.append(
@@ -510,13 +513,13 @@ Call report_validation_result when done."""
                     )
 
         except Exception as e:
-            print(f"[Bundle Validator] Error in iteration {iteration}: {e}")
+            logger.error(f"Error in iteration {iteration}: {e}")
             messages.append(
                 {"role": "user", "content": f"Error occurred: {e!s}. Please continue or report your findings."}
             )
 
     if not validation_complete:
-        print(f"[Bundle Validator] Did not complete after {iteration} iterations")
+        logger.warning(f"Did not complete after {iteration} iterations")
         return (
             "## ⚠️ BUNDLE VALIDATION INCOMPLETE\n\n"
             f"Agent did not complete validation after {iteration} iterations.\n"
@@ -553,9 +556,9 @@ def _execute_python(code, workspace):
                 filename = f"plot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
                 plt.savefig(filename, dpi=150, bbox_inches="tight")
                 plt.close("all")
-                print(f"Plot saved to {filename}")
+                logger.info(f"Plot saved to {filename}")
         except Exception as e:
-            print(f"Error saving plot: {e}")
+            logger.error(f"Error saving plot: {e}")
 
     # Build execution environment
     env = {
@@ -686,7 +689,9 @@ def _analyze_image(image_path, check_for=""):
         ]
 
         # Call the vision model
-        vision_response = client.chat.completions.create(model="gpt-4o", messages=vision_messages, max_tokens=1000)
+        vision_response = client.chat.completions.create(
+            model=get_model_for_role(MODEL_VISION), messages=vision_messages, max_tokens=1000
+        )
 
         critique = vision_response.choices[0].message.content
 

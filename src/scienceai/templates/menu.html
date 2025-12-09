@@ -38,6 +38,9 @@
                         </datalist>
                         <button type="submit">Start</button>
                     </div>
+                    <p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">
+                        Type a new name to create a project,<br>or select an existing one to open.
+                    </p>
                 </form>
             </div>
 
@@ -86,6 +89,64 @@
                 </form>
             </div>
 
+            <!-- LLM Provider Card -->
+            <div class="card open-project-menu" style="margin: 0; max-width: none;">
+                <h2><i class="fas fa-robot"></i> LLM Provider</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem;">
+                    Select your AI model provider. Only providers with configured API keys are available.
+                </p>
+                <div class="provider-selector">
+                    <div class="provider-options" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <!-- OpenAI -->
+                        <label class="provider-option {% if not available_providers.openai %}disabled{% endif %}"
+                            style="flex: 1; min-width: 100px;">
+                            <input type="radio" name="provider" value="openai" {% if current_provider=='openai'
+                                %}checked{% endif %} {% if not available_providers.openai %}disabled{% endif %}
+                                onchange="switchProvider('openai')">
+                            <span class="provider-label">
+                                <i class="fas fa-brain"></i>
+                                <span>OpenAI</span>
+                                {% if not available_providers.openai %}
+                                <span class="no-key">(No API Key)</span>
+                                {% endif %}
+                            </span>
+                        </label>
+
+                        <!-- Anthropic / Claude -->
+                        <label class="provider-option {% if not available_providers.anthropic %}disabled{% endif %}"
+                            style="flex: 1; min-width: 100px;">
+                            <input type="radio" name="provider" value="anthropic" {% if current_provider=='anthropic'
+                                %}checked{% endif %} {% if not available_providers.anthropic %}disabled{% endif %}
+                                onchange="switchProvider('anthropic')">
+                            <span class="provider-label">
+                                <i class="fas fa-feather"></i>
+                                <span>Claude</span>
+                                {% if not available_providers.anthropic %}
+                                <span class="no-key">(No API Key)</span>
+                                {% endif %}
+                            </span>
+                        </label>
+
+                        <!-- Google / Gemini -->
+                        <label class="provider-option {% if not available_providers.google %}disabled{% endif %}"
+                            style="flex: 1; min-width: 100px;">
+                            <input type="radio" name="provider" value="google" {% if current_provider=='google'
+                                %}checked{% endif %} {% if not available_providers.google %}disabled{% endif %}
+                                onchange="switchProvider('google')">
+                            <span class="provider-label">
+                                <i class="fas fa-gem"></i>
+                                <span>Gemini</span>
+                                {% if not available_providers.google %}
+                                <span class="no-key">(No API Key)</span>
+                                {% endif %}
+                            </span>
+                        </label>
+                    </div>
+                    <p id="provider-status" style="margin-top: 0.75rem; font-size: 0.85rem; color: var(--text-muted);">
+                    </p>
+                </div>
+            </div>
+
             <!-- Shutdown Card -->
             <div class="card open-project-menu"
                 style="margin: 0; max-width: none; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
@@ -98,6 +159,67 @@
             </div>
         </div>
     </div>
+
+    <!-- Dark Mode Toggle -->
+    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">
+        <span class="icon sun-icon">☀️</span>
+        <span class="icon moon-icon">🌙</span>
+    </button>
+
+
+    <script>
+        async function switchProvider(provider) {
+            const statusEl = document.getElementById('provider-status');
+            statusEl.textContent = 'Switching...';
+            statusEl.style.color = 'var(--text-muted)';
+
+            try {
+                const response = await fetch('/switch_provider', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ provider: provider })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    statusEl.textContent = `✓ Using ${provider.charAt(0).toUpperCase() + provider.slice(1)}`;
+                    statusEl.style.color = 'var(--success)';
+                } else {
+                    statusEl.textContent = `✗ ${data.error}`;
+                    statusEl.style.color = 'var(--danger)';
+                    // Revert the radio button selection
+                    setTimeout(() => location.reload(), 1500);
+                }
+            } catch (error) {
+                statusEl.textContent = `✗ Failed to switch provider`;
+                statusEl.style.color = 'var(--danger)';
+                setTimeout(() => location.reload(), 1500);
+            }
+        }
+
+        // Dark Mode Toggle Functionality
+        (function () {
+            const themeToggle = document.getElementById('theme-toggle');
+            const html = document.documentElement;
+
+            // Check for saved theme preference or default to 'light'
+            const currentTheme = localStorage.getItem('theme') || 'light';
+            html.setAttribute('data-theme', currentTheme);
+
+            // Toggle theme
+            themeToggle.addEventListener('click', function () {
+                const theme = html.getAttribute('data-theme');
+                const newTheme = theme === 'light' ? 'dark' : 'light';
+
+                html.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+            });
+        })();
+
+    </script>
 </body>
 
 </html>

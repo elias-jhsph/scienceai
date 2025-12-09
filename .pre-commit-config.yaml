@@ -55,12 +55,12 @@ repos:
   # Local hooks for long-running verification
   - repo: local
     hooks:
-      # - id: verify-interface
-      #   name: Verify Interface (Manual)
-      #   entry: python3 tests/test_interface_manual.py
-      #   language: system
-      #   pass_filenames: false
-      #   always_run: true
+      - id: verify-interface
+        name: Verify Interface (Manual)
+        entry: python3 tests/test_interface_manual.py
+        language: system
+        pass_filenames: false
+        always_run: true
 
       - id: verify-error-handling
         name: Verify Error Handling

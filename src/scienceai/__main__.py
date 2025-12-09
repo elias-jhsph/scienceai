@@ -3,6 +3,7 @@ import atexit
 import builtins
 import contextlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -37,6 +38,7 @@ COMMON_HTML_TAG_PATTERN = re.compile(
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 sock = Sock(app)
+logger = logging.getLogger(__name__)
 
 own_pid = os.getpid()
 database = None
@@ -54,7 +56,29 @@ current_progress = None  # Store current progress state for new connections
 context_connections = []  # WebSocket connections for context updates
 context_lock = threading.Lock()
 current_context = None  # Store current context state for new connections
-CONTEXT_LIMIT = 400000  # GPT-5.1 context limit (400,000 tokens)
+
+
+def safe_db_read(read_func):
+    """
+    Safely execute a database read function.
+    Catches transient errors from dictdatabase lock race conditions and returns None.
+    The caller should handle None gracefully (skip this iteration).
+    NOTE: We don't retry because DDB's thread-based locking doesn't allow
+    re-acquiring locks on the same thread.
+    """
+    try:
+        return read_func()
+    except FileNotFoundError as e:
+        logger.warning(f"Database read failed (lock file race): {e}")
+        return None
+    except RuntimeError as e:
+        # "Thread already has a read lock" - DDB locking issue
+        logger.warning(f"Database read failed (lock state): {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Database read failed: {e}")
+        return None
+
 
 db_folder = os.path.join(os.path.expanduser("~"), "Documents", "ScienceAI")
 if not os.path.exists(db_folder):
@@ -72,7 +96,7 @@ def emit_progress(current, total, description="Processing", analyst_name=None):
         message_data["analyst_name"] = analyst_name
 
     message = json.dumps(message_data)
-    print(message)
+    logger.debug(message)
 
     # Store current progress state for new connections
     with progress_lock:
@@ -94,7 +118,9 @@ def emit_context(tokens_used, tokens_limit=None, can_compress=True):
     """Emit context usage update to all connected WebSocket clients"""
     global context_connections, current_context
     if tokens_limit is None:
-        tokens_limit = CONTEXT_LIMIT
+        from .llm_providers import get_context_limit
+
+        tokens_limit = get_context_limit()
     percentage = min(100, round((tokens_used / tokens_limit) * 100, 1))
     message_data = {
         "type": "context",
@@ -119,24 +145,10 @@ def emit_context(tokens_used, tokens_limit=None, can_compress=True):
 def calculate_and_emit_context_from_messages(messages):
     """Calculate token count from chat messages and emit context usage. Returns percentage."""
     try:
-        import tiktoken
+        from .llm_providers import get_context_limit, get_provider
 
-        enc = tiktoken.encoding_for_model("gpt-4")
-
-        total_tokens = 0
-        for msg in messages:
-            content = msg.get("content", "")
-            if content:
-                total_tokens += len(enc.encode(str(content)))
-            # Account for tool calls if present
-            if msg.get("tool_calls"):
-                total_tokens += len(enc.encode(json.dumps(msg.get("tool_calls"))))
-
-        # Add overhead for message structure (roughly 4 tokens per message)
-        total_tokens += len(messages) * 4
-
-        # Add estimate for system message (~2000 tokens typically)
-        total_tokens += 2000
+        provider = get_provider()
+        total_tokens = provider.count_tokens(messages)
 
         # Check if compression is possible
         can_compress = can_compress_context(messages)
@@ -144,8 +156,12 @@ def calculate_and_emit_context_from_messages(messages):
         emit_context(total_tokens, can_compress=can_compress)
 
         # Return the percentage for template use
-        return min(100, round((total_tokens / CONTEXT_LIMIT) * 100, 1))
-    except Exception:
+        limit = get_context_limit()
+        if limit and limit > 0:
+            return min(100, round((total_tokens / limit) * 100, 1))
+        return 0
+    except Exception as e:
+        logger.warning(f"Context calculation failed: {e}")
         # Don't let context tracking break the main flow
         return 0
 
@@ -158,6 +174,34 @@ def can_compress_context(messages):
             continue
         if msg.get("role") == "tool" or msg.get("tool_calls"):
             return True
+    return False
+
+
+def is_undo_blocked(messages):
+    """
+    Check if undoing the last user request is blocked because run_python_code was used.
+    Returns True if undo is blocked, False otherwise.
+    """
+    # Find the last user message index
+    last_user_idx = None
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "user":
+            last_user_idx = i
+            break
+
+    if last_user_idx is None:
+        return True  # No user message, nothing to undo
+
+    # Check if run_python_code was used in any message after the last user message
+    messages_after_user = messages[last_user_idx + 1 :]
+    for msg in messages_after_user:
+        tool_calls = msg.get("tool_calls", [])
+        for tool_call in tool_calls:
+            func = tool_call.get("function", {})
+            func_name = func.get("name", "")
+            if func_name == "run_python_code":
+                return True
+
     return False
 
 
@@ -176,8 +220,10 @@ def close():
     message_queue = None
     database = None
     original_save = None
-    for file in os.listdir(os.path.join(path_to_app, "io")):
-        os.remove(os.path.join(path_to_app, "io", file))
+    io_dir = os.path.join(path_to_app, "io")
+    if os.path.exists(io_dir):
+        for file in os.listdir(io_dir):
+            os.remove(os.path.join(io_dir, file))
 
 
 def sanitize_for_id(value):
@@ -509,10 +555,17 @@ def load_project(project):
 def menu():
     from flask import redirect, request
 
+    from .llm_providers import get_available_providers, get_current_provider_name
+
     # Redirect to app if already loaded
     if database:
         return redirect("/app")
     projects = get_projects(db_folder)
+
+    # Get provider info for the UI
+    available_providers = get_available_providers()
+    current_provider = get_current_provider_name()
+
     if request.method == "POST" and "project" in request.form:
         project = request.form["project"]
         if project in projects:
@@ -526,8 +579,19 @@ def menu():
     if request.args.get("error"):
         error = request.args.get("error")
         error = urllib.parse.unquote(error)
-        return render_template("menu.html", projects=projects, error=error)
-    return render_template("menu.html", projects=projects)
+        return render_template(
+            "menu.html",
+            projects=projects,
+            error=error,
+            available_providers=available_providers,
+            current_provider=current_provider,
+        )
+    return render_template(
+        "menu.html",
+        projects=projects,
+        available_providers=available_providers,
+        current_provider=current_provider,
+    )
 
 
 @app.route("/create", methods=["GET", "POST"])
@@ -688,25 +752,30 @@ def download(filepath):
     dir_path = os.path.dirname(target)
     path = os.path.basename(filepath)
     if request.args.get("attached"):
-        return send_from_directory(directory=dir_path, path=path, filename=path, as_attachment=True)
+        return send_from_directory(directory=dir_path, path=path, download_name=path, as_attachment=True)  # type: ignore
     else:
-        return send_from_directory(directory=dir_path, path=path, filename=path, as_attachment=True)
+        return send_from_directory(directory=dir_path, path=path, download_name=path, as_attachment=False)  # type: ignore
 
 
 @sock.route("/discussion")
 def discussion(ws):
-    if not database:
-        return script_to_return_to_menu
-    messages = database.get_database_chat()
+    # Wait for the backend thread to be ready
+    while not database:
+        time.sleep(1)
+
+    messages = safe_db_read(database.get_database_chat)
+    if messages is None:
+        messages = []  # Fallback to empty if read failed
 
     # Emit initial context usage on connect and get percentage
     context_percentage = calculate_and_emit_context_from_messages(messages)
     can_compress = can_compress_context(messages)
+    undo_blocked = is_undo_blocked(messages)
 
     if len(messages) == 0:
         current = str(uuid.uuid4())
     else:
-        current = str(hash(str(database.get_database_chat())))
+        current = str(hash(str(messages)))
         filtered_messages = filter_intermediate_messages(messages.copy())
         processed_messages = convert_markdown(replace_pi_generated_file_links(filtered_messages, database.project_path))
         ws.send(
@@ -715,19 +784,25 @@ def discussion(ws):
                 messages=processed_messages,
                 context_percentage=context_percentage,
                 can_compress=can_compress,
+                undo_blocked=undo_blocked,
             )
         )
     while True:
         asyncio.run(database.await_update(timeout=20))
         if not database:
             break
-        messages = database.get_database_chat()
-        new = str(hash(str(database.get_database_chat())))
+        # All database reads are now after the pause check
+        messages = safe_db_read(database.get_database_chat)
+        if messages is None:
+            # Read failed, skip this iteration
+            continue
+        new = str(hash(str(messages)))
         if new != current:
             current = new
             # Update context usage when chat changes
             context_percentage = calculate_and_emit_context_from_messages(messages)
             can_compress = can_compress_context(messages)
+            undo_blocked = is_undo_blocked(messages)
             filtered_messages = filter_intermediate_messages(messages.copy())
             processed_messages = convert_markdown(
                 replace_pi_generated_file_links(filtered_messages, database.project_path)
@@ -738,6 +813,7 @@ def discussion(ws):
                     messages=processed_messages,
                     context_percentage=context_percentage,
                     can_compress=can_compress,
+                    undo_blocked=undo_blocked,
                 )
             )
 
@@ -771,23 +847,155 @@ def compress_context():
     return jsonify({"success": True, "message": "Compression started"})
 
 
+@app.route("/undo_last_request", methods=["POST"])
+def undo_last_request():
+    """
+    Undo the last user request by removing the message and all subsequent responses.
+    Also cleans up any analysts created by delegate_research.
+    This is a 'smart undo' that reverts associated side effects.
+    """
+    from flask import jsonify
+
+    if not database or not message_queue:
+        return jsonify({"success": False, "error": "No project loaded"}), 400
+
+    messages = database.get_database_chat()
+    if not messages:
+        return jsonify({"success": False, "error": "No messages to undo"}), 400
+
+    # Find the last user message index
+    last_user_idx = None
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "user":
+            last_user_idx = i
+            break
+
+    if last_user_idx is None:
+        return jsonify({"success": False, "error": "No user message found"}), 400
+
+    # Check if run_python_code was used in any message after the last user message
+    messages_after_user = messages[last_user_idx + 1 :]
+    run_python_code_used = False
+    analysts_to_delete = []
+
+    for msg in messages_after_user:
+        tool_calls = msg.get("tool_calls", [])
+        for tool_call in tool_calls:
+            func = tool_call.get("function", {})
+            func_name = func.get("name", "")
+            func_args = func.get("arguments", "{}")
+
+            if func_name == "run_python_code":
+                run_python_code_used = True
+
+            if func_name == "delegate_research":
+                try:
+                    args = json.loads(func_args) if isinstance(func_args, str) else func_args
+                    analyst_name = args.get("name")
+                    if analyst_name:
+                        analysts_to_delete.append(analyst_name)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+    if run_python_code_used:
+        return jsonify(
+            {
+                "success": False,
+                "error": "Cannot undo: run_python_code was used. The AI executed code that may have created files or made changes that cannot be automatically reverted.",
+                "blocked": True,
+            }
+        )
+
+    if not database or not message_queue:
+        return jsonify({"success": False, "error": "No project loaded"}), 400
+
+    # Send undo command to the backend thread
+    message_queue.put(
+        {"UNDO_LAST_REQUEST": True, "last_user_idx": last_user_idx, "analysts_to_delete": analysts_to_delete}
+    )
+
+    return jsonify({"success": True, "message": "Undo request started"})
+
+
+@app.route("/reset_conversation", methods=["POST"])
+def reset_conversation():
+    """
+    Reset the entire conversation by removing all analysts, clearing pi_generated,
+    and clearing the chat history while keeping papers intact.
+    """
+    from flask import jsonify
+
+    if not database or not message_queue:
+        return jsonify({"success": False, "error": "No project loaded"}), 400
+
+    # Send reset command to the backend thread
+    message_queue.put({"RESET_CONVERSATION": True})
+
+    return jsonify({"success": True, "message": "Reset started. Papers are preserved."})
+
+
+@app.route("/switch_provider", methods=["POST"])
+def switch_provider_endpoint():
+    from flask import jsonify, request
+
+    from .llm_providers import get_available_providers, get_current_provider_name, switch_provider
+
+    data = request.get_json() or {}
+    provider_name = data.get("provider", "").lower()
+
+    if provider_name not in ["openai", "anthropic", "google"]:
+        return jsonify({"success": False, "error": "Invalid provider name"}), 400
+
+    available = get_available_providers()
+    if not available.get(provider_name, False):
+        return jsonify({"success": False, "error": "API key not configured for this provider"}), 400
+
+    success = switch_provider(provider_name)
+    if success:
+        return jsonify(
+            {"success": True, "provider": get_current_provider_name(), "message": f"Switched to {provider_name}"}
+        )
+    else:
+        return jsonify({"success": False, "error": "Failed to switch provider"}), 500
+
+
+@app.route("/get_provider_status", methods=["GET"])
+def get_provider_status():
+    from flask import jsonify
+
+    from .llm_providers import get_available_providers, get_current_provider_name
+
+    return jsonify({"current_provider": get_current_provider_name(), "available_providers": get_available_providers()})
+
+
 @sock.route("/papers")
 def papers(ws):
     if not database:
         return script_to_return_to_menu
-    papers_dict = database.get_database_papers()
+
+    # Wait for the backend thread to be ready
+    while not database:
+        time.sleep(1)
+
+    papers_dict = safe_db_read(database.get_database_papers)
+    if papers_dict is None:
+        papers_dict = []  # Fallback to empty if read failed
     if len(papers_dict) == 0:
         current = str(uuid.uuid4())
     else:
-        current = str(hash(str(database.get_database_papers())))
+        current = str(hash(str(papers_dict)))
         ws.send(render_template("papers.html", papers=papers_dict))
     while True:
         asyncio.run(database.await_update(timeout=20))
         if not database:
             break
-        new = str(hash(str(database.get_database_papers())))
+        # All database reads are now after the pause check
+        papers_dict = safe_db_read(database.get_database_papers)
+        if papers_dict is None:
+            # Read failed, skip this iteration
+            continue
+        new = str(hash(str(papers_dict)))
         if new != current:
-            papers_dict = database.get_database_papers()
             current = new
             ws.send(render_template("papers.html", papers=papers_dict))
 
@@ -993,7 +1201,7 @@ def export_papers():
             os.remove(destination)
         return response
 
-    return send_from_directory(directory=dir_path, path=path, filename=path, as_attachment=True)
+    return send_from_directory(directory=dir_path, path=path, download_name=path, as_attachment=True)  # type: ignore
 
 
 @app.route("/save")
@@ -1060,7 +1268,7 @@ def download_save():
             os.remove(destination)
         return response
 
-    return send_from_directory(directory=dir_path, path=path, filename=path, as_attachment=True)
+    return send_from_directory(directory=dir_path, path=path, download_name=path, as_attachment=True)  # type: ignore
 
 
 @app.route("/download_analysis")
@@ -1086,7 +1294,7 @@ def download_analysis():
             os.remove(destination)
         return response
 
-    return send_from_directory(directory=dir_path, path=path, filename=path, as_attachment=True)
+    return send_from_directory(directory=dir_path, path=path, download_name=path, as_attachment=True)  # type: ignore
 
 
 @app.route("/load_checkpoint", methods=["POST"])
@@ -1160,7 +1368,19 @@ def load_save():
     # Check if project already exists
     if os.path.exists(project_path):
         if request.form.get("overwrite"):
-            shutil.rmtree(project_path)
+            # Use a more robust deletion method for macOS
+            def remove_readonly(func, path, excinfo):
+                """Error handler for shutil.rmtree to handle read-only files."""
+                os.chmod(path, 0o777)  # nosec B103
+                func(path)
+
+            try:
+                shutil.rmtree(project_path, onerror=remove_readonly)
+            except OSError:
+                # If still fails, try with subprocess (more aggressive)
+                import subprocess  # nosec B404
+
+                subprocess.run(["rm", "-rf", project_path], check=False)  # nosec B603, B607
         else:
             shutil.rmtree(temp_dir)
             return redirect("/menu?error=Project%20already%20exists")
@@ -1206,17 +1426,341 @@ atexit.register(close)
 
 
 def main():
-    import logging
+    import argparse
 
-    log = logging.getLogger("werkzeug")
-    log.setLevel(logging.ERROR)
-    # print a clickable link to the user to open the app by navigating to the link
-    print("ScienceAI is running. Please open the following link in your browser to access the application:")
-    if sys.platform.startswith("win"):
-        print("http://localhost:4242")
+    from .llm_providers import (
+        get_available_providers,
+        get_current_provider_name,
+        save_api_key,
+        setup_api_keys_interactive,
+        switch_provider,
+        validate_all_configured_keys,
+        validate_api_key,
+    )
+
+    parser = argparse.ArgumentParser(
+        description="ScienceAI - AI-powered scientific literature analysis",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  scienceai                           # Start the web server
+  scienceai --setup-keys              # Interactive API key setup
+  scienceai --set-key openai sk-...   # Set a specific API key
+  scienceai --validate-keys           # Validate all configured keys
+  scienceai --provider anthropic      # Start with a specific provider
+  scienceai -v                        # Start with verbose (INFO) logging
+  scienceai --debug                   # Start with debug logging
+  scienceai --log-level WARNING       # Set specific log level
+        """,
+    )
+    parser.add_argument(
+        "--setup-keys",
+        action="store_true",
+        help="Interactive setup for API keys",
+    )
+    parser.add_argument(
+        "--set-key",
+        nargs=2,
+        metavar=("PROVIDER", "KEY"),
+        help="Set an API key for a provider (openai, anthropic, google)",
+    )
+    parser.add_argument(
+        "--validate-keys",
+        action="store_true",
+        help="Validate all configured API keys",
+    )
+    parser.add_argument(
+        "--provider",
+        choices=["openai", "anthropic", "google"],
+        help="Set the default LLM provider",
+    )
+    parser.add_argument(
+        "--skip-validation",
+        action="store_true",
+        help="Skip API key validation on startup",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=4242,
+        help="Port to run the server on (default: 4242)",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging (INFO level)",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging (DEBUG level, more verbose than -v)",
+    )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level explicitly (overrides -v and --debug)",
+    )
+    parser.add_argument(
+        "--gcp-service-account",
+        metavar="PATH",
+        help="Path to GCP service account JSON file (for Gemini and/or Claude on Vertex AI)",
+    )
+    parser.add_argument(
+        "--remove-gcp-config",
+        action="store_true",
+        help="Remove GCP service account configuration (reverts to API key)",
+    )
+
+    args = parser.parse_args()
+
+    # Handle --setup-keys
+    if args.setup_keys:
+        setup_api_keys_interactive()
+        return
+
+    # Handle --set-key
+    if args.set_key:
+        provider, key = args.set_key
+        if provider.lower() not in ["openai", "anthropic", "google"]:
+            print(f"✗ Invalid provider: {provider}")
+            print("  Valid providers: openai, anthropic, google")
+            sys.exit(1)
+
+        if save_api_key(provider, key):
+            print(f"✓ Saved {provider} API key")
+            # Validate the key
+            print("  Validating...")
+            is_valid, message = validate_api_key(provider)
+            if is_valid:
+                print(f"  ✓ Key is valid: {message}")
+            else:
+                print(f"  ✗ Key validation failed: {message}")
+        else:
+            print(f"✗ Failed to save {provider} API key")
+            sys.exit(1)
+        return
+
+    # Handle --gcp-service-account
+    if args.gcp_service_account:
+        from .llm_providers import save_gcp_config
+
+        sa_path = args.gcp_service_account
+
+        # Validate file exists
+        if not os.path.exists(sa_path):
+            print(f"✗ Service account file not found: {sa_path}")
+            sys.exit(1)
+
+        # Load and validate JSON
+        try:
+            with open(sa_path) as f:
+                sa_data = json.load(f)
+            project_id = sa_data.get("project_id")
+            if not project_id:
+                print("✗ Invalid service account JSON (missing project_id)")
+                sys.exit(1)
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"✗ Invalid service account JSON: {e}")
+            sys.exit(1)
+
+        print(f"\n✓ Valid service account file for project: {project_id}")
+        print("  This service account can be used for:")
+        print("    1. Google Gemini (native GCP models)")
+        print("    2. Claude on Vertex AI (Anthropic partner models)")
+        print()
+
+        # Ask about Claude on Vertex
+        claude_response = input("Use this service account for Claude on Vertex AI? (y/n): ").strip().lower()
+        use_for_claude = claude_response in ["y", "yes"]
+
+        # Ask for region if using for Claude (or always)
+        if use_for_claude:
+            print("\nCommon Vertex AI regions:")
+            print("  - us-east5 (US East)")
+            print("  - us-central1 (US Central)")
+            print("  - europe-west1 (Europe West)")
+            region = input("Enter Vertex AI region (default: us-east5): ").strip()
+            if not region:
+                region = "us-east5"
+        else:
+            region = "us-east5"  # Default for Gemini
+
+        # Save configuration (always for Gemini, optionally for Claude)
+        if save_gcp_config(
+            service_account_path=sa_path,
+            project_id=project_id,
+            region=region,
+            use_for_gemini=True,  # Always configure for Gemini
+            use_for_claude=use_for_claude,
+        ):
+            print("\n✓ Configured GCP service account:")
+            print(f"  Project: {project_id}")
+            print(f"  Region: {region}")
+            print("  Gemini: ✓")
+            print(f"  Claude on Vertex: {'✓' if use_for_claude else '✗'}")
+        else:
+            print("\n✗ Failed to save configuration")
+            sys.exit(1)
+        return
+
+    # Handle --remove-gcp-config
+    if args.remove_gcp_config:
+        from .llm_providers import load_gcp_config, remove_gcp_config
+
+        gemini_config = load_gcp_config("google_gcp")
+        claude_config = load_gcp_config("anthropic_vertex")
+
+        if not gemini_config and not claude_config:
+            print("\n✗ No GCP service account configuration found")
+            sys.exit(1)
+
+        print("\nCurrent GCP configuration:")
+        if gemini_config:
+            print(f"  ✓ Gemini: {gemini_config['project_id']} ({gemini_config.get('region', 'us-east5')})")
+        if claude_config:
+            print(f"  ✓ Claude on Vertex: {claude_config['project_id']} ({claude_config.get('region', 'us-east5')})")
+        print()
+
+        remove_gemini = False
+        remove_claude = False
+
+        if gemini_config:
+            response = input("Remove Gemini GCP config? (y/n): ").strip().lower()
+            remove_gemini = response in ["y", "yes"]
+
+        if claude_config:
+            response = input("Remove Claude Vertex config? (y/n): ").strip().lower()
+            remove_claude = response in ["y", "yes"]
+
+        if not remove_gemini and not remove_claude:
+            print("\n✗ No configurations removed")
+            return
+
+        if remove_gcp_config(remove_gemini=remove_gemini, remove_claude=remove_claude):
+            print("\n✓ Removed GCP configuration:")
+            if remove_gemini:
+                print("  - Gemini (will use API key if configured)")
+            if remove_claude:
+                print("  - Claude on Vertex (use direct Anthropic API instead)")
+        else:
+            print("\n✗ Failed to remove configuration")
+            sys.exit(1)
+        return
+
+    # Handle --validate-keys
+    if args.validate_keys:
+        print("\nValidating configured API keys...\n")
+        results = validate_all_configured_keys()
+
+        any_valid = False
+        for provider_name, (is_valid, message) in results.items():
+            status = "✓" if is_valid else "✗"
+            print(f"  {status} {provider_name}: {message}")
+            if is_valid:
+                any_valid = True
+
+        if not any_valid:
+            print("\n⚠ No valid API keys configured.")
+            sys.exit(1)
+        else:
+            print("\n✓ All validations complete.")
+        return
+
+    # Handle --provider
+    if args.provider:
+        if not switch_provider(args.provider):
+            available = get_available_providers()
+            if not available.get(args.provider, False):
+                print(f"✗ Cannot use {args.provider}: No API key configured")
+                print("  Use --setup-keys to configure API keys")
+                sys.exit(1)
+            else:
+                print(f"✗ Failed to switch to {args.provider}")
+                sys.exit(1)
+
+    # Check that at least one provider is available
+    available = get_available_providers()
+    if not any(available.values()):
+        print("\n╔═══════════════════════════════════════════════════════════╗")
+        print("║  ⚠ No API keys configured!                               ║")
+        print("╚═══════════════════════════════════════════════════════════╝")
+        print("\nScienceAI requires at least one LLM provider API key.")
+        print("Run 'scienceai --setup-keys' to configure your API keys.\n")
+        print("Or set one directly:")
+        print("  scienceai --set-key openai YOUR_OPENAI_KEY")
+        print("  scienceai --set-key anthropic YOUR_ANTHROPIC_KEY")
+        print("  scienceai --set-key google YOUR_GOOGLE_KEY\n")
+        sys.exit(1)
+
+    # Validate keys on startup (unless skipped)
+    if not args.skip_validation:
+        print("Validating API keys...")
+        results = validate_all_configured_keys()
+
+        valid_providers = []
+        for provider_name, (is_valid, message) in results.items():
+            if is_valid:
+                valid_providers.append(provider_name)
+                print(f"  ✓ {provider_name}: {message}")
+            elif available.get(provider_name, False):
+                # Key was configured but is invalid
+                print(f"  ✗ {provider_name}: {message}")
+
+        if not valid_providers:
+            print("\n⚠ No valid API keys found!")
+            print("Please check your API keys with: scienceai --validate-keys")
+            sys.exit(1)
+
+        # Make sure current provider is valid
+        current = get_current_provider_name()
+        if current not in valid_providers:
+            # Switch to a valid provider
+            new_provider = valid_providers[0]
+            switch_provider(new_provider)
+            print(f"\n  Switched to {new_provider} (previous provider not available)")
+
+    # Configure logging based on CLI arguments
+    if args.log_level:
+        log_level = getattr(logging, args.log_level)
+    elif args.debug:
+        log_level = logging.DEBUG
+    elif args.verbose:
+        log_level = logging.INFO
     else:
-        print("\033]8;;http://localhost:4242\ahttp://localhost:4242\033]8;;\a")
-    app.run(host="localhost", port=4242, debug=False)
+        log_level = logging.WARNING  # Default: only warnings and above
+
+    # Configure root logger with format
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    # Configure Werkzeug (Flask's HTTP logger) - suppress unless in debug mode
+    werkzeug_log = logging.getLogger("werkzeug")
+    if log_level <= logging.DEBUG:
+        werkzeug_log.setLevel(logging.DEBUG)
+    else:
+        werkzeug_log.setLevel(logging.ERROR)
+
+    # Print startup info
+    logger = logging.getLogger("scienceai")
+    current_provider = get_current_provider_name()
+    logger.info(f"Using {current_provider.upper()} as LLM provider")
+    logger.info("ScienceAI is running")
+
+    url = f"http://localhost:{args.port}"
+    logger.info(f"Access the web interface at: {url}")
+
+    # Also print the clickable link to stdout for convenience if running interactively
+    if sys.stdout.isatty():
+        if not sys.platform.startswith("win"):
+            print(f"\033]8;;{url}\a{url}\033]8;;\a")
+        else:
+            print(url)
+
+    app.run(host="localhost", port=args.port, debug=False)
 
 
 if __name__ == "__main__":

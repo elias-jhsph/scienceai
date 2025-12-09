@@ -1,3 +1,4 @@
+import os
 import traceback
 
 
@@ -10,7 +11,7 @@ async def compress_conversation_context(dm):
 
     import dictdatabase as DDB
 
-    from .llm import client
+    from .llm import client, get_config
 
     # Add user request message as pending (marked internal so PI won't include in context)
     user_request_msg = {
@@ -71,7 +72,7 @@ async def compress_conversation_context(dm):
             ]
 
             response = client.chat.completions.create(
-                model="gpt-5-mini", messages=summary_prompt, max_completion_tokens=1000
+                model=get_config().default_fast_model, messages=summary_prompt, max_tokens=1000
             )
 
             summary = response.choices[0].message.content
@@ -101,8 +102,8 @@ async def compress_conversation_context(dm):
             print(f"Failed to compress message at index {idx}: {e}")
             continue
 
-    # Remove the CONTEXT_LIMIT_REACHED message if present
-    messages = [m for m in messages if m.get("content") != "CONTEXT_LIMIT_REACHED"]
+    # Remove the CONTEXTLIMITREACHED message if present
+    messages = [m for m in messages if "CONTEXTLIMITREACHED" not in m.get("content", "")]
 
     # Mark user's compression request as processed and add assistant response
     # Find the user request message and mark it processed
@@ -309,6 +310,59 @@ def run_backend(folder, project_path, storage_path, message_queue, stop_event, i
                         print("Compressing conversation context...")
                         await compress_conversation_context(dm)
                         print("Context compression complete.")
+                        continue
+                    elif message.get("UNDO_LAST_REQUEST"):
+                        print("Undoing last request...")
+                        last_user_idx = message.get("last_user_idx")
+                        analysts_to_delete = message.get("analysts_to_delete", [])
+
+                        # Remove analysts
+                        for analyst_name in analysts_to_delete:
+                            try:
+                                dm.remove_analyst(analyst_name)
+                                print(f"Removed analyst: {analyst_name}")
+                            except Exception as e:
+                                print(f"Failed to remove analyst {analyst_name}: {e}")
+
+                        # Revert chat history
+                        dm.revert_chat_from_index(last_user_idx)
+
+                        print("Undo complete.")
+                        continue
+                    elif message.get("RESET_CONVERSATION"):
+                        print("Resetting conversation...")
+                        import shutil
+
+                        # Remove all analysts
+                        try:
+                            all_analysts = dm.get_all_analysts()
+                            for analyst in all_analysts:
+                                analyst_name = analyst.get("name")
+                                if analyst_name:
+                                    try:
+                                        dm.remove_analyst(analyst_name)
+                                        print(f"Reset: Removed analyst {analyst_name}")
+                                    except Exception as e:
+                                        print(f"Reset: Failed to remove analyst {analyst_name}: {e}")
+                        except Exception as e:
+                            print(f"Reset: Error getting analysts: {e}")
+
+                        # Clear pi_generated directory
+                        pi_generated_path = os.path.join(dm.project_path, "pi_generated")
+                        if os.path.exists(pi_generated_path):
+                            try:
+                                shutil.rmtree(pi_generated_path)
+                                os.makedirs(pi_generated_path)
+                                print("Reset: Cleared pi_generated directory")
+                            except Exception as e:
+                                print(f"Reset: Failed to clear pi_generated: {e}")
+
+                        # Clear analyst tool tracker directory where data collection request tracker exports are stored
+
+                        # Clear chat messages but keep first 2 (intro messages)
+                        dm.revert_chat_from_index(2)
+
+                        print("Reset complete.")
                         continue
                     elif stop_event.is_set():
                         print("Stop event set. Terminating backend")

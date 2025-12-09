@@ -1,25 +1,84 @@
 import contextlib
 import io
 import json
+import logging
 import os
 import traceback
 from datetime import datetime
 from time import sleep
 
-import openai
-
 from scienceai.analyst import Analyst
 
 from .bundle_validator import validate_bundle, validate_bundle_tool_schema
 from .database_manager import DatabaseManager
-from .llm import client, enc
+from .llm import MODEL_VISION, client, enc, get_config, get_model_for_role
 from .llm import use_tools_sync as use_tools
 from .reasoning import add_reasoning_to_context
 
+logger = logging.getLogger(__name__)
+
 path_to_app = os.path.dirname(os.path.abspath(__file__))
 
-with open(os.path.join(path_to_app, "principal_investigator_base_prompt.txt")) as file:
-    system_message = file.read()
+
+def _load_pi_system_prompt() -> str:
+    """Load the PI system prompt with provider-specific prepend and append.
+
+    Loads the base prompt and adds provider-specific instructions:
+    - Prepend: Initial context and reminders at the start
+    - Append: Critical rules at the end (leverages recency bias)
+    """
+    from .llm_providers import Provider, get_provider_type
+
+    # Load base prompt
+    with open(os.path.join(path_to_app, "principal_investigator_base_prompt.txt")) as file:
+        base_prompt = file.read()
+
+    prepend_content = ""
+    append_content = ""
+
+    # Determine provider and load corresponding prepend/append
+    try:
+        provider_type = get_provider_type()
+        logger.info(f"Provider type: {provider_type}")
+
+        if provider_type == Provider.ANTHROPIC:
+            prepend_file = "pi_prepend_anthropic.txt"
+            append_file = "pi_append_anthropic.txt"
+        elif provider_type == Provider.OPENAI:
+            prepend_file = "pi_prepend_openai.txt"
+            append_file = "pi_append_openai.txt"
+        elif provider_type == Provider.GOOGLE:
+            prepend_file = "pi_prepend_google.txt"
+            append_file = "pi_append_google.txt"
+        else:
+            prepend_file = None
+            append_file = None
+
+        if prepend_file:
+            prepend_path = os.path.join(path_to_app, "prompts", prepend_file)
+            if os.path.exists(prepend_path):
+                with open(prepend_path) as f:
+                    content = f.read().strip()
+                if content:
+                    prepend_content = content + "\n\n"
+                    logger.info(f"Loaded PI prepend for provider: {provider_type.value}")
+
+        if append_file:
+            append_path = os.path.join(path_to_app, "prompts", append_file)
+            if os.path.exists(append_path):
+                with open(append_path) as f:
+                    content = f.read().strip()
+                if content:
+                    append_content = "\n\n" + content
+                    logger.info(f"Loaded PI append for provider: {provider_type.value}")
+
+    except Exception as e:
+        logger.warning(f"Could not load provider-specific prompt files: {e}")
+
+    return prepend_content + base_prompt + append_content
+
+
+# System message is now loaded dynamically in PrincipalInvestigator.__init__
 
 
 # PI Module
@@ -33,7 +92,6 @@ class PrincipalInvestigator:
         self.tool_callables = {
             "delegate_research": self.delegate_research,
             "reflect_on_delegations": self.reflect_on_delegations,
-            "create_arbitrary_csv": self.create_arbitrary_csv,
             "get_analyst_data_link": self.get_analyst_data_link,
             "view_image": self.view_image,
             "validate_analytic_bundle": self.validate_analytic_bundle,
@@ -41,14 +99,13 @@ class PrincipalInvestigator:
         self.tools = [
             self.delegate_research_schema(),
             self.reflect_on_delegations(return_tool=True),
-            self.create_arbitrary_csv(None, None, return_tool=True),
             self.get_analyst_data_link(None, None, return_tool=True),
             self.run_python_code(None, return_tool=True),
             self.view_image(None, return_tool=True),
             validate_bundle_tool_schema(),
         ]
         self.tool_callables["run_python_code"] = self.run_python_code
-        self.system_message = system_message
+        self.system_message = _load_pi_system_prompt()
 
     async def initialize(self, ingest=True):
         chat_db = self.db.get_database_chat()
@@ -69,7 +126,17 @@ class PrincipalInvestigator:
 
         if len(chat_db) > 0:
             last_chat = chat_db[-1]
-            if last_chat["content"] == first_message:
+            if last_chat.get("content") == "CONTEXTLIMITREACHED":
+                # Remove the context limit message so the user can continue or re-trigger it
+                self.db.pop_last_chat()
+                # Refresh chat_db after modification
+                chat_db = self.db.get_database_chat()
+                if len(chat_db) > 0:
+                    last_chat = chat_db[-1]
+                else:
+                    last_chat = None
+
+            if last_chat and last_chat["content"] == first_message:
                 if ingest:
                     self.db.update_last_chat("Pending")
                     self.db.ingest_papers()
@@ -125,19 +192,19 @@ class PrincipalInvestigator:
             if msg.get("status") == "Pending":
                 msg["status"] = "Processed"
         # Update the chat in the database
-        from .database_manager import DDB
-
-        with DDB.at("chat").session() as (session, chat):
-            chat["messages"] = messages
-            session.write()
+        self.db.set_all_chat_messages(messages)
 
     def delegate_research_schema(self):
         return {
             "type": "function",
             "function": {
                 "name": "delegate_research",
-                "description": "Delegate data extraction from research papers to a specialized Analyst Agent. "
-                "The Analyst will extract structured data and optionally create CSV files. "
+                "description": "Delegate data collection from research papers to a specialized Analyst Agent. "
+                "CRITICAL: Each delegation must focus on ONE outcome type only. "
+                "For multiple outcomes (e.g., nonunion + time to union + infections), create SEPARATE delegate_research calls. "
+                "WRONG: One delegation for 'nonunion, time to union, and infection data'. "
+                "RIGHT: Three delegate_research calls - one for nonunion, one for time to union, one for infections. "
+                "The Analyst will collect structured data and optionally create CSV files. "
                 "Use this when you need NEW information from papers that hasn't been collected yet. "
                 "Returns answer and evidence from the Analyst after completion.",
                 "parameters": {
@@ -150,11 +217,11 @@ class PrincipalInvestigator:
                         },
                         "question": {
                             "type": "string",
-                            "description": "The research question or data extraction goal. Be specific about WHAT to extract, "
+                            "description": "The research question or data collection goal. Be specific about WHAT to collect, "
                             "not HOW to format it. **If you already know which specific papers to analyze** "
                             "(e.g., from previous analyst results or your own analysis), include their paper IDs "
-                            "or titles directly in the question (e.g., 'For papers [abc123def4, xyz789ghi0], extract "
-                            "sample sizes' or 'From papers titled X, Y, Z, extract methods'). This ensures consistency "
+                            "or titles directly in the question (e.g., 'For papers [abc123def4, xyz789ghi0], collect "
+                            "sample sizes' or 'From papers titled X, Y, Z, collect methods'). This ensures consistency "
                             "and avoids forcing the analyst to rediscover your paper selection. Only use general "
                             "descriptions (e.g., 'papers using qualitative methods') when you need the analyst to "
                             "discover or filter papers themselves. Include what data points are needed and any "
@@ -163,7 +230,7 @@ class PrincipalInvestigator:
                         "require_file_output": {
                             "type": "boolean",
                             "description": "Set to true when you need downloadable CSV files with structured data (typically "
-                            "for 10+ papers or complex multi-field extractions). Set to false for quick queries "
+                            "for 10+ papers or complex multi-field data collection). Set to false for quick queries "
                             "or summary analyses. Default: false. When true, analyst MUST attach data collection files.",
                         },
                     },
@@ -215,28 +282,6 @@ class PrincipalInvestigator:
             + new_analyst.evidence
         )
 
-    def create_arbitrary_csv(self, csv_name, csv_str, return_tool=False):
-        if return_tool:
-            return {
-                "type": "function",
-                "function": {
-                    "name": "create_arbitrary_csv",
-                    "description": "Creates a CSV file with the given name and data",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "csv_name": {"type": "string", "description": "The name of the CSV file"},
-                            "csv_str": {"type": "string", "description": "The data to be written to the CSV file"},
-                        },
-                        "additionalProperties": False,
-                        "required": ["csv_name", "csv_str"],
-                    },
-                },
-            }
-        self.db.create_pi_arbitrary_csv(csv_name, csv_str)
-        csv_path = self.db.get_pi_arbitrary_csv(csv_name)
-        return f"CSV file {csv_name} created successfully.  <button type='submit' onclick='window.open(\"download/{csv_path}\")'>Download CSV</button>"
-
     def get_analyst_data_link(self, analyst_name, data_collection_name, return_tool=False):
         if return_tool:
             return {
@@ -271,7 +316,10 @@ class PrincipalInvestigator:
                 "type": "function",
                 "function": {
                     "name": "run_python_code",
-                    "description": "Executes Python code in a restricted environment. Use this for math, statistics, plotting, and creating files. "
+                    "description": "Executes Python code in a STATELESS environment. "
+                    "CRITICAL: Each call starts completely fresh - variables, imports, and data do NOT persist between calls. "
+                    "ALWAYS start with: import pandas as pd; import numpy as np; df = pd.read_csv('/path/to/file.csv'). "
+                    "Use this for math, statistics, plotting, and creating files. "
                     "Files created in the current directory will be automatically detected and made available for download. "
                     "Standard output and errors are captured and returned.",
                     "parameters": {
@@ -403,9 +451,10 @@ class PrincipalInvestigator:
                 "type": "function",
                 "function": {
                     "name": "view_image",
-                    "description": "View and analyze an image file that you generated. This allows you to visually inspect "
-                    "the image quality, clarity, labels, colors, and overall presentation before sharing it "
-                    "with the user. Use this IMMEDIATELY after generating any image to ensure it meets quality standards.",
+                    "description": "View and analyze an image file that you generated. "
+                    "MANDATORY: You MUST call this immediately after generating ANY plot or image. "
+                    "This allows you to visually inspect the image quality, clarity, labels, colors, and overall presentation "
+                    "before sharing it with the user. Do NOT share images without viewing them first.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -446,7 +495,9 @@ class PrincipalInvestigator:
             # Instead of returning the base64 string to the main chat (which explodes context window),
             # we send it to the vision model here and return ONLY the text critique.
 
-            print(f"Analyzing image {filename} ({width}x{height}, {round(file_size/1024)}KB) with vision model...")
+            logger.info(
+                f"Analyzing image {filename} ({width}x{height}, {round(file_size/1024)}KB) with vision model..."
+            )
 
             vision_messages = [
                 {
@@ -468,8 +519,10 @@ class PrincipalInvestigator:
                 },
             ]
 
-            # Call the vision model (using gpt-4o or compatible vision model)
-            vision_response = client.chat.completions.create(model="gpt-4o", messages=vision_messages, max_tokens=500)
+            # Call the vision model
+            vision_response = client.chat.completions.create(
+                model=get_model_for_role(MODEL_VISION), messages=vision_messages, max_tokens=500
+            )
 
             critique = vision_response.choices[0].message.content
 
@@ -551,9 +604,7 @@ class PrincipalInvestigator:
 
     @staticmethod
     def tool_error_callback(response):
-        from pprint import pprint as pp
-
-        pp(response)
+        logger.error(f"Tool error: {response}")
 
     def _calculate_and_emit_context(self, messages):
         """Calculate token count for messages and emit context usage update."""
@@ -605,26 +656,49 @@ class PrincipalInvestigator:
 
             arguments = {
                 "messages": temp_messages,
-                "model": "gpt-5.1",
+                "model": get_config().default_model,
                 "reasoning_effort": "high",
                 "tools": self.tools,
                 "parallel_tool_calls": False,
             }
 
-            # Try to make API call, catch context limit errors
             try:
                 chat_response = client.chat.completions.create(**arguments)
-            except openai.BadRequestError as e:
-                error_str = str(e)
-                # Check for context length errors
-                if "maximum context length" in error_str.lower():
+            except Exception as e:
+                error_str = str(e).lower()
+                # Check for context length  or token limit errors across providers
+                # OpenAI: "maximum context length"
+                # Anthropic: "max_tokens", "prompt is too long"
+                # Google: "invalid argument" (often for length), "resource exhausted"
+                token_errors = [
+                    "maximum context length",
+                    "context_length",
+                    "too long",
+                    "max_tokens",
+                    "budget_tokens",
+                    "output blocked",  # Sometimes happens with length on Vertex
+                    "400",  # Generic 400 often implies bad request due to length if not other things
+                ]
+
+                if "tool_use" in error_str and "tool_result" in error_str:
+                    # Heal orphans and retry ONCE
+                    logger.warning(f"Tool use mismatch detected (healing orphans): {e}")
+                    temp_messages = self._heal_tool_mismatches(temp_messages)
+                    # Retry carefully
+                    try:
+                        arguments["messages"] = temp_messages
+                        chat_response = client.chat.completions.create(**arguments)
+                    except Exception as retry_e:
+                        logger.error(f"Retry failed after healing: {retry_e}")
+                        raise retry_e
+                elif any(err in error_str for err in token_errors):
+                    logger.warning(f"Context limit or token error reached: {e}")
                     # Add a special message that the frontend will detect
                     context_limit_message = {
-                        "content": "CONTEXT_LIMIT_REACHED",
+                        "content": "CONTEXTLIMITREACHED",
                         "role": "system",
                         "status": "Processed",
                         "time": datetime.now().strftime("%B %d, %Y %I:%M:%S %p %Z"),
-                        "context_limit_exceeded": True,
                     }
                     self.db.add_chat(context_limit_message)
                     self.db.update_last_chat("Processed")
@@ -642,6 +716,8 @@ class PrincipalInvestigator:
                     "status": "Pending",
                     "time": datetime.now().strftime("%B %d, %Y %I:%M:%S %p %Z"),
                 }
+                if chat_response.choices[0].message.thinking:
+                    chat_message["thinking"] = chat_response.choices[0].message.thinking
                 self.db.add_chat(chat_message)
                 no_final_content = False
             elif (chat_response.choices[0].message.content and called_tools) or (
@@ -653,7 +729,7 @@ class PrincipalInvestigator:
                 call_new_history = use_tools(
                     chat_response, arguments, function_dict=self.tool_callables, pre_tool_call=True
                 )
-                added_csv = False
+                # added_csv = False
                 # called_tools = False # Allow looping!
                 is_data_link_request = False
 
@@ -689,9 +765,6 @@ class PrincipalInvestigator:
                             first_tool_call = False
                         call["status"] = "Pending"
                         call["time"] = datetime.now().strftime("%B %d, %Y %I:%M:%S %p %Z")
-
-                        if call["tool_calls"][0]["function"]["name"] == "create_arbitrary_csv":
-                            added_csv = True
                         if not call["content"]:
                             call["content"] = "Working on that now..."
                         self.db.add_chat(call)
@@ -703,10 +776,6 @@ class PrincipalInvestigator:
                         call["status"] = "Pending"
                         call["time"] = datetime.now().strftime("%B %d, %Y %I:%M:%S %p %Z")
                         self.db.add_chat(call)
-
-                        if added_csv:
-                            # Store the CSV content for potential use
-                            call["content"]
 
                         # Skip continuing the loop for run_python_code to allow auto-fixing
                         if call.get("name") == "run_python_code":
@@ -721,18 +790,14 @@ class PrincipalInvestigator:
             if msg.get("status") == "Pending":
                 msg["status"] = "Processed"
         # Update the chat in the database
-        from .database_manager import DDB
-
-        with DDB.at("chat").session() as (session, chat):
-            chat["messages"] = messages
-            session.write()
+        self.db.set_all_chat_messages(messages)
 
     async def finish_tool_calls(self, last_chat):
         new_history = use_tools(
             last_chat,
             {
                 "messages": self.db.get_database_chat(),
-                "model": "gpt-5.1",
+                "model": get_config().default_model,
                 "reasoning_effort": "medium",
                 "tools": self.tools,
             },
@@ -745,3 +810,67 @@ class PrincipalInvestigator:
                 call["time"] = datetime.now().strftime("%B %d, %Y %I:%M:%S %p %Z")
                 self.db.add_chat(call)
         self.db.update_last_chat("Processed")
+
+    def _heal_tool_mismatches(self, messages):
+        """
+        Scans the message history and removes 'assistant' messages that have tool_calls
+        but are missing their corresponding 'tool' result messages (orphans).
+        This is necessary because some LLM providers (e.g. Anthropic) enforce strict
+        alternation of tool_use and tool_result.
+        """
+        healed_messages = []
+        skip_indices = set()
+
+        for i, msg in enumerate(messages):
+            if i in skip_indices:
+                continue
+
+            # If it's an assistant message with tool calls
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                tool_calls = msg["tool_calls"]
+                # Look ahead for corresponding tool results
+                # We expect the NEXT N messages to be tool results for these calls
+                # or interspersed if parallel, but typically they follow immediately.
+
+                # Simple heuristic: Check if IMMEDIATE next messages cover these IDs.
+                # If we have 3 tool calls, we expect 3 tool messages eventually?
+                # Strict strict check: The sequence must be complete.
+
+                required_ids = {tc["id"] for tc in tool_calls}
+                found_ids = set()
+
+                # Look ahead until we hit a non-tool message or run out
+                offset = 1
+                possible_result_indices = []
+
+                while i + offset < len(messages):
+                    next_msg = messages[i + offset]
+                    if next_msg.get("role") == "tool":
+                        possible_result_indices.append(i + offset)
+                        # Extract tool_call_id. Standard format variants:
+                        tid = next_msg.get("tool_call_id")
+                        if not tid and "tool_use_id" in str(next_msg):
+                            # Fallback for weird stored formats if any
+                            pass
+
+                        if tid:
+                            found_ids.add(tid)
+                    else:
+                        break  # End of tool result block
+
+                    offset += 1
+
+                # Check coverage
+                if not required_ids.issubset(found_ids):
+                    logger.warning(
+                        f"Found orphaned tool calls in message {i}. Expected {required_ids}, found {found_ids}. Removing this interaction."
+                    )
+                    # Mark this assistant message AND the partial tool results for skipping
+                    skip_indices.add(i)
+                    for idx in possible_result_indices:
+                        skip_indices.add(idx)
+                    continue
+
+            healed_messages.append(msg)
+
+        return healed_messages

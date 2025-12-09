@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import logging
 import os
 import shutil
 import time
@@ -8,6 +9,8 @@ from datetime import datetime
 import dictdatabase as DDB
 import pandas as pd
 from pandas import json_normalize
+
+logger = logging.getLogger(__name__)
 
 lock_files = []
 
@@ -271,18 +274,18 @@ class DatabaseManager:
         async with semaphore:
             pdf_path = self.get_paper_pdf(paper_id)
             if not DDB.at(paper_id).exists():
-                print(f"Processing paper {paper_id}...")
+                logger.debug(f"Processing paper {paper_id}...")
                 try:
                     processed_paper = await self.processor(pdf_path)
                     self.store_paper_json(paper_id, processed_paper)
-                    print(f"Finished paper {paper_id}")
+                    logger.debug(f"Finished paper {paper_id}")
                 except Exception as e:
-                    print(f"Failed to process paper {paper_id}: {e}")
+                    logger.error(f"Failed to process paper {paper_id}: {e}")
                     self.update_paper(paper_id, {"status": "failed", "error": str(e)})
 
     async def process_all_papers(self):
         """Processes all the papers in parallel"""
-        print("Processing all papers")
+        logger.info("Processing all papers")
         paper_ids = list(DDB.at("papers").read().keys())
         total_papers = len(paper_ids)
 
@@ -338,6 +341,23 @@ class DatabaseManager:
         return True
 
     @log_update
+    def pop_last_chat(self):
+        """Remove the last message from the chat history."""
+        with DDB.at("chat").session() as (session, chat):
+            if "messages" in chat and len(chat["messages"]) > 0:
+                chat["messages"].pop()
+                session.write()
+        return True
+
+    @log_update
+    def set_all_chat_messages(self, messages):
+        """Replace all chat messages with the provided list."""
+        with DDB.at("chat").session() as (session, chat):
+            chat["messages"] = messages
+            session.write()
+        return True
+
+    @log_update
     def create_analyst(self, name, goal, other=None):
         if other is None:
             other = {}
@@ -389,25 +409,20 @@ class DatabaseManager:
         return tool_fullname
 
     @log_update
-    def create_pi_arbitrary_csv(self, csv_name, csv_str):
-        # write the csv_data to the pi_arbitrary_csv folder
-        csv_path = os.path.join(self.project_path, "pi_arbitrary_csv", csv_name.replace(".csv", "") + ".csv")
-        if not os.path.exists(os.path.dirname(csv_path)):
-            os.makedirs(os.path.dirname(csv_path))
-        with open(csv_path, "w") as f:
-            f.write(csv_str)
-        # then store a link to the csv in the database
-        if not DDB.at("pi_arbitrary_csv").exists():
-            DDB.at("pi_arbitrary_csv").create({})
-        with DDB.at("pi_arbitrary_csv").session() as (session, pi_arbitrary_csv):
-            pi_arbitrary_csv[csv_name] = csv_path
-            session.write()
-        return True
+    def revert_chat_from_index(self, index):
+        """
+        Reverts the chat history by removing all messages from the given index (inclusive) to the end.
+        Used for undoing a user request and all its associated responses.
+        """
+        if not DDB.at("chat").exists():
+            return False
 
-    def get_pi_arbitrary_csv(self, csv_name):
-        if not DDB.at("pi_arbitrary_csv", key=csv_name).exists():
-            raise ValueError(f"CSV {csv_name} not found")
-        return DDB.at("pi_arbitrary_csv", key=csv_name).read()
+        with DDB.at("chat").session() as (session, chat):
+            if "messages" in chat and index < len(chat["messages"]):
+                chat["messages"] = chat["messages"][:index]
+            session.write()
+
+        return True
 
     @log_update
     def convert_analyst_tool_tracker(self, analyst_name, tool_name):
@@ -516,28 +531,13 @@ class DatabaseManager:
             df.to_csv(os.path.join(self.project_path, "merged_analyst_tools.csv"), index=False)
             return os.path.join(self.project_path, "merged_analyst_tools.csv")
 
-        columns = []
-        double_columns = {}
-        triple_columns = []
         bad_paths = []
         for csv in csv_paths:
             try:
-                df = pd.read_csv(csv)
+                pd.read_csv(csv)
             except Exception as e:
-                print(f"Error reading csv {csv}: {e}")
+                logger.error(f"Error reading csv {csv}: {e}")
                 bad_paths.append(csv)
-                continue
-            for col in df.columns:
-                if col == "id":
-                    continue
-                elif col not in columns:
-                    columns.append(col)
-                elif col in columns:
-                    if col not in double_columns:
-                        double_columns[col + "_" + csv_paths[csv]["analyst"]] = col
-                    else:
-                        triple_columns.append(col)
-        double_columns = list(double_columns.values())
 
         for bad_path in bad_paths:
             del csv_paths[bad_path]
@@ -546,12 +546,10 @@ class DatabaseManager:
 
         for csv, meta in csv_paths.items():
             df = pd.read_csv(csv)
-            remap = {}
-            for col in df.columns:
-                if col in double_columns:
-                    remap[col] = col + "_" + meta["analyst"]
-                if col in triple_columns:
-                    remap[col] = col + "_" + meta["analyst"] + "_" + meta["name"]
+            # Always rename all non-id columns with a unique suffix to prevent any merge conflicts
+            # This ensures no duplicate columns exist when merging
+            suffix = f"_{meta['analyst']}_{meta['name']}"
+            remap = {col: col + suffix for col in df.columns if col != "id"}
             df.rename(columns=remap, inplace=True)
             if merged_df.empty:
                 merged_df = df
@@ -600,6 +598,66 @@ class DatabaseManager:
         with DDB.at("Analysts").session() as (session, analysts):
             analysts[name].update(metadata)
             session.write()
+        return True
+
+    @log_update
+    def remove_analyst(self, name):
+        """
+        Removes all traces of an analyst by name.
+        """
+        if not DDB.at("Analysts").exists():
+            return False
+        if not DDB.at("Analysts", key=name).exists():
+            return False
+
+        # 1. Remove all lists created by this analyst
+        self.remove_all_analyst_lists(name)
+
+        # 2. Clean up tools and associated files
+        try:
+            analyst_data = DDB.at("Analysts", key=name).read()
+            if "tools" in analyst_data:
+                for tool in analyst_data["tools"]:
+                    # Remove JSON file
+                    json_filename = tool["json_path"]
+                    json_db_name = json_filename.replace(".json", "")
+                    if DDB.at(json_db_name).exists():
+                        DDB.at(json_db_name).delete()
+
+                    # Remove CSV file if it exists
+                    if tool.get("csv_path"):
+                        csv_path = tool["csv_path"]
+                        if os.path.exists(csv_path):
+                            try:
+                                os.remove(csv_path)
+                            except OSError as e:
+                                logger.error(f"Error removing CSV {csv_path}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error cleaning up analyst tools: {e}")
+
+        # 3. Remove the analyst's individual context database
+        if DDB.at(name).exists():
+            DDB.at(name).delete()
+
+        # 4. Remove from Analysts registry
+        with DDB.at("Analysts").session() as (session, analysts):
+            if name in analysts:
+                del analysts[name]
+            session.write()
+
+        # 5. Remove analyst tracker directory (files with prefix analyst_name + "_/")
+        tracker_dir_prefix = name + "_/"
+        tracker_dir_path = os.path.join(self.db_path, tracker_dir_prefix)
+        if os.path.exists(tracker_dir_path) and os.path.isdir(tracker_dir_path):
+            try:
+                import shutil
+
+                shutil.rmtree(tracker_dir_path)
+                logger.info(f"Removed tracker directory: {tracker_dir_path}")
+            except Exception as e:
+                logger.error(f"Error removing tracker directory {tracker_dir_path}: {e}")
+
         return True
 
     @log_update
@@ -699,9 +757,16 @@ class DatabaseManager:
 
     @log_update
     def remove_all_analyst_lists(self, analyst):
-        with DDB.at("papers").session() as (_session, papers):
+        """Remove all papers associations for an analyst without nested sessions."""
+        if not DDB.at("papers").exists():
+            return True
+        # Do the cleanup in a single session - don't call remove_paper_from_list
+        # which would create a nested session on the same database
+        with DDB.at("papers").session() as (session, papers):
             for paper_id in papers:
-                self.remove_paper_from_list(paper_id, analyst)
+                if analyst in papers[paper_id]:
+                    del papers[paper_id][analyst]  # Delete the key entirely
+            session.write()
         return True
 
     def get_paper_data(self, paper_id):

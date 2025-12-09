@@ -4,25 +4,28 @@
 }
 
 li {
-    color: #5296a5ff;
+  color: #5296a5ff;
 }
 
 a {
-    color: #5296a5ff;
-    padding-left: 5px;
+  color: #5296a5ff;
+  padding-left: 5px;
 }
 
 
 /* Syntax highlighting for JSON objects */
-ul.json-dict, ol.json-array {
+ul.json-dict,
+ol.json-array {
   list-style-type: none;
   margin: 0 0 0 1px;
   border-left: 1px dotted #ccc;
   padding-left: 2em;
 }
+
 .json-string {
   color: #333138ff;
 }
+
 .json-literal {
   color: #5296a5ff;
   font-weight: bold;
@@ -34,13 +37,16 @@ a.json-toggle {
   color: inherit;
   text-decoration: none;
 }
+
 a.json-toggle:focus {
   outline: none;
 }
+
 a.json-toggle:before {
   font-size: 1.1em;
   color: #c0c0c0;
-  content: "\25BC"; /* down arrow */
+  content: "\25BC";
+  /* down arrow */
   position: absolute;
   display: inline-block;
   width: 1em;
@@ -48,9 +54,11 @@ a.json-toggle:before {
   line-height: 1em;
   left: -1.2em;
 }
+
 a.json-toggle:hover:before {
   color: #aaa;
 }
+
 a.json-toggle.collapsed:before {
   /* Use rotated down arrow, prevents right arrow appearing smaller than down arrow in some browsers */
   transform: rotate(-90deg);
@@ -62,6 +70,68 @@ a.json-placeholder {
   padding: 0 1em;
   text-decoration: none;
 }
+
 a.json-placeholder:hover {
   text-decoration: underline;
+}
+
+/* Dark Mode Theme */
+[data-theme="dark"] .json-document {
+  background-color: #1e293b;
+  color: #f8fafc;
+}
+
+[data-theme="dark"] li {
+  color: #7dd3fc;
+  /* Sky 300 - brighter for dark bg */
+}
+
+[data-theme="dark"] a {
+  color: #7dd3fc;
+}
+
+[data-theme="dark"] ul.json-dict,
+[data-theme="dark"] ol.json-array {
+  border-left: 1px dotted #475569;
+  /* Slate 600 */
+}
+
+[data-theme="dark"] .json-string {
+  color: #f8fafc;
+  /* Slate 50 - light text */
+}
+
+[data-theme="dark"] .json-literal {
+  color: #38bdf8;
+  /* Sky 400 */
+}
+
+[data-theme="dark"] a.json-toggle:before {
+  color: #64748b;
+  /* Slate 500 */
+}
+
+[data-theme="dark"] a.json-toggle:hover:before {
+  color: #94a3b8;
+  /* Slate 400 */
+}
+
+[data-theme="dark"] a.json-placeholder {
+  color: #64748b;
+  /* Slate 500 */
+}
+
+/* JSON Viewer Overlay Container (for dark mode) */
+[data-theme="dark"] .json-viewer-container {
+  background-color: #1e293b !important;
+}
+
+[data-theme="dark"] .json-viewer-overlay-exit-btn {
+  background: linear-gradient(to bottom, #334155, #1e293b);
+  color: #f8fafc;
+  border: 1px solid #475569;
+}
+
+[data-theme="dark"] .json-viewer-overlay-exit-btn:hover {
+  background: linear-gradient(to bottom, #475569, #334155);
 }

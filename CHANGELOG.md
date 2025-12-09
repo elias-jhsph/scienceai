@@ -5,67 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.1] - 2025-12-09
 
 ### Added
-- Comprehensive test suite with pytest
-- Type hints throughout the codebase
-- Pre-commit hooks for code quality
-- Ruff linting and formatting configuration
-- MyPy type checking configuration
-- `py.typed` marker for PEP 561 compliance
-- CHANGELOG.md for tracking changes
-- CONTRIBUTING.md with development guidelines
-- Improved CI/CD pipeline with matrix testing
+- **Multi-LLM Provider Support**:
+  - **OpenAI**: Direct API support.
+  - **Anthropic**: Dual-route support via Direct API (API Key) or Google Vertex AI (GCP Service Account).
+  - **Google Gemini**: Dual-route support via Google AI Studio (API Key) or Vertex AI (GCP Service Account).
+  - **Flexible Authentication**: Unified config handling for API keys and Service Account paths.
+- **Automated Quality Assurance**:
+  - **Pre-commit Hooks**: Integrated linting (Ruff), formatting, type checking (MyPy), and security scanning (Bandit) running automatically on commit.
+  - **CI/CD Pipeline**: Enhanced GitHub Actions workflows for automated testing (`test.yml`) and PyPI publishing.
+- **Reset Conversation**: Feature to clear history and conversation state, including a fix for database lock issues.
+- **Add Papers**: New functionality to upload additional PDFs to an existing project via the main menu.
+- **Anthropic Thinking Blocks**: Support for "thinking" blocks in Claude 3.7 / 4.5 responses for improved reasoning transparency.
 
-### Changed
-- Updated all GitHub Actions to latest versions (v4/v5)
-- Enhanced `.gitignore` with comprehensive patterns
-- Improved `pyproject.toml` with modern configuration
-- Added proper public API exports in `__init__.py`
-- Refactored `llm.py` with type hints and better error handling
+### Improved
+- **UI/UX Enhancements**:
+  - Dark Mode support for JSON viewer.
+  - Standardized typography for chat timestamps.
+  - **Context Awareness**: Fixed visibility of context limit warnings and improved token clamping/compression logic.
+  - **Visual Memory Indicator**: Added a floating "Brain" emoji 🧠 indicator to visualize current context window usage.
+- **Agent Reliability & Stability**:
+  - "Null Content" reminder for Analyst agents to prevent empty responses.
+  - Disabled parallel tool execution for Gemini/Vertex agents to prevent race conditions.
+  - Improved system prompts for more robust data collection and schema adherence.
+  - Self-healing for tool use mismatches and orphaned tool calls in the PI.
+  - Fixed schema generation errors (missing keys, invalid property names).
 
-## [0.3.3] - 2024-12-05
+### Internal
+- **Refactoring & Maintenance**:
+  - Removed `create_arbitrary_csv` tool (superseded by Python code execution).
+  - Decoupled `principal_investigator.py` from direct `dictdatabase` dependencies.
+  - **System-Wide Multi-Model Refactor**: Comprehensive refactor of `process_paper.py`, `backend.py`, `llm.py`, and agent prompts to support provider-agnostic logic, replacing all hardcoded OpenAI defaults with configurable provider settings.
+  - Migrated ad-hoc test scripts to a standard `tests/` directory.
+  - Added `py.typed` marker for better type support.
+- **Packaging**: Fixed missing `io` directory in package distribution (`pyproject.toml`).
 
-### Added
-- Bundle validator for data extraction quality assurance
-- Context compression feature for long conversations
-- Progress tracking WebSocket for real-time updates
-- Context usage indicator in the UI
+## [0.3.1] - 2025-11-25
 
-### Changed
-- Improved analyst workflow with better error handling
-- Enhanced data extraction with multiple extraction modes
+### Architecture & Core
+- **Principal Investigator Refactor**: Major expansion of `principal_investigator.py` (390+ lines added) introducing `verify_completeness` and improved delegation logic.
+- **Data Extraction**: Significant audit of `data_extractor.py` (490+ lines added) adding robust schema validation and reflection capabilities.
+- **Analyst Agents**: Enhanced `analyst.py` (300+ lines added) with better paper selection and schema generation.
+- **Async Backend**: Rewrote `backend.py` to support asynchronous operations for better concurrency.
 
-## [0.3.2] - 2024-11-XX
+### Frontend & Visualization
+- **UI Overhaul**: Complete redesign of `apps.css` (1200+ lines changed) and templates (`app.html`, `papers.html`) for a modern, responsive interface.
+- **Visualization**: Added `db_element.html` and updated `jquery.json-viewer` for better data inspection.
 
-### Added
-- Python client interface (`ScienceAI` class)
-- Programmatic access to all features
-- Background processing with async operations
-
-### Fixed
-- Various bug fixes and stability improvements
-
-## [0.3.1] - 2024-10-XX
+### Testing & Stability
+- **Verification Scripts**: Added dedicated verification scripts (`verify_error_handling.py`, `verify_ingestion.py`, `verify_load_data.py`) which may later evolve into the test suite.
+- **Debugging Tools**: Added `debugging_scripts/` directory with test cases for O1 models and data extraction.
 
 ### Added
 - Initial public release
 - Principal Investigator (PI) agent system
-- Analyst agent creation and management
-- PDF processing and text extraction
-- Structured data extraction with JSON schemas
-- Web UI for project management
-- CSV and JSON export functionality
-- Checkpoint and project save/restore
-
-### Features
 - Multi-agent architecture for research tasks
-- Automatic paper metadata detection
-- Provenance tracking for extracted data
-- Interactive chat interface with "Show work" transparency
+- PDF processing and automatic metadata detection
+- Structured data extraction with JSON schemas
 
-[Unreleased]: https://github.com/elias-jhsph/scienceai/compare/0.3.3...HEAD
-[0.3.3]: https://github.com/elias-jhsph/scienceai/compare/0.3.2...0.3.3
-[0.3.2]: https://github.com/elias-jhsph/scienceai/compare/0.3.1...0.3.2
+[0.4.1]: https://github.com/elias-jhsph/scienceai/compare/0.3.1...0.4.1
 [0.3.1]: https://github.com/elias-jhsph/scienceai/releases/tag/0.3.1

@@ -58,7 +58,8 @@
         </div>
         <div class="resize-section glass-panel" id="middle-section">
             <div class="resize-section-internal" id="middle-section-internal">
-                <h2 style="text-align: center; position: relative;" xmlns="http://www.w3.org/1999/html" id="chat-heading">
+                <h2 style="text-align: center; position: relative;" xmlns="http://www.w3.org/1999/html"
+                    id="chat-heading">
                     Science Discussion
                     <span id="context-indicator" class="context-indicator" title="Context window usage">
                         <span id="context-percentage">0%</span>
@@ -82,6 +83,51 @@
                     <form id="chat-form" class="chat-form" hx-post="/send_message" hx-swap="outerHTML">
                         <div class="typing-indicator" id="typing-indicator"><span></span><span></span><span></span>
                         </div>
+                        <script>
+                            // Optimistic UI: Show user message immediately on send
+                            document.addEventListener('DOMContentLoaded', function () {
+                                const form = document.getElementById('chat-form');
+                                if (form) {
+                                    form.addEventListener('htmx:beforeRequest', function (event) {
+                                        const chatInput = document.getElementById('chat-input');
+                                        const messageText = chatInput ? chatInput.value.trim() : '';
+
+                                        if (messageText) {
+                                            // Create the optimistic message bubble
+                                            const chatPanel = document.getElementById('chat-panel-messages');
+                                            if (chatPanel) {
+                                                const now = new Date();
+                                                const timeStr = now.toLocaleString('en-US', {
+                                                    month: 'long', day: 'numeric', year: 'numeric',
+                                                    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
+                                                });
+
+                                                // Create user message bubble
+                                                const bubbleArea = document.createElement('div');
+                                                bubbleArea.className = 'chat-bubble-area-user';
+                                                bubbleArea.id = 'optimistic-message';
+                                                bubbleArea.innerHTML = `
+                                                    <div class="chat-bubble-user">
+                                                        <span>${messageText.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</span>
+                                                    </div>
+                                                    <div class="chat-bubble-timestamp">
+                                                        Created: ${timeStr} Status: Sending...
+                                                    </div>
+                                                `;
+
+                                                chatPanel.appendChild(bubbleArea);
+
+                                                // Scroll to the new message
+                                                const chat = document.getElementById('chat');
+                                                if (chat) {
+                                                    chat.scrollTop = chat.scrollHeight;
+                                                }
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                        </script>
                         <!-- Progress Wheel Indicator -->
                         <div id="progress-wheel-container" class="progress-wheel-container" style="display: none;">
                             <div class="progress-wheel-card">
@@ -143,6 +189,13 @@
             <span data-text="Close">❌</span>
         </button>
     </div>
+
+    <!-- Dark Mode Toggle -->
+    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">
+        <span class="icon sun-icon">☀️</span>
+        <span class="icon moon-icon">🌙</span>
+    </button>
+
 
     <!-- Save Modal -->
     <div id="save-modal" class="modal">
@@ -236,7 +289,7 @@
                 explicitly request re-analysis.</p>
             <div style="margin-top: 20px; text-align: right;">
                 <button onclick="closeModal('upload-warning-modal')">Cancel</button>
-                <button onclick="showUploadModal()" style="background-color: #d9534f;">I Understand</button>
+                <button onclick="showUploadModal()" class="danger">I Understand</button>
             </div>
         </div>
     </div>
@@ -254,6 +307,63 @@
             </form>
         </div>
     </div>
+
+    <!-- Undo Request Confirm Modal -->
+    <div id="undo-confirm-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('undo-confirm-modal')">&times;</span>
+            <h2>⏪ Undo Request</h2>
+            <p>Are you sure you want to undo this request? This will:</p>
+            <ul>
+                <li>Remove your message and all AI responses after it</li>
+                <li>Delete any Analysts created by this request</li>
+            </ul>
+            <p style="color: #d9534f;"><strong>⚠️ WARNING: This action is PERMANENT and cannot be undone.</strong></p>
+            <div style="margin-top: 20px; text-align: right;">
+                <button onclick="closeModal('undo-confirm-modal')">Cancel</button>
+                <button onclick="executeUndoRequest()" class="danger">Undo Request</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Undo Request Blocked Modal -->
+    <div id="undo-blocked-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('undo-blocked-modal')">&times;</span>
+            <h2>⚠️ Cannot Undo</h2>
+            <p>This request cannot be undone because the AI executed Python code.</p>
+            <p>When <code>run_python_code</code> is used, the AI may have created files, performed calculations, or made
+                other changes that cannot be automatically reverted.</p>
+            <p>To undo this work, you would need to restore from a checkpoint.
+            </p>
+            <div style="margin-top: 20px; text-align: right;">
+                <button onclick="closeModal('undo-blocked-modal')">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset Conversation Confirm Modal -->
+    <div id="reset-confirm-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('reset-confirm-modal')">&times;</span>
+            <h2>🗑️ Reset Conversation</h2>
+            <p>Are you sure you want to reset the entire conversation? This will:</p>
+            <ul>
+                <li>Remove <strong>ALL</strong> messages in this conversation</li>
+                <li>Delete <strong>ALL</strong> Analysts and their extracted data</li>
+                <li>Delete <strong>ALL</strong> generated files (plots, CSVs, bundles, etc.)</li>
+            </ul>
+            <p><strong>Your uploaded papers will be preserved.</strong></p>
+            <p style="color: #d9534f;"><strong>⚠️ WARNING: This action is PERMANENT and cannot be undone. Consider
+                    saving a checkpoint first.</strong></p>
+            <div style="margin-top: 20px; text-align: right;">
+                <button onclick="closeModal('reset-confirm-modal')">Cancel</button>
+                <button onclick="executeResetConversation()" class="danger">Reset
+                    Everything</button>
+            </div>
+        </div>
+    </div>
+
 
     <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
     <script>
@@ -378,6 +488,84 @@
                 event.target.style.display = 'none';
             }
         }
+
+        // Undo Request Functions
+        function showUndoConfirmModal() {
+            openModal('undo-confirm-modal');
+        }
+
+        function showUndoBlockedModal() {
+            openModal('undo-blocked-modal');
+        }
+
+        async function executeUndoRequest() {
+            // Show processing state in modal
+            const modal = document.getElementById('undo-confirm-modal');
+            const modalContent = modal.querySelector('.modal-content');
+            modalContent.innerHTML = '<h2>⏳ Processing...</h2><p>Undoing request and cleaning up...</p>';
+
+            try {
+                const response = await fetch('/undo_last_request', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    modalContent.innerHTML = '<h2>✅ Done</h2><p>Request undone. Refreshing...</p>';
+                    setTimeout(() => location.reload(), 2500);
+                } else {
+                    closeModal('undo-confirm-modal');
+                    if (data.blocked) {
+                        showUndoBlockedModal();
+                    } else {
+                        alert('Failed to undo: ' + data.error);
+                    }
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                closeModal('undo-confirm-modal');
+                alert('Error undoing request');
+            }
+        }
+
+        // Reset Conversation Functions
+        function showResetConfirmModal() {
+            openModal('reset-confirm-modal');
+        }
+
+        async function executeResetConversation() {
+            // Show processing state in modal
+            const modal = document.getElementById('reset-confirm-modal');
+            const modalContent = modal.querySelector('.modal-content');
+            modalContent.innerHTML = '<h2>⏳ Processing...</h2><p>Removing analysts and clearing generated files...</p>';
+
+            try {
+                const response = await fetch('/reset_conversation', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    modalContent.innerHTML = '<h2>✅ Done</h2><p>Reset in progress. Page will refresh in 10 seconds...</p>';
+                    setTimeout(() => location.reload(), 10000);
+                } else {
+                    closeModal('reset-confirm-modal');
+                    alert('Failed to reset: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                closeModal('reset-confirm-modal');
+                alert('Error resetting conversation');
+            }
+        }
     </script>
 
     <script>
@@ -478,6 +666,26 @@
                 section.style.width = `${newSectionWidth}px`;
             });
         });
+
+        // Dark Mode Toggle Functionality
+        (function () {
+            const themeToggle = document.getElementById('theme-toggle');
+            const html = document.documentElement;
+
+            // Check for saved theme preference or default to 'light'
+            const currentTheme = localStorage.getItem('theme') || 'light';
+            html.setAttribute('data-theme', currentTheme);
+
+            // Toggle theme
+            themeToggle.addEventListener('click', function () {
+                const theme = html.getAttribute('data-theme');
+                const newTheme = theme === 'light' ? 'dark' : 'light';
+
+                html.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+            });
+        })();
+
     </script>
 
 </body>

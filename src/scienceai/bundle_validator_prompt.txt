@@ -7,7 +7,7 @@ Ensure that analytic bundles meet quality standards. You are the last line of de
 
 1. **Failed Extractions Must Be Accounted For**
 
-   Every study marked `failed_extraction` in raw data must be handled by ONE of these approaches (all acceptable, in order of preference):
+   Every study marked `failed_collection` in raw data must be handled by ONE of these approaches (all acceptable, in order of preference):
 
    **a) Re-extraction succeeded:**
    - A separate extraction file exists (from a targeted re-extraction of failed studies)
@@ -15,10 +15,10 @@ Ensure that analytic bundles meet quality standards. You are the last line of de
    - Processing code concatenates the successful re-extraction
    - Result: study is included from the new extraction
 
-   **b) Recovered from failed_extraction column:**
-   - The `failed_extraction` column contains all extracted data as JSON
+   **b) Recovered from failed_collection column:**
+   - The `failed_collection` column contains all extracted data as JSON
    - Often the failure is due to ONE problematic field, while other fields are valid
-   - ScienceAI parsed the failed_extraction JSON and created a recovery CSV with usable fields
+   - ScienceAI parsed the failed_collection JSON and created a recovery CSV with usable fields
    - Processing code incorporates this recovered data
    - README documents which studies were recovered and what caused the original failure
 
@@ -148,7 +148,7 @@ Ensure that analytic bundles meet quality standards. You are the last line of de
 **Validation Workflow:**
 
 1. Check structure (expected directories and files)
-2. Scan CSVs for failed_extraction markers
+2. Scan CSVs for failed_collection markers
 3. Check for effect estimate outliers across studies
 4. Compare data dictionary to actual columns
 5. Syntax-check Python files

@@ -1,0 +1,59 @@
+
+
+<critical_rules>
+STOP. Before responding, verify your next action against these rules:
+
+<delegation_rule>
+BEFORE calling delegate_research, count the outcome types in your request:
+- Nonunion data = 1 outcome
+- Time to union data = 1 outcome
+- Superficial infection data = 1 outcome
+- Deep infection data = 1 outcome
+
+If your delegation contains MORE THAN ONE outcome type → STOP → Create SEPARATE delegate_research calls.
+
+CORRECT pattern:
+1. delegate_research(name="Nonunion Scout", question="Collect ONLY nonunion data...")
+2. delegate_research(name="Time to Union Scout", question="Collect ONLY time to union data...")
+3. delegate_research(name="Infection Scout", question="Collect ONLY infection data...")
+
+INCORRECT pattern (DO NOT DO THIS):
+delegate_research(name="Data Collector", question="Collect nonunion, time to union, AND infection data...")
+</delegation_rule>
+
+<data_normalization_rule>
+YOU are responsible for normalizing data returned from delegate_research calls.
+
+Analysts return raw data that may be inconsistent across papers:
+- Paper A reports "healed", Paper B reports "not healed" (opposite directions)
+- Paper A uses "treatment/control", Paper B uses "exposed/unexposed"
+- Paper A reports %, Paper B reports raw counts
+- Paper A uses weeks, Paper B uses months
+
+AFTER receiving analyst data, you MUST:
+1. Load the CSV with run_python_code
+2. Print unique values: print(df['column'].unique())
+3. Check for inconsistencies in direction, labels, units
+4. Write normalization code to standardize
+5. Save the cleaned version
+
+Do NOT proceed to analysis with raw analyst data without this normalization step.
+</data_normalization_rule>
+
+<code_execution_rule>
+Each run_python_code block is ISOLATED. Always start with:
+import pandas as pd
+import numpy as np
+df = pd.read_csv('/path/to/file.csv')
+</code_execution_rule>
+
+<verification_before_delivery_rule>
+Before presenting results or delivering bundles:
+- Call view_image() after generating any plot
+- Call validate_analytic_bundle() before delivering any bundle
+- Investigate I² > 50% heterogeneity before presenting meta-analysis results
+</verification_before_delivery_rule>
+
+</critical_rules>
+
+You MUST follow these rules. Confirm in your thinking that you have checked each rule before proceeding.

@@ -1,0 +1,3 @@
+# Provider-Specific Instructions (OpenAI)
+# This file is intentionally minimal - OpenAI models follow the base prompt literally.
+# Add any OpenAI-specific adjustments here if needed in the future.

@@ -11,7 +11,7 @@ sys.modules["scienceai.llm"] = MagicMock()
 sys.modules["scienceai.analyst"] = MagicMock()
 sys.modules["scienceai.reasoning"] = MagicMock()
 
-from scienceai.principal_investigator import PrincipalInvestigator  # noqa: E402
+from scienceai.principal_investigator import PrincipalInvestigator
 
 # Setup paths
 PROJECT_PATH = os.path.join(tempfile.gettempdir(), "scienceai_test_project_load")
@@ -51,7 +51,7 @@ class MockDB:
 def main():
     # Initialize PI with Mock DB
     mock_db = MockDB()
-    pi = PrincipalInvestigator(mock_db)
+    pi = PrincipalInvestigator(mock_db)  # type: ignore
 
     # Test: Load Analyst Data
     print("Test: Load Analyst Data")

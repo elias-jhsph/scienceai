@@ -1,0 +1,35 @@
+<workflow_requirements>
+
+<delegation_workflow>
+For multi-paper data collection, follow this sequence:
+
+1. ONE outcome per delegate_research call
+   - delegate_research(name="Nonunion Scout", ...) for nonunion data only
+   - delegate_research(name="Time to Union Scout", ...) for time data only
+   - delegate_research(name="Infection Scout", ...) for infection data only
+
+2. Scout → Reconcile → Collect for each outcome
+   - First scout which papers have the outcome
+   - Then reconcile methodology across papers
+   - Then collect with a consistent schema
+
+3. Validate collected data before analysis
+   - Print unique values and counts for each column
+   - Check for label inconsistencies
+   - Normalize data with run_python_code
+</delegation_workflow>
+
+<code_execution>
+Each run_python_code block starts fresh. Always include:
+- import pandas as pd
+- import numpy as np
+- df = pd.read_csv('/path/to/file.csv')
+</code_execution>
+
+<quality_checks>
+- Call validate_analytic_bundle() before delivering bundles
+- Call view_image() after generating plots
+- Investigate I² > 50% before presenting results
+</quality_checks>
+
+</workflow_requirements>

@@ -1,61 +1,6 @@
 """Tests for LLM client utilities."""
 
-import json
-import os
-from pathlib import Path
 from unittest.mock import MagicMock
-
-import pytest
-
-
-class TestGetApiKey:
-    """Tests for API key retrieval."""
-
-    def test_returns_key_from_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Should return API key from OPENAI_API_KEY environment variable."""
-        test_key = "sk-test-env-key-12345"
-        monkeypatch.setenv("OPENAI_API_KEY", test_key)
-
-        # Import after setting env var to avoid module-level initialization
-        from scienceai.llm import _get_api_key
-
-        result = _get_api_key()
-        assert result == test_key
-
-    def test_returns_key_from_config_file(self, monkeypatch: pytest.MonkeyPatch, temp_dir: Path) -> None:
-        """Should return API key from config file when env var not set."""
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-
-        # Create mock config file
-        config_dir = temp_dir / "Documents" / "ScienceAI"
-        config_dir.mkdir(parents=True)
-        config_file = config_dir / "scienceai-keys.json"
-        config_file.write_text(json.dumps({"openai": "sk-test-file-key"}))
-
-        # Mock expanduser to return our temp directory
-        monkeypatch.setattr(os.path, "expanduser", lambda x: str(temp_dir))
-
-        from scienceai.llm import _get_api_key
-
-        result = _get_api_key()
-        assert result == "sk-test-file-key"
-
-    def test_raises_error_when_no_key_found_non_interactive(
-        self, monkeypatch: pytest.MonkeyPatch, temp_dir: Path
-    ) -> None:
-        """Should raise ValueError when no API key is available."""
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.setattr(os.path, "expanduser", lambda x: str(temp_dir))
-
-        # Mock stdin.isatty to return False (non-interactive)
-        import sys
-
-        monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
-
-        from scienceai.llm import _get_api_key
-
-        with pytest.raises(ValueError, match="OpenAI API key not found"):
-            _get_api_key()
 
 
 class TestTrimHistory:
@@ -142,8 +87,15 @@ class TestUseToolsSync:
             function_dict={},
         )
 
-        # Should have error message
-        assert any("ERROR" in msg.get("content", "") for msg in result)
+        # Should have error message in one of the tool results
+        # The result is a list of messages, and we need to check each one properly
+        found_error = False
+        for msg in result:
+            content = msg.get("content")
+            if content is not None and "ERROR" in str(content):
+                found_error = True
+                break
+        assert found_error, f"Expected ERROR in result messages, got: {result}"
 
 
 class TestUpdateStopEvent:

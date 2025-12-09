@@ -1,13 +1,13 @@
 Metadata-Version: 2.4
 Name: scienceai-llm
-Version: 0.3.3
+Version: 0.4.1
 Summary: An AI powered scientific literature search engine
 Author-email: Elias Weston-Farber <elias@eliastechlabs.com>
 Project-URL: Homepage, https://github.com/elias-jhsph/scienceai
 Project-URL: Repository, https://github.com/elias-jhsph/scienceai
 Project-URL: Documentation, https://github.com/elias-jhsph/scienceai#readme
 Project-URL: Issues, https://github.com/elias-jhsph/scienceai/issues
-Keywords: ai,science,research,literature,pdf,extraction,llm,openai
+Keywords: ai,science,research,literature,pdf,extraction,llm,openai,anthropic,gemini
 Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Science/Research
 Classifier: Programming Language :: Python :: 3
@@ -38,6 +38,18 @@ Requires-Dist: scipy
 Requires-Dist: seaborn
 Requires-Dist: numpy
 Requires-Dist: num2words
+Provides-Extra: anthropic
+Requires-Dist: anthropic>=0.40.0; extra == "anthropic"
+Provides-Extra: google
+Requires-Dist: google-genai>=1.0.0; extra == "google"
+Provides-Extra: vertex-ai
+Requires-Dist: google-cloud-aiplatform>=1.40.0; extra == "vertex-ai"
+Requires-Dist: google-auth>=2.25.0; extra == "vertex-ai"
+Provides-Extra: all-providers
+Requires-Dist: anthropic>=0.40.0; extra == "all-providers"
+Requires-Dist: google-genai>=1.0.0; extra == "all-providers"
+Requires-Dist: google-cloud-aiplatform>=1.40.0; extra == "all-providers"
+Requires-Dist: google-auth>=2.25.0; extra == "all-providers"
 Provides-Extra: dev
 Requires-Dist: pytest>=7.4.0; extra == "dev"
 Requires-Dist: pytest-cov>=4.1.0; extra == "dev"
@@ -97,6 +109,7 @@ This means you can ask: *"Extract healing times, sample sizes, and intervention 
 - **💬 Interactive Research Discussion**: Ask complex research questions and receive evidence-backed answers
 - **🔍 Provenance Tracking**: Every extracted data point includes source quotes and derivation explanations
 - **📈 Export & Visualization**: Download extracted data as CSV, export papers with metadata, view analysis results in an interactive interface
+- **🌙 Dark Mode**: Fully supported dark mode for comfortably working in low-light environments, including specialized styling for data viewers.
 - **💾 Project Management**: Save and resume research projects with full checkpoint support
 
 ---
@@ -128,6 +141,8 @@ You will be prompted to enter your OpenAI API key. This key is used to authentic
 
 Enter your project name and click **"Start"** to create a new project or load an existing one.
 
+> **Tip**: You can switch between **OpenAI**, **Anthropic (Claude)**, and **Google (Gemini)** models using the "LLM Provider" card in the main menu once started. See [Configuration](#-configuration) for setup details.
+
 ![Papers Panel - Your Literature Library](images/main_menu.png)
 
 ### 2. Understanding the Interface
@@ -139,8 +154,9 @@ Enter your project name and click **"Start"** to create a new project or load an
 - **Automatically Detected Metadata**: Author, Date, Title, Journal
 - **Paper IDs**: Each paper gets a unique identifier
 - **Analyst Tracking**: Shows which analysts have processed each paper
+- **Add Papers Button**: Upload additional PDFs to your project at any time
 
-You can upload PDFs individually or as a zip folder during project creation.
+You can upload PDFs individually or as a zip folder during project creation, or add more later via the "Add Papers" button.
 
 ---
 
@@ -158,6 +174,7 @@ You can upload PDFs individually or as a zip folder during project creation.
 - **Message Status**: Messages show "Processed" (waiting for your input) or "Pending" (PI is working)
 - **"Show work..." Links**: Click to see detailed tool calls and PI reasoning (see below)
 - **Timestamps**: Track when each interaction occurred
+- **Brain Indicator 🧠**: A floating emoji shows real-time context (memory) usage. It turns yellow ⚠️ or red 🔴 as the model's memory fills up.
 
 #### 🔍 Transparency: "Show work..." Feature
 
@@ -186,6 +203,16 @@ Click **"Hide work..."** to collapse the details again.
 - *"Which papers found significant effects for [specific intervention]?"*
 - *"Create a summary table comparing study methodologies"*
 - *"What are the outcome measures used across these papers?"*
+
+
+
+#### 🔄 Resetting the Conversation
+
+If you wish to start fresh while keeping your uploaded papers, use the **Reset Conversation** button (or the undo arrow icon in the chat interface). This will:
+- Clear the chat history
+- Reset the Principal Investigator's memory
+- Fix any potential database locks
+- **Keep** your uploaded papers and extracted data collections
 
 ---
 
@@ -379,21 +406,175 @@ Specialized workers created on-demand:
 
 ## 🔧 Configuration
 
-### OpenAI API Key Setup
+### LLM Provider Selection
 
-On first run, you'll be prompted to enter your OpenAI API key. Alternatively, set it as an environment variable:
+ScienceAI supports multiple LLM providers with flexible authentication options:
 
+#### Supported Providers
+- **OpenAI** (GPT-4, GPT-5, o4-mini): Default provider
+- **Anthropic** (Claude Sonnet/Opus 4.5): Via direct API or Google Vertex AI
+- **Google** (Gemini 3 Pro): Via API key or Vertex AI service account
+
+#### Setting Up Providers
+
+**OpenAI (Required for  Default Setup)**
 ```bash
-export OPENAI_API_KEY="your-api-key-here"
+# Method 1: Interactive setup
+scienceai --setup-keys
+
+# Method 2: Direct key setting
+scienceai --set-key openai YOUR_OPENAI_API_KEY
+
+# Method 3: Environment variable
+export OPENAI_API_KEY="sk-..."
 ```
 
-### Advanced Options
+**Anthropic Claude (Optional)**
+```bash
+# Direct API (recommended for personal use)
+scienceai --set-key anthropic YOUR_ANTHROPIC_API_KEY
 
-ScienceAI uses environment variables for configuration:
-- `OPENAI_API_KEY`: Your OpenAI API key (required)
-- Default server port: `4242` (accessible at `http://localhost:4242`)
+# Or via environment variable
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+**Google Gemini (Optional)**
+```bash
+# Standard API key (simple setup)
+scienceai --set-key google YOUR_GOOGLE_API_KEY
+
+# Or via environment variable
+export GOOGLE_API_KEY="..."
+# or
+export GEMINI_API_KEY="..."
+```
+
+#### GCP Service Account for Production/Enterprise
+
+For production deployments or enterprise use, you can use a GCP service account for both Gemini and Claude on Vertex AI:
+
+**Setup:**
+```bash
+scienceai --gcp-service-account /path/to/service-account.json
+```
+
+This will:
+1. Validate your service account file
+2. Extract the project ID automatically
+3. **Prompt you interactively**:
+   ```
+   ✓ Valid service account file for project: my-project-123
+     This service account can be used for:
+       1. Google Gemini (native GCP models)
+       2. Claude on Vertex AI (Anthropic partner models)
+
+   Use this service account for Claude on Vertex AI? (y/n):
+   ```
+4. Ask for your preferred Vertex AI region:
+   ```
+   Common Vertex AI regions:
+     - us-east5 (US East)
+     - us-central1 (US Central)
+     - europe-west1 (Europe West)
+   Enter Vertex AI region (default: us-east5):
+   ```
+5. Save the configuration
+
+**Remove GCP Configuration:**
+```bash
+scienceai --remove-gcp-config
+```
+
+This command allows you to selectively remove Gemini and/or Claude Vertex configurations, reverting to API key authentication.
+
+**Priority Order:**
+- If both GCP service account AND API key are configured for a provider:
+  1. **GCP Service Account** takes priority (recommended for production)
+  2. **API Key** is used as fallback
+
+This design allows smooth transitions between development (API key) and production (service account) environments.
+
+### Provider Switching
+
+Switch between providers via the **LLM Provider** card in the menu UI. Select:
+- **OpenAI** (GPT models)
+- **Claude** (Anthropic direct API)
+- **Claude on Vertex** (via GCP - if configured)
+- **Gemini** (Google models)
+
+Unavailable providers (missing API keys) are grayed out.
+
+### Validate Your Configuration
+
+Test all configured API keys:
+```bash
+scienceai --validate-keys
+```
+
+Output:
+```
+Validating configured API keys...
+
+  ✓ openai: Valid (gpt-5.1 accessible)
+  ✓ anthropic: Valid (claude-sonnet-4-5 accessible)
+  ✗ google: Invalid (API key expired)
+
+⚠ Some keys failed validation
+```
+
+### CLI Options Reference
+
+```bash
+# API Key Management
+scienceai --setup-keys                    # Interactive key setup
+scienceai --set-key PROVIDER KEY         # Set a specific key
+scienceai --validate-keys                # Validate all keys
+
+# GCP Service Account
+scienceai --gcp-service-account PATH     # Configure service account
+scienceai --remove-gcp-config            # Remove service account config
+
+# Provider Selection
+scienceai --provider anthropic           # Start with specific provider
+
+# Server Options
+scienceai --port 8080                    # Custom port (default: 4242)
+scienceai --skip-validation              # Skip startup key validation
+
+# Logging
+scienceai -v                             # Verbose (INFO level)
+scienceai --debug                        # Debug logging
+scienceai --log-level WARNING            # Specific log level
+```
+
+### Configuration Files
+
+API keys and GCP configuration are stored in:
+```
+~/Documents/ScienceAI/scienceai-keys.json
+```
+
+Example structure:
+```json
+{
+  "openai": "sk-...",
+  "anthropic": "sk-ant-...",
+  "google": "AIza...",
+  "google_gcp": {
+    "service_account_path": "/path/to/sa.json",
+    "project_id": "my-project-123",
+    "region": "us-east5"
+  },
+  "anthropic_vertex": {
+    "service_account_path": "/path/to/sa.json",
+    "project_id": "my-project-123",
+    "region": "us-east5"
+  }
+}
+```
 
 ---
+
 
 ## 📚 Detailed Documentation
 
@@ -457,13 +638,16 @@ See LICENSE file for details.
 Check that PDFs are valid and not password-protected.
 
 **API errors?**
-Verify your OpenAI API key is valid and has available credits.
+Verify your API key or Service Account is valid and has available credits.
 
 **Analyst not completing?**
 Check the chat panel for error messages—the PI will explain any issues.
 
 **Cannot download data?**
 Ensure analysts have completed their data collections before exporting.
+
+**"Context Limit Reached" Warning?**
+This means the conversation has exceeded the LLM's memory. ScienceAI will automatically compress older messages to free up space. You can also use the **Reset Conversation** feature to clear the history while keeping your uploaded papers.
 
 ---
 

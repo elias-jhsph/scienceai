@@ -1,4 +1,8 @@
-from .llm import client
+import logging
+
+from .llm import MODEL_REASONING, client, get_model_for_role
+
+logger = logging.getLogger(__name__)
 
 
 def add_reasoning_to_context(context):
@@ -25,12 +29,12 @@ def add_reasoning_to_context(context):
 
     context.append(final_message)
     try:
-        arguments = {"messages": context, "model": "o1"}
+        arguments = {"messages": context, "model": get_model_for_role(MODEL_REASONING)}
 
         chat_response = client.chat.completions.create(**arguments)
 
         output = chat_response.choices[0].message.content
     except Exception as e:
-        print(e)
+        logger.error(f"Reasoning error: {e}")
         return None
     return output

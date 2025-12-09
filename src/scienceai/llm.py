@@ -1,7 +1,12 @@
-"""LLM client utilities for OpenAI API interactions.
+"""LLM client utilities for multi-provider API interactions.
 
-This module provides the OpenAI client initialization and tool calling utilities
-for both synchronous and asynchronous operations.
+This module provides the LLM client initialization and tool calling utilities
+for both synchronous and asynchronous operations. It now supports multiple
+providers (OpenAI, Anthropic, Google) through a unified interface.
+
+Configuration:
+    Set SCIENCEAI_LLM_PROVIDER environment variable to 'openai', 'anthropic', or 'google'
+    Or create ~/Documents/ScienceAI/scienceai-config.json with provider settings
 """
 
 from __future__ import annotations
@@ -9,18 +14,28 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import traceback
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import tiktoken
-from openai import AsyncOpenAI, OpenAI
+
+from .llm_providers import (
+    MODEL_DEFAULT,
+    MODEL_FAST,
+    MODEL_REASONING,
+    MODEL_VISION,
+    ChatResponse,
+    LLMConfig,
+    LLMProvider,
+    Provider,
+    get_config,
+    get_model_for_role,
+    get_provider,
+)
 
 if TYPE_CHECKING:
     from threading import Event
-
-    from openai.types.chat import ChatCompletion
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -34,63 +49,150 @@ FunctionDict = dict[str, Callable[..., Any]]
 STOP_EVENT: Event | None = None
 
 
-def _get_api_key() -> str:
-    """Get OpenAI API key from environment or configuration file.
+class LLMClientWrapper:
+    """Wrapper that provides OpenAI-compatible interface for any provider.
 
-    Returns:
-        The OpenAI API key.
-
-    Raises:
-        ValueError: If no API key is found and not running interactively.
+    This maintains backward compatibility with existing code that uses
+    client.chat.completions.create() syntax.
     """
-    # First try environment variable
-    if api_key := os.environ.get("OPENAI_API_KEY"):
-        return api_key
 
-    # Fall back to config file
-    base_key_path = os.path.join(os.path.expanduser("~"), "Documents", "ScienceAI")
-    target_key = os.path.join(base_key_path, "scienceai-keys.json")
+    def __init__(self, is_async: bool = False):
+        self._is_async = is_async
+        self.chat = self._ChatNamespace(is_async)
 
-    if os.path.exists(target_key):
-        try:
-            with open(target_key) as file:
-                key_list = json.load(file)
-            if openai_key := key_list.get("openai"):
-                return openai_key
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"Failed to read API key from config file: {e}")
+    class _ChatNamespace:
+        """Namespace for chat-related operations."""
 
-    # Check if running interactively before prompting
-    import sys
+        def __init__(self, is_async: bool):
+            self._is_async = is_async
+            self.completions = self._CompletionsNamespace(is_async)
 
-    if sys.stdin.isatty():
-        try:
-            new_key = input("Please enter OpenAI key: ")
-            if new_key.strip():
-                os.makedirs(os.path.dirname(target_key), exist_ok=True)
-                with open(target_key, "w") as file:
-                    json.dump({"openai": new_key}, file)
-                return new_key
-        except (EOFError, KeyboardInterrupt):
-            pass
+        class _CompletionsNamespace:
+            """Namespace for completions operations."""
 
-    raise ValueError(
-        "OpenAI API key not found. Please set the OPENAI_API_KEY environment variable "
-        "or add it to ~/Documents/ScienceAI/scienceai-keys.json"
-    )
+            def __init__(self, is_async: bool):
+                self._is_async = is_async
+
+            def create(self, **kwargs: Any) -> Any:
+                """Create a chat completion (sync)."""
+                provider = get_provider()
+                response = provider.chat_completion(**kwargs)
+                return _wrap_response(response)
+
+            async def acreate(self, **kwargs: Any) -> Any:
+                """Create a chat completion (async)."""
+                provider = get_provider()
+                response = await provider.chat_completion_async(**kwargs)
+                return _wrap_response(response)
 
 
-# Initialize clients
-_api_key = _get_api_key()
+class AsyncLLMClientWrapper(LLMClientWrapper):
+    """Async version of the client wrapper."""
+
+    def __init__(self):
+        super().__init__(is_async=True)
+        self.chat = self._AsyncChatNamespace()
+
+    class _AsyncChatNamespace:
+        """Async namespace for chat operations."""
+
+        def __init__(self):
+            self.completions = self._AsyncCompletionsNamespace()
+
+        class _AsyncCompletionsNamespace:
+            """Async namespace for completions."""
+
+            def __init__(self):
+                pass
+
+            async def create(self, **kwargs: Any) -> Any:
+                """Create a chat completion (async)."""
+                provider = get_provider()
+                response = await provider.chat_completion_async(**kwargs)
+                return _wrap_response(response)
+
+
+class _WrappedResponse:
+    """Wraps ChatResponse to provide OpenAI-compatible interface."""
+
+    def __init__(self, response: ChatResponse):
+        self._response = response
+        self.choices = [self._Choice(response)]
+
+    class _Choice:
+        """Wrapper for response choice."""
+
+        def __init__(self, response: ChatResponse):
+            self.message = self._Message(response)
+            self.finish_reason = response.finish_reason
+
+        class _Message:
+            """Wrapper for response message."""
+
+            def __init__(self, response: ChatResponse):
+                self.content = response.content
+                self.tool_calls = None
+                if response.tool_calls:
+                    self.tool_calls = [_ToolCallWrapper(tc) for tc in response.tool_calls]
+                self.thinking = response.thinking
+
+            def __getitem__(self, key):
+                """Support dict-like access."""
+                mapping = {
+                    "content": self.content,
+                    "tool_calls": self.tool_calls,
+                    "thinking": self.thinking,
+                }
+                if key in mapping:
+                    return mapping[key]
+                raise KeyError(key)
+
+            def get(self, key, default=None):
+                """Support dict-like get."""
+                try:
+                    return self[key]
+                except KeyError:
+                    return default
+
+
+class _ToolCallWrapper:
+    """Wrapper for tool calls to provide OpenAI-compatible interface."""
+
+    def __init__(self, tool_call: dict[str, Any]):
+        self.id = tool_call.get("id", "")
+        self.type = tool_call.get("type", "function")
+        self.function = self._Function(tool_call.get("function", {}))
+
+    class _Function:
+        """Wrapper for function details."""
+
+        def __init__(self, func: dict[str, Any]):
+            self.name = func.get("name", "")
+            self.arguments = func.get("arguments", "{}")
+
+
+def _wrap_response(response: ChatResponse) -> _WrappedResponse:
+    """Wrap a ChatResponse in OpenAI-compatible format."""
+    return _WrappedResponse(response)
+
+
+# Initialize provider and create wrapped clients
+# Note: provider is now fetched dynamically by the client
 
 # Async client for ingestion pipeline
-async_client = AsyncOpenAI(api_key=_api_key)
+async_client = AsyncLLMClientWrapper()
 
 # Sync client for agents and data extraction
-client = OpenAI(api_key=_api_key)
+client = LLMClientWrapper()
 
 # Token encoder for context management
-enc = tiktoken.encoding_for_model("gpt-4")
+# Note: This uses tiktoken which is OpenAI-specific, but token counting
+# is approximate anyway and works well enough for context management
+try:
+    enc = tiktoken.encoding_for_model("gpt-4")
+except Exception:
+    # Fallback to cl100k_base encoding if model not found
+    enc = tiktoken.get_encoding("cl100k_base")
 
 
 def update_stop_event(stop_event: Event | None) -> None:
@@ -124,7 +226,7 @@ def trim_history(history: list[MessageDict], token_limit: int) -> list[MessageDi
 
 
 async def use_tools(
-    chat_response: ChatCompletion | dict[str, Any],
+    chat_response: _WrappedResponse | dict[str, Any],
     arguments: dict[str, Any],
     function_dict: FunctionDict | None = None,
     call_functions: bool = True,
@@ -133,7 +235,7 @@ async def use_tools(
     """Process and execute tool calls from a chat response (async version).
 
     Args:
-        chat_response: OpenAI chat completion response or dict with tool_calls.
+        chat_response: Chat completion response or dict with tool_calls.
         arguments: Original arguments dict containing tool schemas.
         function_dict: Mapping of function names to callable functions.
         call_functions: Whether to actually execute the functions.
@@ -148,9 +250,11 @@ async def use_tools(
     if isinstance(chat_response, dict):
         tool_calls = chat_response["tool_calls"]
         content = chat_response["content"]
+        thinking = chat_response.get("thinking")
     else:
         tool_calls = chat_response.choices[0].message.tool_calls
         content = chat_response.choices[0].message.content
+        thinking = getattr(chat_response.choices[0].message, "thinking", None)
 
     tools = arguments.get("tools", [])
     tool_calls_list: list[ToolCallDict] = []
@@ -183,10 +287,18 @@ async def use_tools(
 
     # Build assistant message with or without tool calls
     if call_functions:
+        assistant_msg: MessageDict = {"content": content, "role": "assistant"}
         if tool_calls_list:
-            new_history: list[MessageDict] = [{"content": content, "role": "assistant", "tool_calls": tool_calls_list}]
-        else:
-            new_history = [{"content": content, "role": "assistant"}]
+            assistant_msg["tool_calls"] = tool_calls_list
+        if thinking:
+            assistant_msg["thinking"] = thinking
+        new_history: list[MessageDict] = [assistant_msg]
+    else:
+        # Should we handle calling functions = False case?
+        # That branch constructs valid_calls which is just a list of calls, not messages.
+        # But wait, lines 284-289 construct new_history regardless of whether we call functions later?
+        # Ah, "if call_functions:" block at 284 handles history creation.
+        pass  # Captured by replacement above
 
     if pre_tool_call:
         return new_history
@@ -300,7 +412,7 @@ async def use_tool(
 
 
 def use_tools_sync(
-    chat_response: ChatCompletion | dict[str, Any],
+    chat_response: _WrappedResponse | dict[str, Any],
     arguments: dict[str, Any],
     function_dict: FunctionDict | None = None,
     call_functions: bool = True,
@@ -309,7 +421,7 @@ def use_tools_sync(
     """Process and execute tool calls from a chat response (synchronous version).
 
     Args:
-        chat_response: OpenAI chat completion response or dict with tool_calls.
+        chat_response: Chat completion response or dict with tool_calls.
         arguments: Original arguments dict containing tool schemas.
         function_dict: Mapping of function names to callable functions.
         call_functions: Whether to actually execute the functions.
@@ -324,9 +436,11 @@ def use_tools_sync(
     if isinstance(chat_response, dict):
         tool_calls = chat_response["tool_calls"]
         content = chat_response["content"]
+        thinking = chat_response.get("thinking")
     else:
         tool_calls = chat_response.choices[0].message.tool_calls
         content = chat_response.choices[0].message.content
+        thinking = getattr(chat_response.choices[0].message, "thinking", None)
 
     tools = arguments.get("tools", [])
     tool_calls_list: list[ToolCallDict] = []
@@ -358,10 +472,12 @@ def use_tools_sync(
                 )
 
     if call_functions:
+        assistant_msg: MessageDict = {"content": content, "role": "assistant"}
         if tool_calls_list:
-            new_history: list[MessageDict] = [{"content": content, "role": "assistant", "tool_calls": tool_calls_list}]
-        else:
-            new_history = [{"content": content, "role": "assistant"}]
+            assistant_msg["tool_calls"] = tool_calls_list
+        if thinking:
+            assistant_msg["thinking"] = thinking
+        new_history: list[MessageDict] = [assistant_msg]
 
     if pre_tool_call:
         return new_history
@@ -467,3 +583,27 @@ def use_tool_sync(
         errors.append({"content": error_content, "role": "system"})
 
     return results, errors
+
+
+# Re-export provider utilities for convenience
+__all__ = [
+    "MODEL_DEFAULT",
+    "MODEL_FAST",
+    "MODEL_REASONING",
+    "MODEL_VISION",
+    "LLMConfig",
+    "LLMProvider",
+    "Provider",
+    "async_client",
+    "client",
+    "enc",
+    "get_config",
+    "get_model_for_role",
+    "get_provider",
+    "trim_history",
+    "update_stop_event",
+    "use_tool",
+    "use_tool_sync",
+    "use_tools",
+    "use_tools_sync",
+]

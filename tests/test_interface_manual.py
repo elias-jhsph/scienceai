@@ -6,7 +6,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from scienceai.client import ScienceAI  # noqa: E402
+from scienceai.client import ScienceAI
 
 
 def main():

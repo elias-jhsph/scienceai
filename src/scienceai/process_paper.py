@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+import logging
 import os
 import re
 import shutil
@@ -8,7 +9,6 @@ import tempfile
 import warnings
 from difflib import SequenceMatcher
 from math import atan2, degrees
-from pprint import pprint as print
 
 import fitz
 import pytesseract
@@ -17,7 +17,9 @@ from habanero import Crossref
 from PIL import Image
 
 from .llm import async_client as client
-from .llm import use_tools
+from .llm import get_config, use_tools
+
+logger = logging.getLogger(__name__)
 
 cr = Crossref()
 
@@ -52,7 +54,7 @@ async def summarize_paper(text):
 
     messages = [{"role": "system", "content": system_message}, {"role": "user", "content": user_message}]
 
-    arguments = {"messages": messages, "model": "gpt-4.1"}
+    arguments = {"messages": messages, "model": get_config().default_model}
 
     response = await client.chat.completions.create(**arguments)
     return response.choices[0].message.content
@@ -131,13 +133,13 @@ async def extract_doi(images, incorrect_doi_list=None):
             },
         ]
 
-        arguments = {"messages": messages, "tools": tools, "model": "gpt-4.1"}
+        arguments = {"messages": messages, "tools": tools, "model": get_config().default_model}
 
         retry = 0
         valid_calls = []
         while valid_calls == [] and retry < 2:
             if retry > 0:
-                print("Retrying DOI Extraction(" + str(retry) + ")...")
+                logger.info("Retrying DOI Extraction(" + str(retry) + ")...")
             chat_response = await client.chat.completions.create(**arguments)
             if chat_response.choices[0].message.tool_calls:
                 valid_calls = await use_tools(chat_response, arguments, call_functions=False)
@@ -158,7 +160,7 @@ async def process_single_page(
     figure_system_message,
     figure_present_tools,
 ):
-    print("Processing page " + str(i + 1))
+    logger.info("Processing page " + str(i + 1))
 
     page_text = "\n\n**Start of Page " + str(i + 1) + "**\n\n"
 
@@ -180,7 +182,7 @@ async def process_single_page(
     if i == 0:
         messages[0]["content"] = first_page_system_message
 
-    arguments = {"messages": messages, "model": "gpt-4.1", "temperature": 0.2}
+    arguments = {"messages": messages, "model": get_config().default_model, "temperature": 0.2}
 
     # Start body text extraction
     body_task = client.chat.completions.create(**arguments)
@@ -204,7 +206,7 @@ async def process_single_page(
     arguments_fig = {
         "messages": messages_fig,
         "tools": figure_present_tools,
-        "model": "gpt-4.1",
+        "model": get_config().default_model,
         "temperature": 0.2,
         "tool_choice": {"type": "function", "function": {"name": "store_figure_table_count"}},
     }
@@ -252,7 +254,7 @@ async def process_single_page(
         try:
             detection_response = await client.chat.completions.create(
                 messages=detection_messages,
-                model="gpt-4.1-mini",
+                model=get_config().default_fast_model,
                 temperature=0,
                 tools=tools,
                 tool_choice={"type": "function", "function": {"name": "classify_response"}},
@@ -278,8 +280,8 @@ async def process_single_page(
         warnings.warn(
             f"Vision model refused to process page {i + 1}. Retrying with academic research context.", stacklevel=2
         )
-        print(f"⚠️  Vision model refused page {i + 1}, retrying with explicit academic context...")
-        print(f"Refusal content: {body_content}")
+        logger.warning(f"⚠️  Vision model refused page {i + 1}, retrying with explicit academic context...")
+        logger.debug(f"Refusal content: {body_content}")
 
         # Retry with a more explicit academic research prompt
         enhanced_system_message = (
@@ -318,7 +320,7 @@ async def process_single_page(
             },
         ]
 
-        retry_arguments = {"messages": retry_messages, "model": "gpt-4.1", "temperature": 0.2}
+        retry_arguments = {"messages": retry_messages, "model": get_config().default_model, "temperature": 0.2}
 
         try:
             retry_response = await client.chat.completions.create(**retry_arguments)
@@ -329,11 +331,11 @@ async def process_single_page(
 
             if not is_retry_refusal:
                 body_content = retry_content
-                print(f"✓ Retry succeeded for page {i + 1}")
+                logger.info(f"✓ Retry succeeded for page {i + 1}")
             else:
                 # Fall back to OCR if retry also failed
-                print(f"⚠️  Retry also refused, falling back to OCR for page {i + 1}...")
-                print(f"Retry refusal content: {retry_content}")
+                logger.warning(f"⚠️  Retry also refused, falling back to OCR for page {i + 1}...")
+                logger.debug(f"Retry refusal content: {retry_content}")
                 raise Exception("Retry also refused")
 
         except Exception:
@@ -354,7 +356,7 @@ async def process_single_page(
 
                 if ocr_text.strip():
                     body_content = ocr_text
-                    print(f"✓ OCR extracted {len(ocr_text)} characters from page {i + 1}")
+                    logger.info(f"✓ OCR extracted {len(ocr_text)} characters from page {i + 1}")
                 else:
                     warnings.warn(f"OCR also failed to extract text from page {i + 1}", stacklevel=2)
                     body_content = f"[Text extraction failed for this page]\n\nOriginal response: {body_content}"
@@ -395,7 +397,7 @@ async def process_single_page(
             },
         ]
 
-        arguments_desc = {"messages": messages_desc, "model": "gpt-4.1", "temperature": 0.2}
+        arguments_desc = {"messages": messages_desc, "model": get_config().default_model, "temperature": 0.2}
 
         chat_response_desc = await client.chat.completions.create(**arguments_desc)
 
@@ -536,7 +538,7 @@ async def confirm_doi(title, images):
             },
         ],
         "tools": tools,
-        "model": "gpt-4.1",
+        "model": get_config().default_model,
         "temperature": 0.2,
         "tool_choice": {"type": "function", "function": {"name": "store_title"}},
     }
@@ -560,16 +562,16 @@ async def confirm_doi(title, images):
 
     # First, do a quick programmatic similarity check
     sim_score = title_similarity(title, stored_title)
-    print(f"Title similarity score: {sim_score:.3f}")
+    logger.debug(f"Title similarity score: {sim_score:.3f}")
 
     # If similarity is very low, reject without LLM call
     if sim_score < 0.5:
-        print(f"Title similarity too low ({sim_score:.3f} < 0.5), rejecting match")
+        logger.debug(f"Title similarity too low ({sim_score:.3f} < 0.5), rejecting match")
         return False
 
     # If similarity is very high, accept without LLM call
     if sim_score > 0.95:
-        print(f"Title similarity very high ({sim_score:.3f} > 0.95), accepting match")
+        logger.debug(f"Title similarity very high ({sim_score:.3f} > 0.95), accepting match")
         return True
 
     system_message = (
@@ -608,13 +610,13 @@ async def confirm_doi(title, images):
             {"role": "system", "content": system_message},
             {"role": "user", "content": "Title 1: " + title + "\nTitle 2: " + stored_title},
         ],
-        "model": "gpt-4.1",
+        "model": get_config().default_model,
         "temperature": 0.0,
         "tools": tools,
         "tool_choice": {"type": "function", "function": {"name": "store_title_similar"}},
     }
 
-    print("Checking title similarity with LLM... " "Title 1: " + title + "\nTitle 2: " + stored_title)
+    logger.info("Checking title similarity with LLM... " "Title 1: " + title + "\nTitle 2: " + stored_title)
 
     retry = 0
     is_title_match = None
@@ -677,7 +679,7 @@ async def extract_title_and_authors(images):
             },
         ],
         "tools": tools,
-        "model": "gpt-4.1",
+        "model": get_config().default_model,
         "temperature": 0.2,
         "tool_choice": {"type": "function", "function": {"name": "store_metadata"}},
     }
@@ -818,9 +820,10 @@ async def gather_metadata(pdf_path, pages):
                 try:
                     crossref_data_temp = cr.works(ids=doi)
                     title = crossref_data_temp["message"]["title"][0]
-                    print("EZ Title: " + title)
+                    logger.debug("EZ Title: " + title)
                     found_doi = await confirm_doi(title, pages)
-                    print("EZ Found DOI: " + str(found_doi))
+                    if found_doi:
+                        logger.debug("EZ Found DOI: " + str(found_doi))
                     if not found_doi:
                         if not old_doi_list:
                             old_doi_list = [doi]
@@ -858,7 +861,7 @@ async def gather_metadata(pdf_path, pages):
         while retry < 4 and not found_doi:
             doi = await extract_doi(pages, incorrect_doi_list=old_doi_list)
             if not doi:
-                print("DOI not found...")
+                logger.info("DOI not found...")
                 break
             else:
                 # Clean up DOI
@@ -866,9 +869,9 @@ async def gather_metadata(pdf_path, pages):
                 try:
                     crossref_data_temp = cr.works(ids=doi)
                     title = crossref_data_temp["message"]["title"][0]
-                    print("Title: " + title)
+                    logger.debug("Title: " + title)
                     found_doi = await confirm_doi(title, pages)
-                    print("Found DOI: " + str(found_doi))
+                    logger.debug("Found DOI: " + str(found_doi))
                     if not found_doi:
                         if not old_doi_list:
                             old_doi_list = [doi]
@@ -906,7 +909,7 @@ async def gather_metadata(pdf_path, pages):
             if author_extracted:
                 search_query += " " + author_extracted
 
-            print(f"Searching Crossref for: {search_query}")
+            logger.info(f"Searching Crossref for: {search_query}")
             try:
                 # Fetch multiple results to find the best match
                 res = cr.works(query=search_query, limit=10)
@@ -918,7 +921,7 @@ async def gather_metadata(pdf_path, pages):
                             found_title = item["title"][0]
                             sim_score = title_similarity(title_extracted, found_title)
                             scored_results.append((sim_score, found_title, item))
-                            print(f"  Candidate: '{found_title}' (similarity: {sim_score:.3f})")
+                            logger.debug(f"  Candidate: '{found_title}' (similarity: {sim_score:.3f})")
 
                     # Sort by similarity score (descending)
                     scored_results.sort(key=lambda x: x[0], reverse=True)
@@ -928,25 +931,27 @@ async def gather_metadata(pdf_path, pages):
 
                     for sim_score, found_title, item in scored_results:
                         if sim_score < MIN_SIMILARITY_THRESHOLD:
-                            print(f"Remaining candidates below threshold ({MIN_SIMILARITY_THRESHOLD}), stopping search")
+                            logger.debug(
+                                f"Remaining candidates below threshold ({MIN_SIMILARITY_THRESHOLD}), stopping search"
+                            )
                             break
 
-                        print(f"Checking best match: '{found_title}' (similarity: {sim_score:.3f})")
+                        logger.info(f"Checking best match: '{found_title}' (similarity: {sim_score:.3f})")
 
                         # Verify if the found title matches our extracted title
                         is_match = await confirm_doi(found_title, pages)
                         if is_match:
-                            print("Title match confirmed!")
+                            logger.info("Title match confirmed!")
                             crossref_data = {"message": item}
                             found_doi = True  # Treat it as found for metadata extraction purposes
                             break
                         else:
-                            print(f"Title match rejected: '{found_title}'")
+                            logger.info(f"Title match rejected: '{found_title}'")
 
                     if not found_doi:
-                        print("No matching paper found in Crossref results")
+                        logger.info("No matching paper found in Crossref results")
             except Exception as e:
-                print(f"Error searching Crossref by title/author: {e}")
+                logger.error(f"Error searching Crossref by title/author: {e}")
 
     if found_doi and crossref_data:
         metadata = crossref_data["message"]
@@ -969,7 +974,7 @@ async def gather_metadata(pdf_path, pages):
                 if isinstance(res, dict):
                     res = [res]
             except Exception as e:
-                print(f"Batch reference fetch failed: {e}. Trying individual fetches...")
+                logger.warning(f"Batch reference fetch failed: {e}. Trying individual fetches...")
                 res = []
                 for doi in dois:
                     try:

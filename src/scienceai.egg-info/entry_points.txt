@@ -1,2 +1,0 @@
-[console_scripts]
-scienceai = scienceai.__main__:main

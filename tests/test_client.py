@@ -3,36 +3,34 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestScienceAIClient:
     """Tests for the ScienceAI client class."""
 
     @patch("scienceai.client.DatabaseManager")
-    @patch("scienceai.client.start_backend")
+    @patch("scienceai.client.run_backend")
     def test_initialization_creates_project(
-        self, mock_start_backend: MagicMock, mock_dm: MagicMock, temp_dir: Path
+        self, mock_run_backend: MagicMock, mock_dm: MagicMock, temp_dir: Path
     ) -> None:
         """Should initialize client with project name."""
         from scienceai import ScienceAI
 
         mock_dm_instance = MagicMock()
         mock_dm.return_value = mock_dm_instance
-        mock_start_backend.return_value = MagicMock()
+        mock_run_backend.return_value = None
 
         client = ScienceAI(
             project_name="TestProject",
             storage_path=str(temp_dir),
-            start_server=False,
+            validate_keys=False,
         )
 
         assert client.project_name == "TestProject"
 
     @patch("scienceai.client.DatabaseManager")
-    @patch("scienceai.client.start_backend")
+    @patch("scienceai.client.run_backend")
     def test_history_returns_chat_messages(
-        self, mock_start_backend: MagicMock, mock_dm: MagicMock, temp_dir: Path
+        self, mock_run_backend: MagicMock, mock_dm: MagicMock, temp_dir: Path
     ) -> None:
         """Should return chat history from database manager."""
         from scienceai import ScienceAI
@@ -43,12 +41,12 @@ class TestScienceAIClient:
             {"role": "assistant", "content": "Hi there!"},
         ]
         mock_dm.return_value = mock_dm_instance
-        mock_start_backend.return_value = MagicMock()
+        mock_run_backend.return_value = None
 
         client = ScienceAI(
             project_name="TestProject",
             storage_path=str(temp_dir),
-            start_server=False,
+            validate_keys=False,
         )
         history = client.history()
 
@@ -59,14 +57,25 @@ class TestScienceAIClient:
 class TestClientValidation:
     """Tests for client input validation."""
 
-    def test_rejects_empty_project_name(self, temp_dir: Path) -> None:
-        """Should raise error for empty project name."""
+    @patch("scienceai.client.DatabaseManager")
+    @patch("scienceai.client.run_backend")
+    def test_accepts_empty_project_name(self, mock_run_backend: MagicMock, mock_dm: MagicMock, temp_dir: Path) -> None:
+        """Should accept empty project name and generate a timestamp-based name."""
         from scienceai import ScienceAI
 
-        with pytest.raises((ValueError, TypeError)):
-            ScienceAI(project_name="", storage_path=str(temp_dir))
+        mock_dm.return_value = MagicMock()
+        mock_run_backend.return_value = None
 
-    def test_rejects_invalid_project_name_characters(self, temp_dir: Path) -> None:
+        # Empty project name is now allowed and generates a timestamp name
+        client = ScienceAI(project_name="", storage_path=str(temp_dir), validate_keys=False)
+        # Empty string is falsy, so it generates a timestamp-based name
+        assert "Project Started at" in client.project_name or client.project_name == ""
+
+    @patch("scienceai.client.DatabaseManager")
+    @patch("scienceai.client.run_backend")
+    def test_rejects_invalid_project_name_characters(
+        self, mock_run_backend: MagicMock, mock_dm: MagicMock, temp_dir: Path
+    ) -> None:
         """Should handle project names with special characters."""
         # Some characters may be invalid depending on implementation
         # This test documents expected behavior
@@ -74,14 +83,13 @@ class TestClientValidation:
 
         from scienceai import ScienceAI
 
+        mock_dm.return_value = MagicMock()
+        mock_run_backend.return_value = None
+
         # Should either work or raise a clear error
-        with (
-            patch("scienceai.client.DatabaseManager"),
-            patch("scienceai.client.start_backend"),
-            contextlib.suppress(ValueError, OSError),
-        ):
+        with contextlib.suppress(ValueError, OSError):
             ScienceAI(
                 project_name="Test/Project",
                 storage_path=str(temp_dir),
-                start_server=False,
+                validate_keys=False,
             )

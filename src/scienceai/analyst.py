@@ -1,20 +1,75 @@
+import logging
 import os
 import time
 from datetime import datetime
 
-import openai
-
 from .data_extractor import ExtractionMode, extract_data, generate_schema, schema_to_tool
 from .database_manager import DatabaseManager
-from .llm import client
+from .llm import MODEL_REASONING, client, get_config, get_model_for_role
 from .llm import use_tools_sync as use_tools
+
+logger = logging.getLogger(__name__)
 
 short_id = {}
 
 path_to_app = os.path.dirname(os.path.abspath(__file__))
 
-with open(os.path.join(path_to_app, "analyst_base_prompt.txt")) as f:
-    analyst_system = f.read()
+
+def _load_analyst_system_prompt() -> str:
+    """Load the analyst system prompt with provider-specific prepend and append.
+
+    Loads the base prompt and adds provider-specific instructions:
+    - Prepend: Initial context and reminders at the start
+    - Append: Critical rules at the end (leverages recency bias)
+    """
+    from .llm_providers import Provider, get_provider_type
+
+    # Load base prompt
+    with open(os.path.join(path_to_app, "analyst_base_prompt.txt")) as f:
+        base_prompt = f.read()
+
+    prepend_content = ""
+    append_content = ""
+
+    # Determine provider and load corresponding prepend/append
+    try:
+        provider_type = get_provider_type()
+
+        if provider_type == Provider.ANTHROPIC:
+            prepend_file = "analyst_prepend_anthropic.txt"
+            append_file = "analyst_append_anthropic.txt"
+        elif provider_type == Provider.OPENAI:
+            prepend_file = "analyst_prepend_openai.txt"
+            append_file = "analyst_append_openai.txt"
+        elif provider_type == Provider.GOOGLE:
+            prepend_file = "analyst_prepend_google.txt"
+            append_file = "analyst_append_google.txt"
+        else:
+            prepend_file = None
+            append_file = None
+
+        if prepend_file:
+            prepend_path = os.path.join(path_to_app, "prompts", prepend_file)
+            if os.path.exists(prepend_path):
+                with open(prepend_path) as f:
+                    content = f.read().strip()
+                if content:
+                    prepend_content = content + "\n\n"
+                    logger.info(f"Loaded analyst prepend for provider: {provider_type.value}")
+
+        if append_file:
+            append_path = os.path.join(path_to_app, "prompts", append_file)
+            if os.path.exists(append_path):
+                with open(append_path) as f:
+                    content = f.read().strip()
+                if content:
+                    append_content = "\n\n" + content
+                    logger.info(f"Loaded analyst append for provider: {provider_type.value}")
+
+    except Exception as e:
+        logger.warning(f"Could not load provider-specific prompt files: {e}")
+
+    return prepend_content + base_prompt + append_content
 
 
 def process_metadata_field(metadata, field_name):
@@ -179,7 +234,7 @@ def reflect_on_evidence(goal, answer, evidence, retries=3):
 
     messages = [{"role": "system", "content": system_message}, {"role": "user", "content": user_message}]
 
-    arguments = {"messages": messages, "model": "o4-mini", "reasoning_effort": "medium"}
+    arguments = {"messages": messages, "model": get_model_for_role(MODEL_REASONING), "reasoning_effort": "medium"}
 
     chat_response = client.chat.completions.create(**arguments)
 
@@ -212,7 +267,7 @@ def reflect_on_evidence(goal, answer, evidence, retries=3):
 
     arguments = {
         "messages": messages,
-        "model": "o4-mini",
+        "model": get_model_for_role(MODEL_REASONING),
         "reasoning_effort": "medium",
         "tools": tools,
         "tool_choice": {"type": "function", "function": {"name": "check_completed_goal"}},
@@ -222,7 +277,7 @@ def reflect_on_evidence(goal, answer, evidence, retries=3):
     valid_calls = []
     while valid_calls == [] and retry < retries:
         if retry > 0:
-            print("Retrying...")
+            logger.info("Retrying reasoning check...")
         chat_response = client.chat.completions.create(**arguments)
         if chat_response.choices[0].message.tool_calls:
             valid_calls = use_tools(chat_response, arguments, call_functions=False)
@@ -328,7 +383,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
 - Example: If you created "SampleSizeExtraction", pass data_collection_names=["SampleSizeExtraction"] and explain what the file contains in your answer
 """
 
-        self.system_message = analyst_system + file_output_instruction
+        self.system_message = _load_analyst_system_prompt() + file_output_instruction
 
     def get_context(self):
         return self.db.get_analyst_context(self.name)
@@ -488,6 +543,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                             },
                         },
                         "additionalProperties": False,
+                        "required": [],
                     },
                 },
             }
@@ -548,7 +604,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
 
         # If collection_name is provided, save as a data collection
         if collection_name:
-            print(f"Saving metadata results to collection: {collection_name}")
+            logger.info(f"Saving metadata results to collection: {collection_name}")
             from datetime import datetime
 
             tracker = self.db.add_analyst_tool_tracker(
@@ -599,39 +655,42 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                 "function": {
                     "strict": True,
                     "name": "create_data_collection_request",
-                    "description": "Extract structured data from research papers using an AI-generated schema. "
-                    "This tool will: (1) Generate an extraction schema based on your goal, "
-                    "(2) Extract data from ALL papers in the target list CONCURRENTLY, "
-                    "(3) Save results to a data collection you can reference later. "
-                    "Use when you need to collect the SAME types of data points from multiple papers. "
-                    "NOTE: The schema is uniform across all papers—design a broad schema that captures variations.",
+                    "description": "Collect structured data from research papers using an AI-generated schema. "
+                    "IMPORTANT: Collect ONLY the specific outcome type requested. Do NOT expand scope to additional outcomes. "
+                    "WORKFLOW: (1) Start with 'exploratory' mode to SCOUT what data is available and in what format. "
+                    "(2) Review failed collections - they reveal data presented in unexpected formats. "
+                    "(3) Call create_data_collection_request AGAIN with refined collection_goal for papers that failed. "
+                    "(4) Iterate until converging on a complete picture. "
+                    "Failed collections are CLUES, not failures - they indicate rigid schemas missed valid data in different formats. "
+                    "This tool collects data from ALL papers CONCURRENTLY with a uniform schema. "
+                    "NOTE: Design broad schemas that capture variations across papers.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "collection_name": {
                                 "type": "string",
-                                "description": "Unique name for this data collection (e.g., 'SampleSizeExtraction', 'MethodologyAnalysis'). "
+                                "description": "Unique name for this data collection (e.g., 'SampleSizeData', 'MethodologyAnalysis'). "
                                 "Use descriptive names as you may reference this later.",
                             },
                             "collection_goal": {
                                 "type": "string",
-                                "description": "Detailed description of what data to extract. BE SPECIFIC about: (1) Types of data points needed, "
+                                "description": "Detailed description of what data to collect. BE SPECIFIC about: (1) Types of data points needed, "
                                 "(2) How many instances per paper (e.g., 'all genes mentioned' vs 'top 5 most important genes'), "
                                 "(3) Any context needed. Good: 'Collect all sample size information including total N, subgroup names, "
                                 "and subgroup N values, plus any exclusion criteria.' Bad: 'Get sample sizes.'",
                             },
                             "target_list": {
                                 "type": "string",
-                                "description": "Name of paper list to extract from, or 'ALL PAPERS' for entire database. "
-                                "Extraction runs on ALL papers in this list—there's no per-paper filtering in the schema.",
+                                "description": "Name of paper list to collect from, or 'ALL PAPERS' for entire database. "
+                                "Collection runs on ALL papers in this list—there's no per-paper filtering in the schema.",
                             },
                             "extraction_mode": {
                                 "type": "string",
                                 "enum": ["exploratory", "focused", "rigid"],
-                                "description": "Extraction strictness mode. "
-                                "'exploratory': Lenient - returns partial data if validation fails, good for discovery. "
-                                "'focused': Balanced (default) - uses convergence detection, retries intelligently. "
-                                "'rigid': Strict - all fields required, fails extraction if data missing.",
+                                "description": "Collection strictness mode. "
+                                "'exploratory': RECOMMENDED FIRST - lenient, returns partial data, reveals what formats exist. "
+                                "'focused': Balanced - uses convergence detection, retries intelligently. "
+                                "'rigid': Strict - all fields required, use AFTER scouting to enforce consistency.",
                             },
                         },
                         "additionalProperties": False,
@@ -665,7 +724,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         if not schema:
             raise ValueError("Could not generate schema for data collection, be more specific in your goal.")
         tool = schema_to_tool(schema, mode=mode)
-        print("Tool:", tool)
+        logger.debug(f"Tool: {tool}")
         results = {}
         tracker = self.db.add_analyst_tool_tracker(
             self.name, collection_name, datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
@@ -688,7 +747,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         import asyncio
         import concurrent.futures
 
-        print(f"Starting parallel extraction for {len(papers)} papers...")
+        logger.info(f"Starting parallel extraction for {len(papers)} papers...")
 
         # Track progress with a counter
         completed_count = [0]  # Using list to allow modification in nested function
@@ -698,7 +757,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             """Extract data from a single paper"""
             paper_id = paper["database"]["paper_id"]
             short_paper_id = paper_id[:10]
-            print(f"*** Extracting from Paper: {short_paper_id}")
+            logger.debug(f"*** Extracting from Paper: {short_paper_id}")
 
             # Run async extract_data with the specified mode
             result = await extract_data(tool, paper["cleaned_text"], mode=mode)
@@ -717,14 +776,14 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                 # Ignore errors during progress emission
                 pass
 
-            print(f"*** Completed extraction for Paper: {short_paper_id}")
+            logger.debug(f"*** Completed extraction for Paper: {short_paper_id}")
             return short_paper_id, paper_id, result
 
         async def run_all_extractions():
             """Run all extractions concurrently"""
             tasks = [extract_from_paper(paper) for paper in papers]
             results = await asyncio.gather(*tasks)
-            print(f"All {len(results)} extractions completed!")
+            logger.info(f"All {len(results)} extractions completed!")
 
             # Emit final progress (should already be at total, but ensure)
             try:
@@ -749,43 +808,43 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                 loop.close()
 
         # Execute in thread and wait for results
-        print("Waiting for all extractions to complete...")
+        logger.info("Waiting for all extractions to complete...")
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future = executor.submit(run_in_thread)
             extraction_results = future.result()
 
-        print(f"Received results for {len(extraction_results)} papers, building output...")
+        logger.info(f"Received results for {len(extraction_results)} papers, building output...")
 
         # Build results dict (tracker already updated during extraction)
-        failed_extractions = []
+        failed_collections = []
         for short_paper_id, paper_id, result in extraction_results:
             short_id[short_paper_id] = paper_id
             results[short_paper_id] = result
-            # Track failed extractions
-            if isinstance(result, dict) and "failed_extraction" in result:
-                failed_extractions.append(short_paper_id)
+            # Track failed collections
+            if isinstance(result, dict) and "failed_collection" in result:
+                failed_collections.append(short_paper_id)
 
         self.db.convert_analyst_tool_tracker(self.name, collection_name)
-        print("Data collection complete, returning results.")
+        logger.info("Data collection complete, returning results.")
 
         # Add extraction summary with warnings about failures
         total_papers = len(extraction_results)
-        successful = total_papers - len(failed_extractions)
+        successful = total_papers - len(failed_collections)
 
         # Add summary as a special key in results so analyst sees it
         results["_EXTRACTION_SUMMARY"] = {
             "total_papers": total_papers,
             "successful": successful,
-            "failed": len(failed_extractions),
-            "failed_paper_ids": failed_extractions,
+            "failed": len(failed_collections),
+            "failed_paper_ids": failed_collections,
         }
 
-        if failed_extractions:
+        if failed_collections:
             results["_WARNING"] = (
-                f"⚠️ {len(failed_extractions)}/{total_papers} papers FAILED extraction and have incomplete data. "
-                f"Failed papers: {', '.join(failed_extractions)}. "
+                f"⚠️ {len(failed_collections)}/{total_papers} papers FAILED extraction and have incomplete data. "
+                f"Failed papers: {', '.join(failed_collections)}. "
                 f"The CSV '{collection_name}' will have NaN/empty values for these rows. "
-                f"Options: (1) Review failure reasons in each paper's 'failed_extraction' field, "
+                f"Options: (1) Review failure reasons in each paper's 'failed_collection' field, "
                 f"(2) Re-run extraction with refined schema, or (3) Proceed with partial data. "
                 f"This warning will be shown to the user when you complete your goal."
             )
@@ -820,7 +879,11 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                 },
             }
 
-        print(f"Saving metadata to collection: {collection_name}")
+        if self.db.get_all_papers(analyst=self.name, named_list=collection_name):
+            # Collection exists, we might be appending or overwriting.
+            pass
+
+        logger.info(f"Saving metadata to collection: {collection_name}")
 
         # Initialize tracker
         from datetime import datetime
@@ -852,7 +915,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                 if len(short_id) > 10:
                     full_id = short_id
                 else:
-                    print(f"Warning: Could not find full ID for {short_id}")
+                    logger.warning(f"Warning: Could not find full ID for {short_id}")
                     continue
 
             # Update tracker
@@ -882,10 +945,12 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                         },
                         "evidence": {
                             "type": "string",
-                            "description": "Specific data points that support your answer. For small datasets (<20 items), include the full list here. "
+                            "description": "Specific data points that support your answer WITH SOURCE DOCUMENTATION. "
+                            "REQUIRED for each data point: (1) The exact source quote from the paper, (2) Where you found it (page, table, figure). "
+                            "For small datasets (<20 items), include the full list here. "
                             "For large datasets, provide summary statistics and key examples. DO NOT just reference data you don't show—"
-                            "either display it here OR attach it as a data collection file. Example: 'Paper abc123: 150 participants; "
-                            "Paper xyz789: 200 participants' (showing actual data).",
+                            "either display it here OR attach it as a data collection file. Example: 'Paper abc123: 150 participants "
+                            '(Table 1, p.4: "A total of 150 subjects were enrolled").\'',
                         },
                         "data_collection_names": {
                             "type": "array",
@@ -915,17 +980,17 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                 "using the data_collection_names parameter. Do not attempt to complete without attaching files."
             )
 
-        # Check for failed extractions in data collections BEFORE proceeding
-        failed_extraction_warnings = []
+        # Check for failed collections in data collections BEFORE proceeding
+        failed_collection_warnings = []
         if data_collection_names:
             for collection_name in data_collection_names:
                 try:
                     csv_path = self.db.convert_analyst_tool_tracker(self.name, collection_name)
                     df = pd.read_csv(csv_path)
 
-                    # Check for failed_extraction column
-                    if "failed_extraction" in df.columns:
-                        failed_rows = df[df["failed_extraction"].notna()]
+                    # Check for failed_collection column
+                    if "failed_collection" in df.columns:
+                        failed_rows = df[df["failed_collection"].notna()]
                         if len(failed_rows) > 0:
                             total_rows = len(df)
                             failed_count = len(failed_rows)
@@ -939,14 +1004,14 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                                 failed_papers_info.append(f"  - {paper_id}: {paper_title[:60]}...")
 
                             warning = (
-                                f"\n\n⚠️ **WARNING: {failed_count}/{total_rows} papers failed extraction in '{collection_name}'**\n"
+                                f"\n\n⚠️ **WARNING: {failed_count}/{total_rows} papers failed collection in '{collection_name}'**\n"
                                 f"These papers have incomplete data (mostly NaN values):\n"
                                 + "\n".join(failed_papers_info[:10])
                             )  # Limit to first 10
                             if failed_count > 10:
                                 warning += f"\n  ... and {failed_count - 10} more"
 
-                            failed_extraction_warnings.append(warning)
+                            failed_collection_warnings.append(warning)
                 except Exception:  # nosec
                     # Ignore errors during progress emission
                     # Ignore errors during progress emission
@@ -1009,9 +1074,9 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                 + "\n".join(download_links)
             )
 
-        # Add failed extraction warnings to answer (prominently displayed)
-        if failed_extraction_warnings:
-            answer = answer + "\n\n" + "\n".join(failed_extraction_warnings)
+        # Add failed collection warnings to answer (prominently displayed)
+        if failed_collection_warnings:
+            answer = answer + "\n\n" + "\n".join(failed_collection_warnings)
             answer += "\n\n**Note:** The CSV file contains incomplete data for the papers listed above. You may want to review the extraction failures and decide whether to re-run the extraction or proceed with partial data."
 
         # Run the standard goal checker (backward compatible)
@@ -1084,19 +1149,22 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             messages = self.db.get_analyst_context(self.name)
             arguments = {
                 "messages": messages,
-                "model": "gpt-5.1",
+                "model": get_config().default_model,
                 "reasoning_effort": "medium",
                 "tools": self.tools,
                 "parallel_tool_calls": False,
             }
 
-            # Try to make API call, catch context limit errors
             try:
                 chat_response = client.chat.completions.create(**arguments)
-            except openai.BadRequestError as e:
+            except Exception as e:
                 error_str = str(e)
-                # Check for context length errors - OpenAI returns "maximum context length" in the message
-                if "maximum context length" in error_str.lower():
+                # Check for context length errors - various providers use different messages
+                if (
+                    "maximum context length" in error_str.lower()
+                    or "context_length" in error_str.lower()
+                    or "too long" in error_str.lower()
+                ):
                     self.answer = (
                         f"⚠️ CONTEXT LIMIT EXCEEDED: The analyst '{self.name}' hit the context window limit. "
                         f"The conversation grew too large ({len(messages)} messages) to continue processing. "
@@ -1168,6 +1236,17 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                         "content": "Make sure to use tool calls to attempt to collect data or complete your goal, do not just talk to yourself.",
                     }
                 ]
+            # Check if the last message content is "null" AND has no tool calls - remind the analyst to use the answer tool
+            last_message = messages[-1] if messages else {}
+            last_message_content = last_message.get("content", "")
+            last_message_has_no_tools = last_message.get("tool_calls", None) is None
+            if (last_message_content == "null" or last_message_content is None) and last_message_has_no_tools:
+                reminder_message = {
+                    "role": "system",
+                    "content": "You returned an empty or null response. You must use the complete_goal_by_answering_question_with_evidence tool to submit your findings. Do not return null - call the tool with your answer and evidence.",
+                }
+                messages.append(reminder_message)
+                self.db.add_analyst_context(self.name, reminder_message)
         self.db.add_analyst_metadata(
             self.name, {"goal_achieved": True, "answer": self.answer, "evidence": self.evidence}
         )

@@ -16,6 +16,15 @@ seaborn
 numpy
 num2words
 
+[all-providers]
+anthropic>=0.40.0
+google-genai>=1.0.0
+google-cloud-aiplatform>=1.40.0
+google-auth>=2.25.0
+
+[anthropic]
+anthropic>=0.40.0
+
 [dev]
 pytest>=7.4.0
 pytest-cov>=4.1.0
@@ -26,3 +35,10 @@ pre-commit>=3.5.0
 types-Flask>=1.1.0
 types-requests>=2.31.0
 pandas-stubs>=2.0.0
+
+[google]
+google-genai>=1.0.0
+
+[vertex-ai]
+google-cloud-aiplatform>=1.40.0
+google-auth>=2.25.0

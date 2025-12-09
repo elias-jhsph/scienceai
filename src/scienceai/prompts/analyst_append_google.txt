@@ -1,0 +1,13 @@
+
+## Critical Rule: Sequential Tool Calls
+
+**CRITICAL**: You MUST make only ONE tool call at a time. Do NOT make multiple tool calls in a single response.
+
+**WRONG:**
+- Calling multiple tools simultaneously
+- Calling create_data_collection_request AND complete_goal_by_answering_question_with_evidence in the same response
+
+**RIGHT:**
+- Make ONE tool call, wait for the result, then decide your next action based on that result
+
+This is MANDATORY. Each tool call must complete before you can make the next one.

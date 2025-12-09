@@ -1,0 +1,37 @@
+{
+    "_comment": "ScienceAI LLM Provider Configuration",
+    "_usage": "Copy this file to ~/Documents/ScienceAI/scienceai-config.json and customize as needed",
+    "provider": "openai",
+    "_provider_options": "Choose from: openai, anthropic, google",
+    "_model_overrides": "Optional: Override default models for each role",
+    "default_model": "",
+    "default_reasoning_model": "",
+    "default_vision_model": "",
+    "default_fast_model": "",
+    "_model_aliases": "Optional: Create aliases for model names",
+    "model_aliases": {},
+    "_example_openai_config": {
+        "_description": "OpenAI models as of December 2025",
+        "provider": "openai",
+        "default_model": "gpt-5.1",
+        "default_reasoning_model": "o4-mini",
+        "default_vision_model": "gpt-4o",
+        "default_fast_model": "gpt-5-mini"
+    },
+    "_example_anthropic_config": {
+        "_description": "Anthropic Claude models as of December 2025",
+        "provider": "anthropic",
+        "default_model": "claude-sonnet-4-5",
+        "default_reasoning_model": "claude-opus-4-5",
+        "default_vision_model": "claude-sonnet-4-5",
+        "default_fast_model": "claude-haiku-4-5"
+    },
+    "_example_google_config": {
+        "_description": "Google Gemini models as of December 2025",
+        "provider": "google",
+        "default_model": "gemini-3-pro",
+        "default_reasoning_model": "gemini-3-pro",
+        "default_vision_model": "gemini-3-pro",
+        "default_fast_model": "gemini-2.5-flash-lite"
+    }
+}

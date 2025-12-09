@@ -149,6 +149,10 @@
         }
 
         async function viewJSON(url) {
+            // Detect current theme
+            const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+            const bgColor = isDarkMode ? '#1e293b' : '#fff';
+
             // Create overlay
             const overlay = $('<div>').css({
                 position: 'fixed',
@@ -164,11 +168,12 @@
             }).appendTo('body');
 
             // Create container for JSON viewer
-            const viewer = $('<div>').css({
+            const viewer = $('<div>').addClass('json-viewer-container').css({
                 width: '90%',
                 height: '90%',
-                backgroundColor: '#fff',
-                overflow: 'auto'
+                backgroundColor: bgColor,
+                overflow: 'auto',
+                borderRadius: '8px'
             }).appendTo(overlay);
 
             // Fetch and display JSON
@@ -182,7 +187,7 @@
             }
 
             // Create refresh button
-            $('<button>').html('&#x21bb;').css({
+            $('<button>').addClass('json-viewer-overlay-exit-btn').html('&#x21bb;').css({
                 position: 'absolute',
                 top: '1vh',  // Using viewport height units for vertical positioning
                 right: '5vw',  // Using viewport width units for right positioning
@@ -202,7 +207,7 @@
             }).appendTo(overlay);
 
             // Create exit button
-            $('<button>').text('✕').css({
+            $('<button>').addClass('json-viewer-overlay-exit-btn').text('✕').css({
                 position: 'absolute',
                 top: '1vh',  // Consistent vertical positioning with the refresh button
                 right: '1vw',  // Minimal right positioning to keep it on the edge
