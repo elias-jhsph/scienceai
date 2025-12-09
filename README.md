@@ -8,7 +8,7 @@
 
 **An AI-Powered Research Assistant for Systematic Literature Analysis**
 
-ScienceAI is a Python application that transforms how researchers analyze scientific literature. Unlike a standard LLM chatbot, ScienceAI is specifically designed to handle complex, multi-paper research tasks through an intelligent agent-based architecture that supports both OpenAI, Claude, and Gemini models.
+ScienceAI is a Python application that transforms how researchers analyze scientific literature. Unlike a standard LLM chatbot, ScienceAI is specifically designed to handle complex, multi-paper research tasks through an intelligent agent-based architecture that supports both GPT-5, Claude, and Gemini models.
 
 ---
 
