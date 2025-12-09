@@ -25,6 +25,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install build twine
 
+      - name: Convert README images to absolute paths
+        run: |
+          sed -i 's|src="images/|src="https://raw.githubusercontent.com/${{ github.repository }}/main/images/|g' README.md
+          sed -i 's|(\(images/.*\))|(https://raw.githubusercontent.com/${{ github.repository }}/main/\1)|g' README.md
+
       - name: Build package
         run: python -m build
 
