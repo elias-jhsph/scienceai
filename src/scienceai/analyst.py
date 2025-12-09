@@ -1220,7 +1220,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                     and message["name"] == "complete_goal_by_answering_question_with_evidence"
                 ]
                 self.evidence = (
-                    ("Here are the reasons the analyst failed to reach its goal " "after ")
+                    ("Here are the reasons the analyst failed to reach its goal after ")
                     + str(self.attempts)
                     + " attempts:"
                     + "\n\n"

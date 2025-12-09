@@ -23,9 +23,10 @@ class TestTokenCounting(unittest.TestCase):
         config = LLMConfig(provider=Provider.ANTHROPIC, api_key="sk-ant-test")
 
         # Patch load_gcp_config to return None -> Direct Client
-        with patch("scienceai.llm_providers.load_gcp_config", return_value=None), patch(
-            "anthropic.Anthropic"
-        ) as MockAnthropic:
+        with (
+            patch("scienceai.llm_providers.load_gcp_config", return_value=None),
+            patch("anthropic.Anthropic") as MockAnthropic,
+        ):
             mock_client = MockAnthropic.return_value
             mock_client.beta.messages.count_tokens.return_value.input_tokens = 42
 
@@ -38,11 +39,12 @@ class TestTokenCounting(unittest.TestCase):
         config = LLMConfig(provider=Provider.ANTHROPIC)
         gcp_config = {"service_account_path": "/tmp/dummy.json", "project_id": "test-project", "region": "us-east5"}
 
-        with patch("scienceai.llm_providers.load_gcp_config", return_value=gcp_config), patch(
-            "scienceai.llm_providers.os.path.exists", return_value=True
-        ), patch.dict(os.environ, {}, clear=True), patch(
-            "scienceai.llm_providers.AnthropicProvider._init_vertex_client"
-        ) as _:
+        with (
+            patch("scienceai.llm_providers.load_gcp_config", return_value=gcp_config),
+            patch("scienceai.llm_providers.os.path.exists", return_value=True),
+            patch.dict(os.environ, {}, clear=True),
+            patch("scienceai.llm_providers.AnthropicProvider._init_vertex_client") as _,
+        ):
             provider = AnthropicProvider(config)
 
             # Manually set up Vertex attributes that _init_vertex_client would set
@@ -51,9 +53,11 @@ class TestTokenCounting(unittest.TestCase):
             provider._sa_path = "/tmp/dummy.json"
             provider.client = MagicMock()  # Just a mock client, no spec needed
 
-            with patch("requests.post") as mock_post, patch(
-                "google.auth.default", return_value=(MagicMock(), "proj")
-            ), patch("google.oauth2.service_account.Credentials.from_service_account_file") as mock_creds:
+            with (
+                patch("requests.post") as mock_post,
+                patch("google.auth.default", return_value=(MagicMock(), "proj")),
+                patch("google.oauth2.service_account.Credentials.from_service_account_file") as mock_creds,
+            ):
                 # Set up credentials mock
                 mock_cred_instance = MagicMock()
                 mock_cred_instance.token = "fake-token"
@@ -75,9 +79,10 @@ class TestTokenCounting(unittest.TestCase):
     def test_google_token_counting_mock(self):
         config = LLMConfig(provider=Provider.GOOGLE, api_key="gemini-test-key")
 
-        with patch("scienceai.llm_providers.load_gcp_config", return_value=None), patch(
-            "google.genai.Client"
-        ) as MockGenAI:
+        with (
+            patch("scienceai.llm_providers.load_gcp_config", return_value=None),
+            patch("google.genai.Client") as MockGenAI,
+        ):
             mock_client = MockGenAI.return_value
             mock_client.models.count_tokens.return_value.total_tokens = 15
 
@@ -90,11 +95,12 @@ class TestTokenCounting(unittest.TestCase):
         config = LLMConfig(provider=Provider.GOOGLE)
         gcp_config = {"service_account_path": "/tmp/dummy.json", "project_id": "test-project", "region": "global"}
 
-        with patch("scienceai.llm_providers.load_gcp_config", return_value=gcp_config), patch(
-            "scienceai.llm_providers.os.path.exists", return_value=True
-        ), patch("scienceai.llm_providers.GoogleProvider._init_vertex_client") as _, patch(
-            "google.genai.Client"
-        ) as MockGenAIClient:
+        with (
+            patch("scienceai.llm_providers.load_gcp_config", return_value=gcp_config),
+            patch("scienceai.llm_providers.os.path.exists", return_value=True),
+            patch("scienceai.llm_providers.GoogleProvider._init_vertex_client") as _,
+            patch("google.genai.Client") as MockGenAIClient,
+        ):
             provider = GoogleProvider(config)
             # Mimic Vertex setup - must set all attributes that _init_vertex_client would set
             provider._use_vertex = True

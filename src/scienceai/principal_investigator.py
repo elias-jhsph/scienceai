@@ -496,7 +496,7 @@ class PrincipalInvestigator:
             # we send it to the vision model here and return ONLY the text critique.
 
             logger.info(
-                f"Analyzing image {filename} ({width}x{height}, {round(file_size/1024)}KB) with vision model..."
+                f"Analyzing image {filename} ({width}x{height}, {round(file_size / 1024)}KB) with vision model..."
             )
 
             vision_messages = [

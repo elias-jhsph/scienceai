@@ -830,7 +830,7 @@ class DatabaseManager:
         if path_parts[2] == "internal_memory":
             results = self.get_analyst_context(path_parts[1], include_hidden=True)
             if len(path_parts) == 3:
-                return {f"memory - {i+1}": {} for i in range(len(results))}
+                return {f"memory - {i + 1}": {} for i in range(len(results))}
             if len(path_parts) > 3:
                 result = results[int(path_parts[3].split(" - ")[1]) - 1]
                 for part in path_parts[4:]:

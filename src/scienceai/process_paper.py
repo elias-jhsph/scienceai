@@ -616,7 +616,7 @@ async def confirm_doi(title, images):
         "tool_choice": {"type": "function", "function": {"name": "store_title_similar"}},
     }
 
-    logger.info("Checking title similarity with LLM... " "Title 1: " + title + "\nTitle 2: " + stored_title)
+    logger.info("Checking title similarity with LLM... Title 1: " + title + "\nTitle 2: " + stored_title)
 
     retry = 0
     is_title_match = None

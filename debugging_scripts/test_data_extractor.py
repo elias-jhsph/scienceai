@@ -22,8 +22,7 @@ with open("test_paper.txt") as file:
 
 collection_name = "SampleSizeCollection"
 collection_goal = (
-    "Collect detailed information on sample sizes from all the papers, "
-    "including any variations or patterns observed."
+    "Collect detailed information on sample sizes from all the papers, including any variations or patterns observed."
 )
 
 schema = generate_schema(summaries, goal=collection_name + " - " + collection_goal)
