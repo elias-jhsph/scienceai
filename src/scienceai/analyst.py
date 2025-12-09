@@ -627,9 +627,9 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             self.db.convert_analyst_tool_tracker(self.name, collection_name)
 
             # Add note to output
-            output[
-                "_system_note"
-            ] = f"Results saved to collection '{collection_name}'. You can now use data_collection_names=['{collection_name}'] in complete_goal."
+            output["_system_note"] = (
+                f"Results saved to collection '{collection_name}'. You can now use data_collection_names=['{collection_name}'] in complete_goal."
+            )
 
         return output
 

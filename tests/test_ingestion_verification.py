@@ -22,8 +22,8 @@ sys.modules["scienceai.process_paper"] = mock_process_paper_module
 # Add src to path to ensure we load the local package
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from scienceai.database_manager import DatabaseManager  # noqa: E402
-from scienceai.process_paper import process_paper  # noqa: E402
+from scienceai.database_manager import DatabaseManager
+from scienceai.process_paper import process_paper
 
 
 async def main():

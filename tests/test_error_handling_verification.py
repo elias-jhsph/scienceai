@@ -13,7 +13,7 @@ sys.modules["scienceai.llm"] = MagicMock()
 sys.modules["scienceai.analyst"] = MagicMock()
 sys.modules["scienceai.reasoning"] = MagicMock()
 
-from scienceai.database_manager import DatabaseManager  # noqa: E402
+from scienceai.database_manager import DatabaseManager
 
 
 # Mock processor that always fails
