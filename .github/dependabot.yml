@@ -11,7 +11,7 @@ updates:
       day: "monday"
     open-pull-requests-limit: 5
     labels:
-      - "dependencies"
+
       - "python"
     commit-message:
       prefix: "deps"
@@ -31,8 +31,6 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "github-actions"
+
     commit-message:
       prefix: "ci"
