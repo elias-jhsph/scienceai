@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2025-12-13
+
+### Added
+- **Parallel Analyst Delegation**: PI can now spawn multiple independent analyst instances in parallel for replicated research. User-controllable via UI dropdown (1×, 2×, 3× replicates).
+- **New Data Type**: Added `text_block_list` for extracting multiple narrative sections or related text segments.
+- **Local Config Support**: Config files now support a priority-based lookup—`scienceai-config.json` in the current working directory takes precedence over the global `~/Documents/ScienceAI/scienceai-config.json`.
+
+### Improved
+- **Context Compression**: Enhanced compression with metadata extraction—now differentiates between `delegate_research` and `run_python_code` calls, extracting analyst names, collection names, and referenced files for better context preservation.
+- **WebSocket Stability**: Graceful handling of `BrokenPipeError` exceptions in all WebSocket handlers (`/discussion`, `/papers`, `/progress`) to prevent page refresh loops.
+- **Fallback Reload Timeout**: Increased from 5 seconds to 30 seconds to reduce unnecessary page reloads during normal operation.
+- **UI Icons**: Migrated all FontAwesome icons to native emojis (👁️, 📥, ↩️, 🗑️, ➕) for better cross-platform compatibility and reduced external dependencies.
+- **Undo Enhancement**: Undo now also removes parallel analyst replicates (e.g., "Analyst Name copy 1", "copy 2", etc.).
+- **Compression Lock**: Added guard to prevent multiple simultaneous compression operations.
+- **PI Code Execution**: Improved documentation for relative file paths in `run_python_code` tool.
+
+### Fixed
+- **Orphaned Tool Calls**: Added healing for orphaned tool calls during context compression.
+- **Thread Safety**: Added locking around analyst list mutations to prevent race conditions during parallel delegation.
+
+### Internal
+- **Model Updates**: Default OpenAI model updated from `gpt-5.1` to `gpt-5.2`.
+- **OpenAI API**: Moved `max_completion_tokens` and `reasoning_effort` to `extra_body` for better API compatibility.
+- **Provider Status**: Fixed `get_current_provider_name()` to use `load_config()` instead of cached config.
+
 ## [0.4.1] - 2025-12-09
 
 ### Added
@@ -65,5 +90,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PDF processing and automatic metadata detection
 - Structured data extraction with JSON schemas
 
+[0.4.2]: https://github.com/elias-jhsph/scienceai/compare/0.4.1...0.4.2
 [0.4.1]: https://github.com/elias-jhsph/scienceai/compare/0.3.1...0.4.1
 [0.3.1]: https://github.com/elias-jhsph/scienceai/releases/tag/0.3.1

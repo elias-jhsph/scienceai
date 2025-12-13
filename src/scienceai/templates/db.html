@@ -1,4 +1,36 @@
-<h2 style="text-align: center;">Analysis</h2>
+<div style="display: flex;align-items: center;justify-content: flex-start; gap: 10px; margin-bottom: 10px;">
+    <h2>Analyst Replicates: &nbsp;<div class="parallel-calls-control" title="Auto Analyst Replicates">
+            <select id="parallel-calls-select" onchange="updateParallelCalls(this.value)"
+                style="padding: 2px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); font-size: 0.9em;">
+                <option value="1" selected>1×</option>
+                <option value="2">2×</option>
+                <option value="3">3×</option>
+            </select>
+        </div>
+    </h2>
+</div>
+<script>
+    function updateParallelCalls(count) {
+        fetch('/set_parallel_calls', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ count: parseInt(count) }),
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Parallel calls set to ' + count);
+                } else {
+                    console.error('Failed to set parallel calls:', data.error);
+                }
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+    }
+</script>
 <div id="data-viewer">
     {{ html_snippet | safe }}
 </div>

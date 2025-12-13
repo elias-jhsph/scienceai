@@ -9,7 +9,6 @@
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧪</text></svg>">
     <link rel="stylesheet" type="text/css" href="/static/apps.css" />
     <link href="/static/json-viewer/jquery.json-viewer.css" rel="stylesheet" type="text/css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jquery-ui@1.13.2/dist/jquery-ui.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.12/dist/htmx.min.js"></script>
@@ -31,8 +30,13 @@
         <div class="resize-section glass-panel" id="left-section">
             <div class="resize-section-internal" id="left-section-internal">
                 <h2 style="text-align: center;" id="papers-heading">Papers <button id="add-paper-button"
-                        class="icon-button" style="font-size: 0.8em;" title="Add Paper"><i
-                            class="fas fa-plus-circle"></i></button></h2>
+                        class="icon-button" style="font-size: 0.8em;" title="Add Paper">➕</button></h2>
+                <script>
+                    document.getElementById('papers-heading').innerHTML = '&#x21bb; Papers &#x21bb;';
+                    setTimeout(() => {
+                        document.getElementById('papers-heading').innerHTML = 'Papers <button id="add-paper-button" class="icon-button" style="font-size: 0.8em;" title="Add Paper">➕</button>';
+                    }, 500);
+                </script>
                 <div class="search-box">
                     <input type="text" id="searchInput" placeholder="Filter...">
                     <button id="searchButton">Search</button>
@@ -48,7 +52,7 @@
                                     return;
                                 }
                                 location.reload();
-                            }, 5000);
+                            }, 30000);
                         </script>
                     </div>
                 </div>
@@ -75,7 +79,7 @@
                                     return;
                                 }
                                 location.reload();
-                            }, 5000);
+                            }, 30000);
                         </script>
                     </div>
                 </div>
@@ -167,7 +171,7 @@
                                 return;
                             }
                             location.reload();
-                        }, 5000);
+                        }, 30000);
                     </script>
                 </div>
             </div>

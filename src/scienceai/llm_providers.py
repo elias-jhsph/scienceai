@@ -90,17 +90,17 @@ class LLMConfig:
         """Get default model for the provider.
 
         As of December 2025:
-        - OpenAI: gpt-5.1 (latest flagship model, released Nov 2025)
+        - OpenAI: gpt-5.2 (latest flagship model, released Nov 2025)
         - Anthropic: Claude Sonnet 4.5 (latest recommended model)
         - Google: Gemini 3 Pro (released Nov 18, 2025)
         """
         defaults = {
-            Provider.OPENAI: "gpt-5.1",
+            Provider.OPENAI: "gpt-5.2",
             Provider.ANTHROPIC: "claude-sonnet-4-5",
             Provider.ANTHROPIC_VERTEX: "claude-sonnet-4-5",  # Same Claude models on Vertex
             Provider.GOOGLE: "gemini-3-pro-preview",
         }
-        return defaults.get(self.provider, "gpt-5.1")
+        return defaults.get(self.provider, "gpt-5.2")
 
     def _get_default_reasoning_model(self) -> str:
         """Get default reasoning model for the provider.
@@ -154,12 +154,12 @@ class LLMConfig:
         """Get default context window limit for the provider's default model.
 
         As of December 2025:
-        - OpenAI gpt-5.1: 400,000 tokens
+        - OpenAI gpt-5.2: 400,000 tokens
         - Anthropic Claude Sonnet 4.5: 200,000 tokens (1M with beta header)
         - Google Gemini 3 Pro: 1,000,000 tokens
         """
         defaults = {
-            Provider.OPENAI: 400_000,  # GPT-5.1 context limit
+            Provider.OPENAI: 400_000,  # GPT-5.2 context limit
             Provider.ANTHROPIC: 200_000,  # Claude Sonnet 4.5 default context
             Provider.ANTHROPIC_VERTEX: 200_000,  # Same as direct Anthropic API
             Provider.GOOGLE: 1_000_000,  # Gemini 3 Pro context limit
@@ -494,7 +494,7 @@ class OpenAIProvider(LLMProvider):
             "model": resolved_model,
             "messages": messages,
         }
-
+        extra_body: dict[str, Any] = {}
         if tools:
             request_args["tools"] = tools
         if tool_choice:
@@ -502,11 +502,13 @@ class OpenAIProvider(LLMProvider):
         if temperature is not None:
             request_args["temperature"] = temperature
         if max_tokens is not None:
-            request_args["max_completion_tokens"] = max_tokens
+            extra_body["max_completion_tokens"] = max_tokens
         if reasoning_effort is not None:
-            request_args["reasoning_effort"] = reasoning_effort
+            extra_body["reasoning_effort"] = reasoning_effort
         if tools and not parallel_tool_calls:
             request_args["parallel_tool_calls"] = False
+        if extra_body:
+            request_args["extra_body"] = extra_body
 
         # Add any additional kwargs
         request_args.update(kwargs)
@@ -553,6 +555,7 @@ class OpenAIProvider(LLMProvider):
             "messages": messages,
         }
 
+        extra_body: dict[str, Any] = {}
         if tools:
             request_args["tools"] = tools
         if tool_choice:
@@ -560,11 +563,13 @@ class OpenAIProvider(LLMProvider):
         if temperature is not None:
             request_args["temperature"] = temperature
         if max_tokens is not None:
-            request_args["max_completion_tokens"] = max_tokens
+            extra_body["max_completion_tokens"] = max_tokens
         if reasoning_effort is not None:
-            request_args["reasoning_effort"] = reasoning_effort
+            extra_body["reasoning_effort"] = reasoning_effort
         if tools and not parallel_tool_calls:
             request_args["parallel_tool_calls"] = False
+        if extra_body:
+            request_args["extra_body"] = extra_body
 
         request_args.update(kwargs)
 
@@ -1889,16 +1894,26 @@ def load_config() -> LLMConfig:
         provider = Provider.OPENAI
 
     # Load from config file if exists
-    base_path = os.path.join(os.path.expanduser("~"), "Documents", "ScienceAI")
-    config_path = os.path.join(base_path, "scienceai-config.json")
+    # Priority 1: Current working directory (Local)
+    # Priority 2: ~/Documents/ScienceAI (Global)
+
+    config_paths = [
+        os.path.join(os.getcwd(), "scienceai-config.json"),
+        os.path.join(os.path.expanduser("~"), "Documents", "ScienceAI", "scienceai-config.json"),
+    ]
 
     config_data = {}
-    if os.path.exists(config_path):
-        try:
-            with open(config_path) as f:
-                config_data = json.load(f)
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"Failed to read config file: {e}")
+
+    for config_path in config_paths:
+        if os.path.exists(config_path):
+            try:
+                with open(config_path) as f:
+                    # We only load the first one we find that is valid
+                    config_data = json.load(f)
+                    logger.info(f"Loaded config from: {config_path}")
+                    break
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Failed to read config file at {config_path}: {e}")
 
     # Override provider from config file if present
     if "provider" in config_data:
@@ -2113,7 +2128,7 @@ def get_available_providers() -> dict[str, bool]:
 
 def get_current_provider_name() -> str:
     """Get the name of the currently configured provider."""
-    return get_config().provider.value
+    return load_config().provider.value
 
 
 def switch_provider(provider_name: str) -> bool:

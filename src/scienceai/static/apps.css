@@ -543,8 +543,10 @@ select:focus {
     transform: none;
 }
 
-.fas fa-times {
+/* Close button styling */
+.close-icon {
     margin-left: 5px;
+    font-weight: bold;
 }
 
 /* Chat Interface */
@@ -876,13 +878,23 @@ select:focus {
     height: 100%;
     overflow: hidden;
     font-size: 0.9rem;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.card button,
+.card a.icon-button {
+    word-break: normal;
+    overflow-wrap: normal;
 }
 
 .analysis-widget {
     background: linear-gradient(to bottom, var(--surface), var(--surface-alt));
     border-radius: var(--radius-lg);
     border: 1px solid var(--border);
-    box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    box-shadow: var(--shadow-md),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
     margin-bottom: 1.5rem;
     overflow: hidden;
     transition: box-shadow 0.3s ease;

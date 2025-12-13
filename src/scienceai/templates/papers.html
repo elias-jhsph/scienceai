@@ -17,10 +17,10 @@
             <div class="icon-container-box-image">
                 <div class="icon-container-pdf-image"></div>
                 <div class="button-icon-menu">
-                    <button class="icon-button" onclick="viewPDF('/download/{{ paper.pdf_path|quote_url }}')"><i
-                            class="fa fa-eye"></i></button>
+                    <button class="icon-button"
+                        onclick="viewPDF('/download/{{ paper.pdf_path|quote_url }}')">👁️</button>
                     <a href="{{ url_for('download', filepath=paper.pdf_path|quote_url) }}?attached=T"
-                        class="icon-button"><i class="fas fa-download"></i></a>
+                        class="icon-button">📥</a>
                 </div>
             </div>
             {% endif %}
@@ -29,10 +29,9 @@
                 <div class="icon-container-json-image"></div>
                 <div class="button-icon-menu">
                     <button class="icon-button"
-                        onclick="viewJSON('/download/{{ paper.json_path|quote_url }}', 'json-viewer-{{ loop.index }}')"><i
-                            class="fa fa-eye"></i></button>
+                        onclick="viewJSON('/download/{{ paper.json_path|quote_url }}', 'json-viewer-{{ loop.index }}')">👁️</button>
                     <a href="{{ url_for('download', filepath=paper.json_path|quote_url) }}?attached=T"
-                        class="icon-button"><i class="fas fa-download"></i></a>
+                        class="icon-button">📥</a>
                     <div id="json-viewer-{{ loop.index }}" class="json-viewer" style="display:none;"></div>
                 </div>
             </div>
@@ -245,8 +244,9 @@
                 filterPapers();
             };
 
-            const icon = document.createElement('i');
-            icon.className = 'fas fa-times';
+            const icon = document.createElement('span');
+            icon.textContent = ' ✕';
+            icon.style.fontWeight = 'bold';
             tag.appendChild(icon);
 
             document.getElementById('tagsContainer').appendChild(tag);
@@ -283,7 +283,7 @@
         // update #papers-heading to be Papers with the super script of the reload icon then set a timeout to remove the super script after 1.5 seconds
         document.getElementById('papers-heading').innerHTML = '&#x21bb; Papers &#x21bb;';
         setTimeout(() => {
-            document.getElementById('papers-heading').innerHTML = 'Papers <button id="add-paper-button" class="icon-button" style="font-size: 0.8em;" title="Add Paper"><i class="fas fa-plus-circle"></i></button>';
+            document.getElementById('papers-heading').innerHTML = 'Papers <button id="add-paper-button" class="icon-button" style="font-size: 0.8em;" title="Add Paper">➕</button>';
         }, 500);
     </script>
 </div>

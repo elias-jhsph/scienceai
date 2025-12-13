@@ -465,8 +465,8 @@ def replace_pi_generated_file_links(messages, project_path):
                     f'<span class="pi-file-link">'
                     f'<span class="pi-file-name">{filename}</span>'
                     f'<span class="pi-file-buttons">'
-                    f'<button class="icon-button" onclick="viewCSV(\'download/{full_path}\')"><i class="fa fa-eye"></i></button>'
-                    f'<a href="/download/{full_path}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>'
+                    f'<button class="icon-button" onclick="viewCSV(\'download/{full_path}\')">👁️</button>'
+                    f'<a href="/download/{full_path}?attached=T" class="icon-button">📥</a>'
                     f"</span></span>"
                 )
             elif ext in [".json"]:
@@ -475,8 +475,8 @@ def replace_pi_generated_file_links(messages, project_path):
                     f'<span class="pi-file-link">'
                     f'<span class="pi-file-name">{filename}</span>'
                     f'<span class="pi-file-buttons">'
-                    f'<button class="icon-button" onclick="viewJSON(\'download/{full_path}\')"><i class="fa fa-eye"></i></button>'
-                    f'<a href="/download/{full_path}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>'
+                    f'<button class="icon-button" onclick="viewJSON(\'download/{full_path}\')">👁️</button>'
+                    f'<a href="/download/{full_path}?attached=T" class="icon-button">📥</a>'
                     f"</span></span>"
                 )
             elif ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
@@ -485,8 +485,8 @@ def replace_pi_generated_file_links(messages, project_path):
                     f'<span class="pi-file-link">'
                     f'<span class="pi-file-name">{filename}</span>'
                     f'<span class="pi-file-buttons">'
-                    f'<a href="/download/{full_path}" target="_blank" class="icon-button"><i class="fa fa-eye"></i></a>'
-                    f'<a href="/download/{full_path}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>'
+                    f'<a href="/download/{full_path}" target="_blank" class="icon-button">👁️</a>'
+                    f'<a href="/download/{full_path}?attached=T" class="icon-button">📥</a>'
                     f"</span></span>"
                 )
             else:
@@ -495,7 +495,7 @@ def replace_pi_generated_file_links(messages, project_path):
                     f'<span class="pi-file-link">'
                     f'<span class="pi-file-name">{filename}</span>'
                     f'<span class="pi-file-buttons">'
-                    f'<a href="/download/{full_path}?attached=T" class="icon-button"><i class="fas fa-download"></i></a>'
+                    f'<a href="/download/{full_path}?attached=T" class="icon-button">📥</a>'
                     f"</span></span>"
                 )
 
@@ -774,19 +774,35 @@ def discussion(ws):
 
     if len(messages) == 0:
         current = str(uuid.uuid4())
+        # Always send initial content even if empty to prevent 5-second refresh fallback
+        try:
+            ws.send(
+                render_template(
+                    "chat.html",
+                    messages=[],
+                    context_percentage=context_percentage,
+                    can_compress=can_compress,
+                    undo_blocked=undo_blocked,
+                )
+            )
+        except (BrokenPipeError, OSError):
+            return  # Client disconnected, exit gracefully
     else:
         current = str(hash(str(messages)))
         filtered_messages = filter_intermediate_messages(messages.copy())
         processed_messages = convert_markdown(replace_pi_generated_file_links(filtered_messages, database.project_path))
-        ws.send(
-            render_template(
-                "chat.html",
-                messages=processed_messages,
-                context_percentage=context_percentage,
-                can_compress=can_compress,
-                undo_blocked=undo_blocked,
+        try:
+            ws.send(
+                render_template(
+                    "chat.html",
+                    messages=processed_messages,
+                    context_percentage=context_percentage,
+                    can_compress=can_compress,
+                    undo_blocked=undo_blocked,
+                )
             )
-        )
+        except (BrokenPipeError, OSError):
+            return  # Client disconnected, exit gracefully
     while True:
         asyncio.run(database.await_update(timeout=20))
         if not database:
@@ -807,15 +823,18 @@ def discussion(ws):
             processed_messages = convert_markdown(
                 replace_pi_generated_file_links(filtered_messages, database.project_path)
             )
-            ws.send(
-                render_template(
-                    "chat.html",
-                    messages=processed_messages,
-                    context_percentage=context_percentage,
-                    can_compress=can_compress,
-                    undo_blocked=undo_blocked,
+            try:
+                ws.send(
+                    render_template(
+                        "chat.html",
+                        messages=processed_messages,
+                        context_percentage=context_percentage,
+                        can_compress=can_compress,
+                        undo_blocked=undo_blocked,
+                    )
                 )
-            )
+            except (BrokenPipeError, OSError):
+                break  # Client disconnected, exit loop gracefully
 
 
 @app.route("/send_message", methods=["POST"])
@@ -839,8 +858,14 @@ def send_message():
 def compress_context():
     from flask import jsonify
 
+    from .backend import _compression_running
+
     if not database or not message_queue:
         return jsonify({"success": False, "error": "No project loaded"}), 400
+
+    # Check if compression is already running - reject immediately, don't queue
+    if _compression_running:
+        return jsonify({"success": False, "error": "Compression already in progress", "already_running": True}), 409
 
     # Send compress command to the backend thread
     message_queue.put({"COMPRESS_CONTEXT": True})
@@ -894,6 +919,9 @@ def undo_last_request():
                     analyst_name = args.get("name")
                     if analyst_name:
                         analysts_to_delete.append(analyst_name)
+                        # Also attempt to delete potential parallel replicates (up to 5 to be safe)
+                        for i in range(1, 6):
+                            analysts_to_delete.append(f"{analyst_name} copy {i}")
                 except (json.JSONDecodeError, TypeError):
                     pass
 
@@ -959,6 +987,20 @@ def switch_provider_endpoint():
         return jsonify({"success": False, "error": "Failed to switch provider"}), 500
 
 
+@app.route("/set_parallel_calls", methods=["POST"])
+def set_parallel_calls():
+    from flask import jsonify, request
+
+    if not database or not message_queue:
+        return jsonify({"success": False, "error": "No project loaded"}), 400
+
+    data = request.get_json() or {}
+    count = data.get("count", 1)
+
+    message_queue.put({"SET_PARALLEL_CALLS": True, "count": count})
+    return jsonify({"success": True, "message": f"Parallel calls set to {count}"})
+
+
 @app.route("/get_provider_status", methods=["GET"])
 def get_provider_status():
     from flask import jsonify
@@ -982,9 +1024,17 @@ def papers(ws):
         papers_dict = []  # Fallback to empty if read failed
     if len(papers_dict) == 0:
         current = str(uuid.uuid4())
+        # Always send initial content even if empty to prevent 5-second refresh fallback
+        try:
+            ws.send(render_template("papers.html", papers=[]))
+        except BrokenPipeError:
+            return  # Client disconnected, exit gracefully
     else:
         current = str(hash(str(papers_dict)))
-        ws.send(render_template("papers.html", papers=papers_dict))
+        try:
+            ws.send(render_template("papers.html", papers=papers_dict))
+        except (BrokenPipeError, OSError):
+            return  # Client disconnected, exit gracefully
     while True:
         asyncio.run(database.await_update(timeout=20))
         if not database:
@@ -997,7 +1047,10 @@ def papers(ws):
         new = str(hash(str(papers_dict)))
         if new != current:
             current = new
-            ws.send(render_template("papers.html", papers=papers_dict))
+            try:
+                ws.send(render_template("papers.html", papers=papers_dict))
+            except (BrokenPipeError, OSError):
+                break  # Client disconnected, exit gracefully
 
 
 @sock.route("/progress")

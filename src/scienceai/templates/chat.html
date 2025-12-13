@@ -29,7 +29,7 @@
                 {% if loop.index0 == first_user_idx.value and message.status == 'Processed' %}
                 <button class="undo-request-btn reset-btn" onclick="showResetConfirmModal()"
                     title="Reset conversation (remove all analysts and generated files)">
-                    <i class="fas fa-trash-restore"></i> Reset All
+                    🗑️ Reset All
                 </button>
                 {% endif %}
                 {% if loop.index0 == last_user_idx.value and loop.index0 != first_user_idx.value and message.status ==
@@ -37,7 +37,7 @@
                 <button class="undo-request-btn {% if undo_blocked %}disabled{% endif %}"
                     onclick="{% if undo_blocked %}showUndoBlockedModal(){% else %}showUndoConfirmModal(){% endif %}"
                     title="{% if undo_blocked %}Cannot undo (code was executed){% else %}Undo this request{% endif %}">
-                    <i class="fas fa-undo"></i> Undo
+                    ↩️ Undo
                 </button>
                 {% endif %}
             </div>

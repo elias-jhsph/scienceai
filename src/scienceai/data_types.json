@@ -1069,6 +1069,93 @@
       }
     }
   },
+  "text_block_list": {
+    "spec_description": "A list of text blocks, used to extract multiple narrative sections or related text segments.",
+    "spec": {
+      "name": {
+        "type": "string",
+        "description": "The name of this field."
+      },
+      "description": {
+        "type": "string",
+        "description": "A description of the content to be extracted."
+      },
+      "required": {
+        "type": "boolean",
+        "description": "Is this field required?"
+      }
+    },
+    "tool": {
+      "mode": "array",
+      "description": "A list of text blocks.",
+      "keys": {
+        "source_quote": {
+          "type": "string",
+          "description": "The exact quotation if NAME_value directly stated. Use this OR derivation (not both)."
+        },
+        "derivation": {
+          "type": "object",
+          "description": "Use when text block requires assembly from multiple sources.",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "subtraction",
+                "division",
+                "multiplication",
+                "lookup",
+                "average",
+                "custom"
+              ]
+            },
+            "operation_description": {
+              "type": "string"
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "quote": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "extracted_value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "quote",
+                  "location",
+                  "extracted_value"
+                ]
+              }
+            },
+            "computation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "operation_description",
+            "sources",
+            "computation"
+          ]
+        },
+        "source_location": {
+          "type": "string",
+          "description": "The location in the paper of the NAME_source_quote"
+        },
+        "value": {
+          "type": "string",
+          "description": "The extracted block of text with description: DESCRIPTION."
+        }
+      }
+    }
+  },
   "boolean_value": {
     "spec_description": "A true or false value often used to answer yes/no questions or confirm the presence or absence of a feature.",
     "spec": {
@@ -1276,24 +1363,51 @@
         "properties": {
           "operation": {
             "type": "string",
-            "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
           },
-          "operation_description": {"type": "string"},
+          "operation_description": {
+            "type": "string"
+          },
           "sources": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "quote": {"type": "string"},
-                "location": {"type": "string"},
-                "extracted_value": {"type": "number"}
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "number"
+                }
               },
-              "required": ["quote", "location", "extracted_value"]
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
             }
           },
-          "computation": {"type": "string"}
+          "computation": {
+            "type": "string"
+          }
         },
-        "required": ["operation", "operation_description", "sources", "computation"]
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
       },
       "source_location": {
         "type": "string",
@@ -1358,23 +1472,53 @@
           "type": "object",
           "description": "Use when value requires calculation.",
           "properties": {
-            "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
-            "operation_description": {"type": "string"},
+            "operation": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "subtraction",
+                "division",
+                "multiplication",
+                "lookup",
+                "average",
+                "custom"
+              ]
+            },
+            "operation_description": {
+              "type": "string"
+            },
             "sources": {
               "type": "array",
               "items": {
                 "type": "object",
                 "properties": {
-                  "quote": {"type": "string"},
-                  "location": {"type": "string"},
-                  "extracted_value": {"type": "number"}
+                  "quote": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "extracted_value": {
+                    "type": "number"
+                  }
                 },
-                "required": ["quote", "location", "extracted_value"]
+                "required": [
+                  "quote",
+                  "location",
+                  "extracted_value"
+                ]
               }
             },
-            "computation": {"type": "string"}
+            "computation": {
+              "type": "string"
+            }
           },
-          "required": ["operation", "operation_description", "sources", "computation"]
+          "required": [
+            "operation",
+            "operation_description",
+            "sources",
+            "computation"
+          ]
         },
         "source_location": {
           "type": "string",
@@ -1444,23 +1588,53 @@
         "type": "object",
         "description": "Use when measurement requires assembly from multiple sources.",
         "properties": {
-          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
-          "operation_description": {"type": "string"},
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
           "sources": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "quote": {"type": "string"},
-                "location": {"type": "string"},
-                "extracted_value": {"type": "number"}
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "number"
+                }
               },
-              "required": ["quote", "location", "extracted_value"]
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
             }
           },
-          "computation": {"type": "string"}
+          "computation": {
+            "type": "string"
+          }
         },
-        "required": ["operation", "operation_description", "sources", "computation"]
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
       },
       "source_location": {
         "type": "string",
@@ -1521,23 +1695,53 @@
           "type": "object",
           "description": "Use when value requires calculation.",
           "properties": {
-            "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
-            "operation_description": {"type": "string"},
+            "operation": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "subtraction",
+                "division",
+                "multiplication",
+                "lookup",
+                "average",
+                "custom"
+              ]
+            },
+            "operation_description": {
+              "type": "string"
+            },
             "sources": {
               "type": "array",
               "items": {
                 "type": "object",
                 "properties": {
-                  "quote": {"type": "string"},
-                  "location": {"type": "string"},
-                  "extracted_value": {"type": "number"}
+                  "quote": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "extracted_value": {
+                    "type": "number"
+                  }
                 },
-                "required": ["quote", "location", "extracted_value"]
+                "required": [
+                  "quote",
+                  "location",
+                  "extracted_value"
+                ]
               }
             },
-            "computation": {"type": "string"}
+            "computation": {
+              "type": "string"
+            }
           },
-          "required": ["operation", "operation_description", "sources", "computation"]
+          "required": [
+            "operation",
+            "operation_description",
+            "sources",
+            "computation"
+          ]
         },
         "source_location": {
           "type": "string",
@@ -1595,23 +1799,53 @@
         "type": "object",
         "description": "Use when statistics require assembly from multiple sources.",
         "properties": {
-          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
-          "operation_description": {"type": "string"},
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
           "sources": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "quote": {"type": "string"},
-                "location": {"type": "string"},
-                "extracted_value": {"type": "number"}
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "number"
+                }
               },
-              "required": ["quote", "location", "extracted_value"]
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
             }
           },
-          "computation": {"type": "string"}
+          "computation": {
+            "type": "string"
+          }
         },
-        "required": ["operation", "operation_description", "sources", "computation"]
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
       },
       "source_location": {
         "type": "string",
@@ -1688,23 +1922,53 @@
           "type": "object",
           "description": "Use when values require calculation.",
           "properties": {
-            "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
-            "operation_description": {"type": "string"},
+            "operation": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "subtraction",
+                "division",
+                "multiplication",
+                "lookup",
+                "average",
+                "custom"
+              ]
+            },
+            "operation_description": {
+              "type": "string"
+            },
             "sources": {
               "type": "array",
               "items": {
                 "type": "object",
                 "properties": {
-                  "quote": {"type": "string"},
-                  "location": {"type": "string"},
-                  "extracted_value": {"type": "number"}
+                  "quote": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "extracted_value": {
+                    "type": "number"
+                  }
                 },
-                "required": ["quote", "location", "extracted_value"]
+                "required": [
+                  "quote",
+                  "location",
+                  "extracted_value"
+                ]
               }
             },
-            "computation": {"type": "string"}
+            "computation": {
+              "type": "string"
+            }
           },
-          "required": ["operation", "operation_description", "sources", "computation"]
+          "required": [
+            "operation",
+            "operation_description",
+            "sources",
+            "computation"
+          ]
         },
         "source_location": {
           "type": "string",
@@ -1782,23 +2046,53 @@
         "type": "object",
         "description": "Use when coefficient requires assembly from multiple sources.",
         "properties": {
-          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
-          "operation_description": {"type": "string"},
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
           "sources": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "quote": {"type": "string"},
-                "location": {"type": "string"},
-                "extracted_value": {"type": "number"}
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "number"
+                }
               },
-              "required": ["quote", "location", "extracted_value"]
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
             }
           },
-          "computation": {"type": "string"}
+          "computation": {
+            "type": "string"
+          }
         },
-        "required": ["operation", "operation_description", "sources", "computation"]
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
       },
       "source_location": {
         "type": "string",
@@ -1863,23 +2157,53 @@
           "type": "object",
           "description": "Use when value requires calculation.",
           "properties": {
-            "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
-            "operation_description": {"type": "string"},
+            "operation": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "subtraction",
+                "division",
+                "multiplication",
+                "lookup",
+                "average",
+                "custom"
+              ]
+            },
+            "operation_description": {
+              "type": "string"
+            },
             "sources": {
               "type": "array",
               "items": {
                 "type": "object",
                 "properties": {
-                  "quote": {"type": "string"},
-                  "location": {"type": "string"},
-                  "extracted_value": {"type": "number"}
+                  "quote": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "extracted_value": {
+                    "type": "number"
+                  }
                 },
-                "required": ["quote", "location", "extracted_value"]
+                "required": [
+                  "quote",
+                  "location",
+                  "extracted_value"
+                ]
               }
             },
-            "computation": {"type": "string"}
+            "computation": {
+              "type": "string"
+            }
           },
-          "required": ["operation", "operation_description", "sources", "computation"]
+          "required": [
+            "operation",
+            "operation_description",
+            "sources",
+            "computation"
+          ]
         },
         "source_location": {
           "type": "string",
@@ -1945,23 +2269,53 @@
         "type": "object",
         "description": "Use when test result requires assembly from multiple sources.",
         "properties": {
-          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
-          "operation_description": {"type": "string"},
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
           "sources": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "quote": {"type": "string"},
-                "location": {"type": "string"},
-                "extracted_value": {"type": "number"}
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "number"
+                }
               },
-              "required": ["quote", "location", "extracted_value"]
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
             }
           },
-          "computation": {"type": "string"}
+          "computation": {
+            "type": "string"
+          }
         },
-        "required": ["operation", "operation_description", "sources", "computation"]
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
       },
       "source_location": {
         "type": "string",
@@ -2023,23 +2377,53 @@
         "type": "object",
         "description": "Use when cell counts require assembly from multiple sources.",
         "properties": {
-          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
-          "operation_description": {"type": "string"},
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
           "sources": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "quote": {"type": "string"},
-                "location": {"type": "string"},
-                "extracted_value": {"type": "number"}
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "number"
+                }
               },
-              "required": ["quote", "location", "extracted_value"]
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
             }
           },
-          "computation": {"type": "string"}
+          "computation": {
+            "type": "string"
+          }
         },
-        "required": ["operation", "operation_description", "sources", "computation"]
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
       },
       "source_location": {
         "type": "string",
@@ -2117,23 +2501,53 @@
         "type": "object",
         "description": "Use when values require assembly from multiple sources.",
         "properties": {
-          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
-          "operation_description": {"type": "string"},
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
           "sources": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "quote": {"type": "string"},
-                "location": {"type": "string"},
-                "extracted_value": {"type": "number"}
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "number"
+                }
               },
-              "required": ["quote", "location", "extracted_value"]
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
             }
           },
-          "computation": {"type": "string"}
+          "computation": {
+            "type": "string"
+          }
         },
-        "required": ["operation", "operation_description", "sources", "computation"]
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
       },
       "source_location": {
         "type": "string",
@@ -2171,23 +2585,53 @@
         "type": "object",
         "description": "Use when proportion requires calculation from sources.",
         "properties": {
-          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
-          "operation_description": {"type": "string"},
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
           "sources": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "quote": {"type": "string"},
-                "location": {"type": "string"},
-                "extracted_value": {"type": "number"}
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "number"
+                }
               },
-              "required": ["quote", "location", "extracted_value"]
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
             }
           },
-          "computation": {"type": "string"}
+          "computation": {
+            "type": "string"
+          }
         },
-        "required": ["operation", "operation_description", "sources", "computation"]
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
       },
       "source_location": {
         "type": "string",
@@ -2253,23 +2697,53 @@
         "type": "object",
         "description": "Use when survival data requires assembly from multiple sources.",
         "properties": {
-          "operation": {"type": "string", "enum": ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"]},
-          "operation_description": {"type": "string"},
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "subtraction",
+              "division",
+              "multiplication",
+              "lookup",
+              "average",
+              "custom"
+            ]
+          },
+          "operation_description": {
+            "type": "string"
+          },
           "sources": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "quote": {"type": "string"},
-                "location": {"type": "string"},
-                "extracted_value": {"type": "number"}
+                "quote": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "extracted_value": {
+                  "type": "number"
+                }
               },
-              "required": ["quote", "location", "extracted_value"]
+              "required": [
+                "quote",
+                "location",
+                "extracted_value"
+              ]
             }
           },
-          "computation": {"type": "string"}
+          "computation": {
+            "type": "string"
+          }
         },
-        "required": ["operation", "operation_description", "sources", "computation"]
+        "required": [
+          "operation",
+          "operation_description",
+          "sources",
+          "computation"
+        ]
       },
       "source_location": {
         "type": "string",

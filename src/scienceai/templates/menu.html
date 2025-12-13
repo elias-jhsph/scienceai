@@ -5,7 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" type="text/css" href="/static/apps.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <title>ScienceAI</title>
 </head>
@@ -24,7 +23,7 @@
         <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
             <!-- Open Project Card -->
             <div class="card open-project-menu" style="margin: 0; max-width: none;">
-                <h2><i class="fas fa-folder-open"></i> Open Project</h2>
+                <h2>📂 Open Project</h2>
                 <form action="/menu" method="post">
                     <label for="project" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Project
                         Name</label>
@@ -46,7 +45,7 @@
 
             <!-- Load Checkpoint Card -->
             <div class="card open-project-menu" style="margin: 0; max-width: none;">
-                <h2><i class="fas fa-save"></i> Load Checkpoint</h2>
+                <h2>💾 Load Checkpoint</h2>
                 <form action="/load_checkpoint" method="post" enctype="multipart/form-data">
                     <div style="margin-bottom: 1rem;">
                         <label for="load-project"
@@ -76,7 +75,7 @@
 
             <!-- Delete Project Card -->
             <div class="card open-project-menu" style="margin: 0; max-width: none;">
-                <h2><i class="fas fa-trash-alt"></i> Delete Project</h2>
+                <h2>🗑️ Delete Project</h2>
                 <form action="/delete_project" method="post"
                     onsubmit="return confirm('Are you sure you want to delete this project? This cannot be undone.');">
                     <label for="delete-project" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Project
@@ -91,7 +90,7 @@
 
             <!-- LLM Provider Card -->
             <div class="card open-project-menu" style="margin: 0; max-width: none;">
-                <h2><i class="fas fa-robot"></i> LLM Provider</h2>
+                <h2>🤖 LLM Provider</h2>
                 <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem;">
                     Select your AI model provider. Only providers with configured API keys are available.
                 </p>
@@ -104,7 +103,7 @@
                                 %}checked{% endif %} {% if not available_providers.openai %}disabled{% endif %}
                                 onchange="switchProvider('openai')">
                             <span class="provider-label">
-                                <i class="fas fa-brain"></i>
+                                <span style="font-size: 1.5rem;">🧠</span>
                                 <span>OpenAI</span>
                                 {% if not available_providers.openai %}
                                 <span class="no-key">(No API Key)</span>
@@ -119,7 +118,7 @@
                                 %}checked{% endif %} {% if not available_providers.anthropic %}disabled{% endif %}
                                 onchange="switchProvider('anthropic')">
                             <span class="provider-label">
-                                <i class="fas fa-feather"></i>
+                                <span style="font-size: 1.5rem;">🪶</span>
                                 <span>Claude</span>
                                 {% if not available_providers.anthropic %}
                                 <span class="no-key">(No API Key)</span>
@@ -134,7 +133,7 @@
                                 %}checked{% endif %} {% if not available_providers.google %}disabled{% endif %}
                                 onchange="switchProvider('google')">
                             <span class="provider-label">
-                                <i class="fas fa-gem"></i>
+                                <span style="font-size: 1.5rem;">💎</span>
                                 <span>Gemini</span>
                                 {% if not available_providers.google %}
                                 <span class="no-key">(No API Key)</span>
@@ -150,7 +149,7 @@
             <!-- Shutdown Card -->
             <div class="card open-project-menu"
                 style="margin: 0; max-width: none; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
-                <h2><i class="fas fa-power-off"></i> System</h2>
+                <h2>🔌 System</h2>
                 <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Shut down the ScienceAI server.</p>
                 <form action="/shutdown" method="post">
                     <button type="submit" class="secondary"

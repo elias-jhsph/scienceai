@@ -13,7 +13,7 @@
     "_example_openai_config": {
         "_description": "OpenAI models as of December 2025",
         "provider": "openai",
-        "default_model": "gpt-5.1",
+        "default_model": "gpt-5.2",
         "default_reasoning_model": "o4-mini",
         "default_vision_model": "gpt-4o",
         "default_fast_model": "gpt-5-mini"

@@ -1,11 +1,18 @@
 import os
 import traceback
 
+# Module-level flag to prevent double-starting compression
+_compression_running = False
 
-async def compress_conversation_context(dm):
+
+async def compress_conversation_context(dm, skip_user_message=False):
     """
     Compress the conversation by summarizing the first 50% of tool calls and tool responses.
     Each tool message is summarized into a few sentences and replaced with an assistant message.
+
+    Args:
+        dm: DatabaseManager instance
+        skip_user_message: If True, don't add the user request message (used when resuming interrupted compression)
     """
     from datetime import datetime
 
@@ -14,37 +21,73 @@ async def compress_conversation_context(dm):
     from .llm import client, get_config
 
     # Add user request message as pending (marked internal so PI won't include in context)
-    user_request_msg = {
-        "content": "🗜️ Please compress the conversation to free up context space.",
-        "role": "user",
-        "status": "Pending",
-        "time": datetime.now().strftime("%B %d, %Y %I:%M:%S %p %Z"),
-        "internal": True,  # Flag to exclude from PI context
-    }
-    dm.add_chat(user_request_msg)
+    if not skip_user_message:
+        user_request_msg = {
+            "content": "🗜️ Please compress the conversation to free up context space.",
+            "role": "user",
+            "status": "Pending",
+            "time": datetime.now().strftime("%B %d, %Y %I:%M:%S %p %Z"),
+            "internal": True,  # Flag to exclude from PI context
+        }
+        dm.add_chat(user_request_msg)
 
     messages = dm.get_database_chat()
 
-    # Find all tool-related messages that haven't been compressed yet
-    tool_indices = []
-    for i, msg in enumerate(messages):
+    # Find tool call groups (assistant with tool_calls + their corresponding tool responses)
+    # We must compress these together to avoid orphaned tool calls
+    tool_groups = []  # List of lists: each inner list is [assistant_idx, tool_idx1, tool_idx2, ...]
+    i = 0
+    while i < len(messages):
+        msg = messages[i]
         # Skip already compressed messages
         if msg.get("compressed"):
+            i += 1
             continue
-        if msg.get("role") == "tool" or msg.get("tool_calls"):
-            tool_indices.append(i)
 
-    if len(tool_indices) == 0:
-        print("No tool messages to compress")
+        # Look for assistant messages with tool_calls
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            group = [i]
+            tool_call_ids = {tc["id"] for tc in msg["tool_calls"]}
+
+            # Find all corresponding tool responses that follow
+            j = i + 1
+            while j < len(messages):
+                next_msg = messages[j]
+                if next_msg.get("role") == "tool":
+                    tool_call_id = next_msg.get("tool_call_id")
+                    if tool_call_id in tool_call_ids:
+                        group.append(j)
+                        tool_call_ids.discard(tool_call_id)
+                    j += 1
+                else:
+                    break
+
+            # Only add complete groups (all tool responses found)
+            if len(tool_call_ids) == 0 and not msg.get("compressed"):
+                tool_groups.append(group)
+            i = j if j > i + 1 else i + 1
+        elif msg.get("role") == "tool" and not msg.get("compressed"):
+            # Standalone tool message (orphan) - compress individually
+            tool_groups.append([i])
+            i += 1
+        else:
+            i += 1
+
+    if len(tool_groups) == 0:
+        print("No tool message groups to compress")
         return
 
-    # Get the first 50% of tool messages to compress (round up so odd numbers eventually reach 0)
+    # Get the first 50% of groups to compress (round up so odd numbers eventually reach 0)
     import math
 
-    compress_count = math.ceil(len(tool_indices) / 2)
+    compress_count = math.ceil(len(tool_groups) / 2)
 
-    indices_to_compress = tool_indices[:compress_count]
-    print(f"Compressing {len(indices_to_compress)} tool messages out of {len(tool_indices)} total")
+    groups_to_compress = tool_groups[:compress_count]
+    # Flatten to get all indices
+    indices_to_compress = [idx for group in groups_to_compress for idx in group]
+    print(
+        f"Compressing {len(groups_to_compress)} tool groups ({len(indices_to_compress)} messages) out of {len(tool_groups)} groups total"
+    )
 
     # Process each message to compress
     for idx in sorted(indices_to_compress, reverse=True):  # Process in reverse to maintain indices
@@ -56,7 +99,7 @@ async def compress_conversation_context(dm):
         if len(original_content) < 100:
             continue
 
-        # Summarize with gpt-4.1-mini
+        # Summarize with LLM
         try:
             summary_prompt = [
                 {
@@ -72,16 +115,121 @@ async def compress_conversation_context(dm):
             ]
 
             response = client.chat.completions.create(
-                model=get_config().default_fast_model, messages=summary_prompt, max_tokens=1000
+                model=get_config().default_fast_model, messages=summary_prompt, max_tokens=2000
             )
 
             summary = response.choices[0].message.content
 
+            # Validate summary is not empty
+            if not summary or len(summary.strip()) < 10:
+                print(
+                    f"Warning: Summary generation returned empty/short result for index {idx}, keeping truncated original"
+                )
+                # Keep a truncated version of the original instead of losing all info
+                summary = f"[Summary failed - Original content preview]: {original_content[:2000]}..."
+            else:
+                print(f"Summary generated for index {idx}: {summary[:200]}...")
+
+            # Extract metadata using regex - differentiate between delegate_research and run_python_code
+            import re
+
+            metadata_parts = []
+
+            # Check if this is a delegate_research call (has "Response from X:" pattern)
+            is_delegate_research = bool(re.search(r"Response from [^:]+:", original_content))
+
+            # For python code detection, we need to check:
+            # 1. The content itself (for tool responses)
+            # 2. The preceding assistant message's tool_calls arguments (for run_python_code)
+
+            # Build a combined text to search - include tool_call arguments if present
+            searchable_content = original_content
+
+            # If this is a tool response, look at the preceding assistant message for the code
+            if original_role == "tool":
+                # Find the tool_call_id
+                tool_call_id = msg.get("tool_call_id", "")
+                # Look backwards for the assistant message that called this tool
+                for prev_idx in range(idx - 1, -1, -1):
+                    prev_msg = messages[prev_idx]
+                    if prev_msg.get("role") == "assistant" and prev_msg.get("tool_calls"):
+                        for tc in prev_msg["tool_calls"]:
+                            if tc.get("id") == tool_call_id:
+                                # Found it - check if it's run_python_code
+                                func_name = tc.get("function", {}).get("name", "")
+                                if func_name == "run_python_code":
+                                    # Add the code arguments to searchable content
+                                    args_str = tc.get("function", {}).get("arguments", "")
+                                    searchable_content += "\n" + args_str
+                                break
+                        break
+
+            # Also check if the message itself has tool_calls (for assistant messages)
+            if msg.get("tool_calls"):
+                for tc in msg["tool_calls"]:
+                    func_name = tc.get("function", {}).get("name", "")
+                    if func_name == "run_python_code":
+                        args_str = tc.get("function", {}).get("arguments", "")
+                        searchable_content += "\n" + args_str
+
+            # Check if this is a run_python_code call (has load_analyst_data pattern)
+            is_python_call = bool(re.search(r"load_analyst_data\s*\(", searchable_content))
+
+            if is_delegate_research:
+                # For delegate_research: Extract analyst names from "Response from X Analyst:" patterns
+                analyst_matches = re.findall(r"Response from ([^:]+):", original_content)
+                analyst_names = list(set(analyst_matches))  # Remove duplicates
+
+                # Extract collection names from CSV file paths like viewCSV('download/.../Name_dates.csv')
+                # Remove the timestamp portion (_YYYY-MM-DD_HH_MM_SS.csv)
+                csv_matches = re.findall(r"viewCSV\(['\"]download/[^'\"]*?/([^/'\"]+)\.csv['\"]", original_content)
+                collection_names = []
+                for csv_name in csv_matches:
+                    # Remove timestamp suffix like _2025-12-12_14_21_26
+                    clean_name = re.sub(r"_\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2}$", "", csv_name)
+                    if clean_name not in collection_names:
+                        collection_names.append(clean_name)
+
+                if analyst_names:
+                    metadata_parts.append(f"**Analyst(s):** {', '.join(analyst_names)}")
+                if collection_names:
+                    metadata_parts.append(f"**Data Collection(s):** {', '.join(collection_names)}")
+
+            elif is_python_call:
+                # For run_python_code: Extract from load_analyst_data('Analyst Name', 'Collection Name')
+                load_matches = re.findall(
+                    r"load_analyst_data\s*\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\)", searchable_content
+                )
+                if load_matches:
+                    analysts_from_python = list({m[0] for m in load_matches})
+                    collections_from_python = list({m[1] for m in load_matches})
+
+                    if analysts_from_python:
+                        metadata_parts.append(f"**Used Python to access data from:** {', '.join(analysts_from_python)}")
+                    if collections_from_python:
+                        metadata_parts.append(f"**Data Collection(s) accessed:** {', '.join(collections_from_python)}")
+
+                # Extract file names from quoted strings ending in common extensions
+                # Use non-capturing group (?:...) so findall returns strings, not tuples
+                file_extensions = r"\.(?:csv|png|jpg|jpeg|gif|json|html|pdf|txt|xlsx|zip)"
+                # Match both single and double quoted strings ending in file extensions
+                file_matches = re.findall(
+                    r"['\"]([^'\"]*" + file_extensions + r")['\"]", searchable_content, re.IGNORECASE
+                )
+                if file_matches:
+                    # Get just the base names
+                    import os as os_module
+
+                    file_names = list({os_module.path.basename(f) for f in file_matches})
+                    if file_names:
+                        metadata_parts.append(f"**Files Referenced:** {', '.join(file_names)}")
+
+            metadata_section = "\n".join(metadata_parts) if metadata_parts else ""
+
             # Create replacement message
             compressed_content = (
                 f"[📦 Compressed Tool Output]\n\n"
-                f"{summary}\n\n"
-                f"---\n"
+                f"{summary}\n\n" + (f"{metadata_section}\n\n" if metadata_section else "") + f"---\n"
                 f"*This message was automatically summarized to free up context space. "
                 f"Original content was {len(original_content)} characters.*"
             )
@@ -104,6 +252,50 @@ async def compress_conversation_context(dm):
 
     # Remove the CONTEXTLIMITREACHED message if present
     messages = [m for m in messages if "CONTEXTLIMITREACHED" not in m.get("content", "")]
+
+    # Heal orphaned tool calls - remove assistant messages with tool_calls that don't have matching responses
+    def heal_orphaned_tool_calls(msgs):
+        """Remove assistant messages with tool_calls that are missing their tool responses."""
+        healed = []
+        skip_indices = set()
+
+        for i, msg in enumerate(msgs):
+            if i in skip_indices:
+                continue
+
+            # If it's an assistant message with tool_calls
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                tool_calls = msg["tool_calls"]
+                required_ids = {tc["id"] for tc in tool_calls}
+                found_ids = set()
+
+                # Look ahead for corresponding tool results
+                j = i + 1
+                tool_result_indices = []
+                while j < len(msgs):
+                    next_msg = msgs[j]
+                    if next_msg.get("role") == "tool":
+                        tool_call_id = next_msg.get("tool_call_id")
+                        if tool_call_id in required_ids:
+                            found_ids.add(tool_call_id)
+                            tool_result_indices.append(j)
+                        j += 1
+                    else:
+                        break
+
+                # If we're missing any tool responses, skip this message and its partial results
+                if not required_ids.issubset(found_ids):
+                    print(f"Healing: Removing orphaned tool call at index {i} (missing {required_ids - found_ids})")
+                    skip_indices.add(i)
+                    for idx in tool_result_indices:
+                        skip_indices.add(idx)
+                    continue
+
+            healed.append(msg)
+
+        return healed
+
+    messages = heal_orphaned_tool_calls(messages)
 
     # Mark user's compression request as processed and add assistant response
     # Find the user request message and mark it processed
@@ -196,6 +388,18 @@ def run_backend(folder, project_path, storage_path, message_queue, stop_event, i
                     dm.add_chat(completion_msg)
                     dm.update_last_chat("Processed")
                     print("Interrupted upload recovery complete.")
+
+            # Check for interrupted compression - look for pending compression request
+            messages = dm.get_database_chat()
+            for msg in messages:
+                if (
+                    msg.get("content") == "🗜️ Please compress the conversation to free up context space."
+                    and msg.get("status") == "Pending"
+                ):
+                    print("Detected interrupted compression. Resuming...")
+                    await compress_conversation_context(dm, skip_user_message=True)
+                    print("Interrupted compression recovery complete.")
+                    break
 
             pi = PrincipalInvestigator(dm)
             await pi.initialize(ingest=ingest)
@@ -307,9 +511,17 @@ def run_backend(folder, project_path, storage_path, message_queue, stop_event, i
                         print("Add papers complete.")
                         continue
                     elif message.get("COMPRESS_CONTEXT"):
-                        print("Compressing conversation context...")
-                        await compress_conversation_context(dm)
-                        print("Context compression complete.")
+                        global _compression_running
+                        if _compression_running:
+                            print("Compression already in progress, skipping...")
+                            continue
+                        _compression_running = True
+                        try:
+                            print("Compressing conversation context...")
+                            await compress_conversation_context(dm)
+                            print("Context compression complete.")
+                        finally:
+                            _compression_running = False
                         continue
                     elif message.get("UNDO_LAST_REQUEST"):
                         print("Undoing last request...")
@@ -363,6 +575,20 @@ def run_backend(folder, project_path, storage_path, message_queue, stop_event, i
                         dm.revert_chat_from_index(2)
 
                         print("Reset complete.")
+                        continue
+                    elif message.get("SET_PARALLEL_CALLS"):
+                        updates = message.get("count", 1)
+                        try:
+                            count = int(updates)
+                            # Enforce bounds
+                            if count < 1:
+                                count = 1
+                            if count > 3:
+                                count = 3
+                            pi.n_parallel_calls = count
+                            print(f"Updated parallel calls to {count}")
+                        except ValueError:
+                            print(f"Invalid parallel calls count: {updates}")
                         continue
                     elif stop_event.is_set():
                         print("Stop event set. Terminating backend")

@@ -694,7 +694,7 @@ Why this matters: Images are visual artifacts that require visual inspection. Me
     -   `pi-generated-content` - Wrap your content
     -   `pi-image-container` - Container for images
     -   `pi-image-caption` - Image captions
-    -   `pi-download-link` - Download links with icons (e.g., `<i class="fas fa-download"></i>`)
+    -   `pi-download-link` - Download links with icons (e.g., `📥`)
 -   Example:
     ```html
     <div class="pi-generated-content">
@@ -703,7 +703,7 @@ Why this matters: Images are visual artifacts that require visual inspection. Me
             <img src="/download/path/to/image.png" alt="Description">
             <div class="pi-image-caption">Figure 1: Sample size distribution</div>
         </div>
-        <a href="/download/path/to/data.csv" class="pi-download-link"><i class="fas fa-download"></i> Download Data</a>
+        <a href="/download/path/to/data.csv" class="pi-download-link">📥 Download Data</a>
     </div>
     ```
 

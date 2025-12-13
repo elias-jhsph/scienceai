@@ -1199,6 +1199,12 @@ IMPORTANT INSTRUCTIONS FOR DATA EXTRACTION:
      "computation": "The actual formula, e.g., '13 + 10 = 23'"
    }
 
+   IMPORTANT FOR DERIVATIONS:
+   - For multi-step inferences, include quotes from MULTIPLE sections of the paper
+   - A single quote (especially from just the title) is rarely sufficient to justify a derived conclusion
+   - Include supporting evidence for each logical step in your derivation chain
+   - Build the chain: quote A + quote B → intermediate conclusion → final derived value
+
 3. EXAMPLES:
    - Direct quote: If paper says "23 patients", use source_quote = "23 patients"
    - Derivation needed: If paper says "13 in group A" and "10 in group B", and you need total, use derivation with operation="sum"

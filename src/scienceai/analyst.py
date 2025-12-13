@@ -220,6 +220,12 @@ def reflect_on_evidence(goal, answer, evidence, retries=3):
         "is COMPLETELY ACCEPTABLE and is in fact a system feature that provides crucial data provenance "
         "and validation. "
         "\n\n"
+        "PARTIAL EXTRACTION FAILURES ARE ACCEPTABLE: "
+        "If the analyst collected data from most or just many of target papers but some papers failed extraction, "
+        "this is acceptable IF the analyst made a concerted effort with targeted retry attempts AND "
+        "documented the failures and reasons. Do NOT reject an otherwise complete answer just because "
+        "a small number of papers could not have data collected. "
+        "\n\n"
         "If the goal requests 'N fields' or a specific number of data points (e.g., '10 flat fields'), "
         "evaluate ONLY whether those N core data points are present and correctly extracted. "
         "The metadata columns are ADDITIONAL to the requested fields and should NOT count against the analyst. "
@@ -657,11 +663,10 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                     "name": "create_data_collection_request",
                     "description": "Collect structured data from research papers using an AI-generated schema. "
                     "IMPORTANT: Collect ONLY the specific outcome type requested. Do NOT expand scope to additional outcomes. "
-                    "WORKFLOW: (1) Start with 'exploratory' mode to SCOUT what data is available and in what format. "
-                    "(2) Review failed collections - they reveal data presented in unexpected formats. "
-                    "(3) Call create_data_collection_request AGAIN with refined collection_goal for papers that failed. "
-                    "(4) Iterate until converging on a complete picture. "
-                    "Failed collections are CLUES, not failures - they indicate rigid schemas missed valid data in different formats. "
+                    "WORKFLOW: (1) Run on ALL papers for first attempt. "
+                    "(2) Run on ALL papers a SECOND time to catch non-determinism and edge cases. "
+                    "(3) For any remaining failures, create a named list of failed paper IDs and run TARGETED extraction. "
+                    "(4) Stop after 3-4 total iterations - document remaining failures rather than endless retrying. "
                     "This tool collects data from ALL papers CONCURRENTLY with a uniform schema. "
                     "NOTE: Design broad schemas that capture variations across papers.",
                     "parameters": {
@@ -933,7 +938,9 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             "function": {
                 "name": "complete_goal_by_answering_question_with_evidence",
                 "description": "Submit your final answer to the research question with supporting evidence. "
-                "This is the ONLY way to complete your task.",
+                "This is the ONLY way to complete your task. "
+                "You may complete even with some extraction failures if it seems that the analyst has made a concerted effort to collect the missing or inconsistent data with targeted collection goals. "
+                "Document any failed papers and reasons in your answer.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -1053,7 +1060,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
 
                     # Generate download link - use basename for relative path
                     os.path.basename(csv_path)
-                    html_snippet = f'<div class="icon-container-box-image"><div class="icon-container-csv-image"></div><div class="button-icon-menu"><button class="icon-button" onclick="viewCSV(\'download/{csv_path}\')"><i class="fa fa-eye"></i></button><a href="/download/{csv_path}?attached=T" class="icon-button"><i class="fas fa-download"></i></a></div></div>'
+                    html_snippet = f'<div class="icon-container-box-image"><div class="icon-container-csv-image"></div><div class="button-icon-menu"><button class="icon-button" onclick="viewCSV(\'download/{csv_path}\')">👁️</button><a href="/download/{csv_path}?attached=T" class="icon-button">📥</a></div></div>'
                     download_links.append(html_snippet)
 
                 except Exception as e:

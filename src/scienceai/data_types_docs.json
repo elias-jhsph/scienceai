@@ -694,5 +694,28 @@
         "type": "survival_analysis_result"
       }
     ]
+  },
+  "text_block_list": {
+    "description": "Data Type: text_block_list\nDescription: A list of text blocks, used to extract multiple narrative sections or related text segments.\nSpecifications Required:\n  - name (string): The name of this field.\n  - description (string): A description of the content to be extracted.\n  - required (boolean): Is this field required?\n",
+    "examples": [
+      {
+        "name": "text_block_list",
+        "description": "A list of text blocks, used to extract multiple narrative sections or related text segments from a research paper.",
+        "required": false,
+        "type": "text_block_list"
+      },
+      {
+        "name": "key_text_sections",
+        "description": "Multiple narrative passages such as study background, methodology summary, and discussion highlights to capture distinct text segments.",
+        "required": false,
+        "type": "text_block_list"
+      },
+      {
+        "name": "text_block_list",
+        "description": "A list of text blocks, used to extract multiple narrative sections or related text segments.",
+        "required": false,
+        "type": "text_block_list"
+      }
+    ]
   }
 }

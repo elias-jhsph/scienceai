@@ -44,10 +44,8 @@
                 <summary>JSON Data</summary>
                 <div class="db-load-info">
                     <button class="icon-button"
-                        onclick="viewJSON('/download/{{ value|quote_url }}', 'json-viewer-{{ loop.index }}')"><i
-                            class="fa fa-eye"></i></button>
-                    <a href="{{ url_for('download', filepath=value|quote_url) }}?attached=T" class="icon-button"><i
-                            class="fas fa-download"></i></a>
+                        onclick="viewJSON('/download/{{ value|quote_url }}', 'json-viewer-{{ loop.index }}')">👁️</button>
+                    <a href="{{ url_for('download', filepath=value|quote_url) }}?attached=T" class="icon-button">📥</a>
                 </div><i>(&#x21bb; each time you view it)</i>
             </details>
         </div>
@@ -57,10 +55,8 @@
                 <summary>CSV Data</summary>
                 <div class="db-load-info">
                     <button class="icon-button"
-                        onclick="viewCSV('/download/{{ value|quote_url }}', 'json-viewer-{{ loop.index }}')"><i
-                            class="fa fa-eye"></i></button>
-                    <a href="{{ url_for('download', filepath=value|quote_url) }}?attached=T" class="icon-button"><i
-                            class="fas fa-download"></i></a>
+                        onclick="viewCSV('/download/{{ value|quote_url }}', 'json-viewer-{{ loop.index }}')">👁️</button>
+                    <a href="{{ url_for('download', filepath=value|quote_url) }}?attached=T" class="icon-button">📥</a>
                 </div><i>(&#x21bb; each time you view it)</i>
             </details>
         </div>

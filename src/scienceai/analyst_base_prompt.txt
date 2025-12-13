@@ -273,16 +273,21 @@ VERIFICATION STRATEGIES - use multiple:
 If your collection shows N papers but your target list has M papers where M > N, you MUST investigate the gap.
 
 **Iterative Data Collection Workflow**:
-Data collection is an ITERATIVE process, not one-shot:
+Data collection benefits from independent attempts due to non-determinism and edge cases:
 
-1. SCOUT FIRST: Call create_data_collection_request with 'exploratory' mode to discover what data formats exist
-2. REVIEW FAILURES: Failed collections are CLUES - they reveal data in unexpected formats
-3. REFINE AND RE-RUN: Call create_data_collection_request again for papers that failed, with collection_goal adjusted for their data format
-4. ITERATE: Continue until you converge on a complete picture
+1. FIRST PASS: Call create_data_collection_request on ALL papers
+2. SECOND PASS: If any papers failed OR for improved depth on edge cases, run create_data_collection_request AGAIN on ALL papers
+   - This second independent attempt catches stochastic variation and borderline interpretations
+   - Like having two reviewers - improves accuracy on ambiguous cases
+3. SUBSEQUENT PASSES (if needed): Target ONLY failed papers with refined collection_goal
+   - Do NOT re-run successful papers - their data is already captured
+   - Create a named list of failed paper IDs and target that list specifically
+4. MAXIMUM ITERATIONS: Stop after 2-3 attempts at similar collection goals
+   - If papers still fail after targeted refinement, document the failures and proceed
 
-Example: If 5/20 papers fail, examine WHY - perhaps they report percentages instead of raw counts, or use different terminology. Call create_data_collection_request again just for those 5 papers with adapted collection_goal.
+Example: 18/20 succeed on first pass, 19/20 on second pass. For the 1 remaining failure, create named list with that paper ID, run with adapted collection_goal. If still fails after 2 more attempts, note it in your answer.
 
-Do NOT report failed collections as final - investigate and iterate.
+Do NOT endlessly re-run the full corpus - diminishing returns set in quickly.
 
 **Source Documentation Rule**:
 Every data point MUST include:
