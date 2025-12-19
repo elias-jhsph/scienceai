@@ -16,6 +16,12 @@ from scienceai.llm_providers import AnthropicProvider, LLMConfig, Provider
 class TestTokenClamping(unittest.TestCase):
     def setUp(self):
         self.mock_client = MagicMock()
+        # Mock both messages.create and beta.messages.create
+        self.mock_response = MagicMock()
+        self.mock_response.content = [MagicMock(text="test response")]
+        self.mock_client.messages.create.return_value = self.mock_response
+        self.mock_client.beta.messages.create.return_value = self.mock_response
+
         mock_anthropic.Anthropic.return_value = self.mock_client
 
         # Also mock AnthropicVertex
@@ -31,7 +37,8 @@ class TestTokenClamping(unittest.TestCase):
         # Logic: budget = 5000 - 2048 = 2952
         provider.chat_completion(messages=[{"role": "user", "content": "hi"}], reasoning_effort="high", max_tokens=5000)
 
-        call_kwargs = self.mock_client.messages.create.call_args.kwargs
+        # When thinking is enabled, it uses beta.messages.create
+        call_kwargs = self.mock_client.beta.messages.create.call_args.kwargs
         thinking = call_kwargs.get("thinking")
         self.assertIsNotNone(thinking)
         print(f"Restricted Max Tokens Test: clamped budget to {thinking['budget_tokens']}")
@@ -47,8 +54,8 @@ class TestTokenClamping(unittest.TestCase):
         # Logic: 16384 < 20000, no clamp needed
         provider.chat_completion(messages=[{"role": "user", "content": "hi"}], reasoning_effort="high")
 
-        # Verify
-        call_kwargs = self.mock_client.messages.create.call_args.kwargs
+        # Verify - when thinking is enabled, it uses beta.messages.create
+        call_kwargs = self.mock_client.beta.messages.create.call_args.kwargs
         thinking = call_kwargs.get("thinking")
         self.assertIsNotNone(thinking)
         print(f"Default Max Tokens Test: budget is {thinking['budget_tokens']}")
@@ -66,7 +73,8 @@ class TestTokenClamping(unittest.TestCase):
         # Logic: 8192 < 20000, no clamp needed
         provider.chat_completion(messages=[{"role": "user", "content": "hi"}], reasoning_effort="medium")
 
-        call_kwargs = self.mock_client.messages.create.call_args.kwargs
+        # When thinking is enabled, it uses beta.messages.create
+        call_kwargs = self.mock_client.beta.messages.create.call_args.kwargs
         thinking = call_kwargs.get("thinking")
         self.assertIsNotNone(thinking)
         print(f"No Clamp Test: budget is {thinking['budget_tokens']}")

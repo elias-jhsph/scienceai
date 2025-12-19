@@ -95,12 +95,21 @@ class TestTokenCounting(unittest.TestCase):
         config = LLMConfig(provider=Provider.GOOGLE)
         gcp_config = {"service_account_path": "/tmp/dummy.json", "project_id": "test-project", "region": "global"}
 
+        # Mock google.genai before GoogleProvider tries to import it
         with (
             patch("scienceai.llm_providers.load_gcp_config", return_value=gcp_config),
             patch("scienceai.llm_providers.os.path.exists", return_value=True),
             patch("scienceai.llm_providers.GoogleProvider._init_vertex_client") as _,
-            patch("google.genai.Client") as MockGenAIClient,
         ):
+            # Import and patch google.genai after the provider is created but before it uses it
+            import sys
+
+            mock_genai_module = MagicMock()
+            mock_client = MagicMock()
+            mock_client.models.count_tokens.return_value.total_tokens = 99
+            mock_genai_module.Client.return_value = mock_client
+            sys.modules["google"] = MagicMock()
+            sys.modules["google.genai"] = mock_genai_module
             provider = GoogleProvider(config)
             # Mimic Vertex setup - must set all attributes that _init_vertex_client would set
             provider._use_vertex = True
@@ -108,10 +117,8 @@ class TestTokenCounting(unittest.TestCase):
             provider.project_id = "test-project"  # Required for Vertex token counting
             provider.region = "global"  # Required for Vertex token counting
 
-            # Mock the genai Client for Vertex token counting
-            mock_client = MagicMock()
-            mock_client.models.count_tokens.return_value.total_tokens = 99
-            MockGenAIClient.return_value = mock_client
+            # Set the provider's client to the mock
+            provider.client = mock_client
 
             count = provider.count_tokens(self.messages)
             self.assertEqual(count, 99)
