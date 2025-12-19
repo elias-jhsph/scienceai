@@ -73,9 +73,9 @@ function updateProgress(current, total, description, analystName) {
     // Update label and description
     if (labelEl) {
         if (analystName) {
-            labelEl.textContent = analystName + ': Data Collection';
+            labelEl.textContent = analystName + ': Data Extraction';
         } else {
-            labelEl.textContent = 'Data Collection';
+            labelEl.textContent = 'Data Extraction';
         }
     }
 
@@ -83,8 +83,19 @@ function updateProgress(current, total, description, analystName) {
         descriptionEl.textContent = description;
     }
 
-    // Calculate progress percentage
-    const percentage = total > 0 ? (current / total) : 0;
+    // Calculate progress with two-phase transformation:
+    // Phase 1 (0-50%): Linear lag showing 70% of actual
+    // Phase 2 (50-100%): Exponential catch-up to reach 100%
+    const x = total > 0 ? (current / total) : 0;
+    let percentage;
+    if (x <= 0.5) {
+        // Phase 1: Linear Lag (30% drop) - at 50% actual, shows 35%
+        percentage = x * 0.7;
+    } else {
+        // Phase 2: Exponential Catch-up from 35% to 100%
+        const segment = (x - 0.5) / 0.5;
+        percentage = 0.35 + (0.65 * Math.pow(segment, 1.5));
+    }
     const circumference = 2 * Math.PI * 24; // r=24 for the smaller circle
     const offset = circumference - (percentage * circumference);
 
@@ -311,6 +322,20 @@ document.addEventListener('DOMContentLoaded', function () {
             // Handle context updates
             if (data.type === 'context' && data.percentage !== undefined) {
                 updateContext(data.percentage, data.can_compress);
+            }
+            // Handle pause complete event - silently close modal and reset button
+            if (data.type === 'pause_complete') {
+                // Close the pause pending modal
+                const pauseModal = document.getElementById('pause-pending-modal');
+                if (pauseModal) {
+                    pauseModal.style.display = 'none';
+                }
+                // Reset the pause button
+                const pauseBtn = document.getElementById('pause-button');
+                if (pauseBtn) {
+                    pauseBtn.innerHTML = '<span data-text="Pause">⏸️</span>';
+                    pauseBtn.disabled = false;
+                }
             }
         } catch (e) {
             // Not a JSON message, ignore

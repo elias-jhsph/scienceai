@@ -1,9 +1,16 @@
 import logging
 import os
+import re
 import time
 from datetime import datetime
 
-from .data_extractor import ExtractionMode, extract_data, generate_schema, schema_to_tool
+from .data_extractor import (
+    ExtractionMode,
+    data_types,
+    data_types_docs,
+    extract_data,
+    schema_to_tool,
+)
 from .database_manager import DatabaseManager
 from .llm import MODEL_REASONING, client, get_config, get_model_for_role
 from .llm import use_tools_sync as use_tools
@@ -15,18 +22,51 @@ short_id = {}
 path_to_app = os.path.dirname(os.path.abspath(__file__))
 
 
+def _build_data_types_reference() -> str:
+    """Generate available data types reference from JSON for analyst prompt."""
+    reference = "\n\n## Available Data Types for Schema Definition\n\n"
+    reference += "When defining your schema, use these data types:\n\n"
+
+    for type_name, docs in data_types_docs.items():
+        spec = data_types[type_name]["spec"]
+        # Get extra fields beyond the standard name/description/required
+        extra_fields = [k for k in spec if k not in ["name", "description", "required"]]
+
+        # Get just the description line (second line of the full description)
+        desc_lines = docs["description"].split("\n")
+        short_desc = desc_lines[1].replace("Description: ", "") if len(desc_lines) > 1 else docs["description"]
+
+        reference += f"**{type_name}**: {short_desc}\n"
+        if extra_fields:
+            reference += f"  - Additional required fields: `{', '.join(extra_fields)}`\n"
+        # Add a compact example
+        example = docs["examples"][0] if docs["examples"] else {}
+        reference += f"  - Example: `{example}`\n\n"
+
+    return reference
+
+
 def _load_analyst_system_prompt() -> str:
     """Load the analyst system prompt with provider-specific prepend and append.
 
     Loads the base prompt and adds provider-specific instructions:
     - Prepend: Initial context and reminders at the start
     - Append: Critical rules at the end (leverages recency bias)
+    - Data types reference: Dynamically generated from JSON
     """
     from .llm_providers import Provider, get_provider_type
 
     # Load base prompt
     with open(os.path.join(path_to_app, "analyst_base_prompt.txt")) as f:
         base_prompt = f.read()
+
+    # Inject dynamic data types reference
+    data_types_ref = _build_data_types_reference()
+    if "{{DATA_TYPES_REFERENCE}}" in base_prompt:
+        base_prompt = base_prompt.replace("{{DATA_TYPES_REFERENCE}}", data_types_ref)
+    else:
+        # Append if placeholder not found (backward compatibility)
+        base_prompt = base_prompt + data_types_ref
 
     prepend_content = ""
     append_content = ""
@@ -215,7 +255,7 @@ def reflect_on_evidence(goal, answer, evidence, retries=3):
         "for identifying papers—title extraction is optional, not required. "
         "\n\n"
         "CRITICAL EVALUATION RULE - Metadata Columns Are Expected: "
-        "When evaluating data collection outputs, the presence of auto-generated metadata columns "
+        "When evaluating data extraction outputs, the presence of auto-generated metadata columns "
         "(such as _source_quote, _source_location, _derivation, _unit, numerator_*, denominator_*, etc.) "
         "is COMPLETELY ACCEPTABLE and is in fact a system feature that provides crucial data provenance "
         "and validation. "
@@ -334,7 +374,7 @@ class Analyst:
             "create_named_paper_list": self.create_named_paper_list,
             "get_named_paper_list": self.get_named_paper_list,
             "get_paper_metadata": self.get_paper_metadata,
-            "create_data_collection_request": self.create_data_collection_request,
+            "extract_structured_data": self.extract_structured_data,
             "complete_goal_by_answering_question_with_evidence": self.complete_goal_by_answering_question_with_evidence,
         }
         self.tools = [
@@ -342,7 +382,7 @@ class Analyst:
             self.create_named_paper_list(None, None, return_tool=True),
             self.get_named_paper_list(None, return_tool=True),
             self.get_paper_metadata(return_tool=True),
-            self.create_data_collection_request(None, None, return_tool=True),
+            self.extract_structured_data(return_tool=True),
             self.complete_goal_by_answering_question_with_evidence_schema(),
         ]
         self.follow_up_answer = None
@@ -373,7 +413,7 @@ If YES (e.g., publication years, author lists, journal names):
 4. When completing, use data_collection_names=["YourCollectionName"]
 
 If NO (e.g., sample sizes, methods, results):
-1. Use create_data_collection_request() for full-text extraction
+1. Use extract_structured_data() for full-text extraction
 
 **Why this matters:** Extracting publication years from paper content is SLOW and ERROR-PRONE. The metadata already has this information in structured form. Always check metadata first!
 
@@ -383,7 +423,7 @@ Do NOT complete without using data_collection_names parameter to attach files.
             file_output_instruction = """
 
 IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file outputs (e.g., sample sizes from 100+ papers), use the 'data_collection_names' parameter:
-- Provide a list of your data collection names (e.g., ["SampleSizeExtraction", "SubgroupAnalysis"])
+- Provide a list of your data extraction names (e.g., ["SampleSizeExtraction", "SubgroupAnalysis"])
 - Give a concise text 'answer' summarizing your findings
 - Do NOT repeat the data in the 'evidence' field—the system will automatically inject the file contents and generate download links
 - Example: If you created "SampleSizeExtraction", pass data_collection_names=["SampleSizeExtraction"] and explain what the file contains in your answer
@@ -485,7 +525,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             paper_ids: List of short paper IDs to query (takes priority over target_list)
             metadata_fields: List of field names to retrieve. If empty, returns default essential fields.
             target_list: Name of a paper list or "ALL PAPERS" (used if paper_ids is empty)
-            collection_name: Optional name to save results as a data collection for CSV export
+            collection_name: Optional name to save results as a data extraction for CSV export
 
         Returns:
             Dictionary mapping short paper IDs to metadata dictionaries
@@ -499,7 +539,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                     "description": "Retrieve bibliographic metadata for papers (100x faster than full-text extraction). "
                     "AVAILABLE FIELDS: authors, journal, year, title, DOI, citation_count, publication_date, "
                     "volume, issue, pages, publisher, URL, type, ISSN, language, reference_count. "
-                    "USE THIS for: publication years, author names, journal names, DOIs, citation counts, dates. "
+                    "USE THIS for: publication years, author names (first_author), journal names, DOIs, citation counts, dates. "
                     "Query specific papers by ID, a named list, or all papers (default).",
                     "parameters": {
                         "type": "object",
@@ -544,7 +584,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                             },
                             "collection_name": {
                                 "type": "string",
-                                "description": "OPTIONAL: Provide a name (e.g., 'PublicationYears') to automatically save these results as a data collection. "
+                                "description": "OPTIONAL: Provide a name (e.g., 'PublicationYears') to automatically save these results as a data extraction. "
                                 "REQUIRED if require_file_output=True. This generates the CSV file needed for your final answer.",
                             },
                         },
@@ -608,7 +648,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             except Exception as e:
                 output[short_paper_id] = {"error": f"Failed to retrieve metadata: {e!s}"}
 
-        # If collection_name is provided, save as a data collection
+        # If collection_name is provided, save as a data extraction
         if collection_name:
             logger.info(f"Saving metadata results to collection: {collection_name}")
             from datetime import datetime
@@ -639,70 +679,241 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
 
         return output
 
-    def create_data_collection_request(
-        self, collection_name="", collection_goal="", target_list=None, extraction_mode="focused", return_tool=False
+    def _find_resumable_tracker(self, collection_name, papers):
+        """
+        Find an existing tracker with partial extraction for this collection.
+
+        Returns dict with 'path' and 'extracted_ids' if found, None otherwise.
+        """
+        try:
+            trackers = self.db.get_all_tool_trackers_for_analyst(self.name)
+            logger.debug(f"Found {len(trackers)} existing trackers for analyst '{self.name}'")
+        except ValueError as e:
+            logger.debug(f"No trackers found for analyst '{self.name}': {e}")
+            return None
+
+        if not trackers:
+            logger.debug("No trackers to check for resume")
+            return None
+
+        all_paper_ids = {p["database"]["paper_id"] for p in papers}
+        logger.debug(f"Looking for tracker matching collection '{collection_name}' with {len(all_paper_ids)} papers")
+
+        for json_path, _csv_path in trackers.items():
+            logger.debug(f"Checking tracker: {json_path}")
+            # Check if this tracker matches our collection name
+            # json_path is full path like: /project/scienceai_ddb/AnalystName_/CollectionName_timestamp.json
+            # We need to check if collection_name is in the filename
+            filename = os.path.basename(json_path)
+
+            # Tracker filename format: AnalystName_/CollectionName_timestamp.json
+            # But basename gives us just: CollectionName_timestamp.json (after the _/ separator in path)
+            # Actually the _/ is a DIRECTORY separator, so json_path has .../AnalystName_/CollectionName_timestamp.json
+            if f"{collection_name}_" in filename:
+                logger.debug(f"Found matching tracker: {filename}")
+                # Read tracker data - get_analyst_tool_tracker expects the DDB key
+                # which is the path relative to scienceai_ddb without .json
+                try:
+                    # Extract the DDB key from the full path
+                    # json_path: /path/to/scienceai_ddb/AnalystName_/CollectionName_timestamp.json
+                    # We need: AnalystName_/CollectionName_timestamp
+                    ddb_key = json_path.replace(".json", "")
+                    if "/scienceai_ddb/" in ddb_key:
+                        ddb_key = ddb_key.split("/scienceai_ddb/")[-1]
+
+                    logger.debug(f"Reading tracker with DDB key: {ddb_key}")
+                    data = self.db.get_analyst_tool_tracker(ddb_key)
+                    extracted_ids = set(data.keys())
+                    logger.debug(f"Tracker has {len(extracted_ids)} extracted papers")
+
+                    # Check if incomplete (some but not all extracted)
+                    if extracted_ids and extracted_ids < all_paper_ids:
+                        logger.info(
+                            f"Found resumable tracker: {len(extracted_ids)}/{len(all_paper_ids)} papers extracted"
+                        )
+                        return {"path": ddb_key, "extracted_ids": extracted_ids}
+                    elif extracted_ids == all_paper_ids:
+                        logger.debug("Tracker is complete, not resuming")
+                    elif not extracted_ids:
+                        logger.debug("Tracker is empty, not resuming")
+                except Exception as e:
+                    logger.warning(f"Could not read tracker {json_path}: {e}")
+                    continue
+
+        logger.debug(f"No resumable tracker found for collection '{collection_name}'")
+        return None
+
+    def extract_structured_data(
+        self,
+        collection_name="",
+        schema=None,
+        collection_message="",
+        target_list=None,
+        paper_ids=None,
+        extraction_mode="focused",
+        return_tool=False,
     ):
         """
-        Extract structured data from research papers.
+        Extract structured data from research papers using analyst-defined schema.
 
         Args:
-            collection_name: Unique name for this data collection
-            collection_goal: Detailed description of what data to extract
+            collection_name: Unique name for this data extraction
+            schema: Required array of field definitions, each with:
+                - name: snake_case string
+                - type: string from available types
+                - description: string
+                - required: boolean
+                - type-specific fields (categories, field_names, unit)
+            collection_message: Purpose/use of this data - guides justification standard for derivations
             target_list: Name of paper list to extract from, or 'ALL PAPERS'
+            paper_ids: Optional list of specific paper IDs to extract from
             extraction_mode: One of 'exploratory', 'focused', or 'rigid'
-                - exploratory: Lenient mode for discovery. Returns partial data on validation failures.
-                - focused: Default balanced mode. Uses convergence detection.
-                - rigid: Strict mode. All fields required, fails if data missing.
             return_tool: If True, returns the tool schema instead of executing
         """
         if return_tool:
             return {
                 "type": "function",
                 "function": {
-                    "strict": True,
-                    "name": "create_data_collection_request",
-                    "description": "Collect structured data from research papers using an AI-generated schema. "
-                    "IMPORTANT: Collect ONLY the specific outcome type requested. Do NOT expand scope to additional outcomes. "
-                    "WORKFLOW: (1) Run on ALL papers for first attempt. "
-                    "(2) Run on ALL papers a SECOND time to catch non-determinism and edge cases. "
-                    "(3) For any remaining failures, create a named list of failed paper IDs and run TARGETED extraction. "
-                    "(4) Stop after 3-4 total iterations - document remaining failures rather than endless retrying. "
-                    "This tool collects data from ALL papers CONCURRENTLY with a uniform schema. "
-                    "NOTE: Design broad schemas that capture variations across papers.",
+                    "strict": False,
+                    "name": "extract_structured_data",
+                    "description": "Extract structured data from research papers using YOUR defined schema. "
+                    "You MUST define the schema with specific fields and data types. "
+                    "See 'Available Data Types for Schema Definition' in your system prompt for valid types. "
+                    "Each field in schema needs: name, type, description, required. "
+                    "Some types need additional fields (categories for categorical_value, etc.)."
+                    "IMPORTANT: Do NOT include 'first_author', 'publication_year', or 'title' in your schema. Use get_paper_metadata for these.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "collection_name": {
                                 "type": "string",
-                                "description": "Unique name for this data collection (e.g., 'SampleSizeData', 'MethodologyAnalysis'). "
-                                "Use descriptive names as you may reference this later.",
+                                "description": "Unique name for this collection.",
                             },
-                            "collection_goal": {
+                            "schema": {
+                                "type": "array",
+                                "description": "List of fields to extract.",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {"type": "string", "description": "Field name in snake_case"},
+                                        "type": {"type": "string", "description": "Data type from available types"},
+                                        "description": {"type": "string", "description": "What this field captures"},
+                                        "required": {"type": "boolean", "description": "Fail if missing?"},
+                                        "categories": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "Required for categorical_value type",
+                                        },
+                                        "field_names": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "Required for named_number_set type",
+                                        },
+                                        "unit": {"type": "string", "description": "Required for unit_number types"},
+                                    },
+                                    "required": ["name", "type", "description", "required"],
+                                },
+                            },
+                            "collection_message": {
                                 "type": "string",
-                                "description": "Detailed description of what data to collect. BE SPECIFIC about: (1) Types of data points needed, "
-                                "(2) How many instances per paper (e.g., 'all genes mentioned' vs 'top 5 most important genes'), "
-                                "(3) Any context needed. Good: 'Collect all sample size information including total N, subgroup names, "
-                                "and subgroup N values, plus any exclusion criteria.' Bad: 'Get sample sizes.'",
+                                "description": "The PURPOSE/USE of this data (justification standard). "
+                                "Tell the extractor HOW this data will be used, which determines the rigor required for derivations. "
+                                "Examples: 'For meta-analysis - derivations OK with full computation chains' or "
+                                "'For summary - standard documentation acceptable'. "
+                                "This guides what level of justification is needed.",
                             },
                             "target_list": {
                                 "type": "string",
-                                "description": "Name of paper list to collect from, or 'ALL PAPERS' for entire database. "
-                                "Collection runs on ALL papers in this list—there's no per-paper filtering in the schema.",
+                                "description": "Paper list to extract from, or 'ALL PAPERS' for entire database.",
+                            },
+                            "paper_ids": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Optional list of paper IDs to extract from directly. If set, ignores target_list.",
                             },
                             "extraction_mode": {
                                 "type": "string",
                                 "enum": ["exploratory", "focused", "rigid"],
-                                "description": "Collection strictness mode. "
-                                "'exploratory': RECOMMENDED FIRST - lenient, returns partial data, reveals what formats exist. "
-                                "'focused': Balanced - uses convergence detection, retries intelligently. "
-                                "'rigid': Strict - all fields required, use AFTER scouting to enforce consistency.",
+                                "description": "'exploratory': lenient, partial data OK. "
+                                "'focused': balanced with smart retries. "
+                                "'rigid': strict, all required fields must be found.",
                             },
                         },
                         "additionalProperties": False,
-                        "required": ["collection_name", "collection_goal", "target_list", "extraction_mode"],
+                        "required": ["collection_name", "schema", "collection_message", "extraction_mode"],
                     },
                 },
             }
+
+        # ... (implementation details would be here but we are just replacing the start block)
+
+        # Start of implementation logic needs to handle argument rename too
+        # But this replacement block is too big to rely on 'Start of implementation'
+        # I will replace the wrapper part first and handle the call to extract_data separately or include it if range allows.
+        # The range 747-1007 is huge. Let's stick to the definition part first.
+
+        # Validate schema is provided
+        if not schema or not isinstance(schema, list) or len(schema) == 0:
+            return {
+                "_SCHEMA_ERROR": "Schema is required and must be a non-empty array of field definitions.",
+                "_GUIDANCE": "Each field needs: name, type, description, required. "
+                f"Available types: {', '.join(sorted(data_types.keys()))}",
+                "_EXAMPLE": {
+                    "name": "sample_size",
+                    "type": "number",
+                    "description": "Total number of participants",
+                    "required": True,
+                },
+            }
+
+        # Validate each field in schema
+        schema_errors = []
+        for i, field in enumerate(schema):
+            field_errors = []
+
+            # Check required base fields
+            for req_field in ["name", "type", "description", "required"]:
+                if req_field not in field:
+                    field_errors.append(f"Missing required field: '{req_field}'")
+
+            # Check type exists
+            field_type = field.get("type", "")
+            if field_type and field_type not in data_types:
+                # Try to suggest similar types
+                similar = [t for t in data_types if field_type.lower() in t.lower() or t.lower() in field_type.lower()]
+                suggestion = f" Did you mean: {', '.join(similar)}?" if similar else ""
+                field_errors.append(f"Unknown type: '{field_type}'.{suggestion}")
+
+            # Check type-specific requirements
+            if field_type == "categorical_value" and "categories" not in field:
+                field_errors.append("Type 'categorical_value' requires 'categories' array.")
+            if field_type == "named_number_set" and "field_names" not in field:
+                field_errors.append("Type 'named_number_set' requires 'field_names' array.")
+            if field_type in ["unit_number", "unit_number_list"] and "unit" not in field:
+                field_errors.append(f"Type '{field_type}' should have 'unit' field.")
+
+            if field_errors:
+                field_name = field.get("name", f"field[{i}]")
+                schema_errors.append({"field": field_name, "errors": field_errors})
+
+        if schema_errors:
+            return {
+                "_SCHEMA_VALIDATION_FAILED": True,
+                "_ERRORS": schema_errors,
+                "_AVAILABLE_TYPES": sorted(data_types.keys()),
+                "_GUIDANCE": "Fix the errors above and try again. See 'Available Data Types' in your system prompt.",
+            }
+
+        # Schema is valid - show preview and proceed
+        schema_preview = []
+        for field in schema:
+            preview = f"- {field['name']} ({field['type']}): {field['description']}"
+            if field.get("required"):
+                preview += " [REQUIRED]"
+            schema_preview.append(preview)
+
+        logger.info(f"Schema validated successfully with {len(schema)} fields")
+        logger.info("Schema preview:\n" + "\n".join(schema_preview))
 
         # Convert string mode to enum
         mode_map = {
@@ -712,7 +923,38 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         }
         mode = mode_map.get(extraction_mode.lower(), ExtractionMode.FOCUSED)
 
-        if target_list:
+        if paper_ids:
+            papers = []
+            for pid in paper_ids:
+                full_id = short_id.get(pid)
+                if not full_id:
+                    logger.warning(f"Could not resolve paper ID {pid}")
+                    continue
+                try:
+                    paper_data = self.db.get_paper_data(full_id)
+                    papers.append(paper_data)
+                except Exception as e:
+                    logger.warning(f"Could not load paper {pid}: {e}")
+
+            # Auto-create a named list for this collection's papers if collection_name is provided
+            if collection_name and papers:
+                try:
+                    # We can use the logic from create_named_paper_list but avoid the overhead of the tool method call
+                    # logic: if exists, skip; else create.
+                    # Actually, calling create_named_paper_list is cleaner but it raises ValueError if exists.
+                    # Let's check first.
+                    existing = self.db.get_all_papers(analyst=self.name, named_list=collection_name)
+                    if not existing:
+                        for paper in papers:
+                            # We need full IDs. 'papers' contains full paper data.
+                            full_id = paper["database"]["paper_id"]
+                            self.db.add_paper_to_list(full_id, self.name, collection_name)
+                        logger.info(f"Auto-created paper list '{collection_name}' from provided paper_ids.")
+                except Exception as e:
+                    # Don't fail extraction if auto-list creation fails
+                    logger.warning(f"Could not auto-create paper list '{collection_name}': {e}")
+
+        elif target_list:
             try:
                 if target_list == "ALL PAPERS":
                     target_list = None
@@ -722,27 +964,44 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         else:
             papers = self.db.get_all_papers_data()
 
-        summaries = ""
-        for paper in papers:
-            summaries += paper["metadata"]["title"][0] + "\n\nSummary: " + paper["summary"] + "\n\n\n"
-        schema = generate_schema(summaries, goal=collection_name + " - " + collection_goal, mode=mode)
-        if not schema:
-            raise ValueError("Could not generate schema for data collection, be more specific in your goal.")
+        # Convert analyst schema to extraction tool
         tool = schema_to_tool(schema, mode=mode)
         logger.debug(f"Tool: {tool}")
         results = {}
-        tracker = self.db.add_analyst_tool_tracker(
-            self.name, collection_name, datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
-        )
+
+        # Check for resumable extraction before creating new tracker
+        all_papers = papers  # Keep reference to full list for final results
+        resumable = self._find_resumable_tracker(collection_name, papers)
+
+        if resumable:
+            # Resume from existing tracker
+            tracker = resumable["path"]
+            already_extracted = resumable["extracted_ids"]
+            papers = [p for p in papers if p["database"]["paper_id"] not in already_extracted]
+            logger.info(f"Resuming extraction: {len(already_extracted)} already done, {len(papers)} remaining")
+
+            # Pre-populate results with existing extractions
+            existing_data = self.db.get_analyst_tool_tracker(tracker)
+            for paper_id, data in existing_data.items():
+                short_id[paper_id[:10]] = paper_id
+                results[paper_id[:10]] = data
+        else:
+            # Start fresh extraction
+            tracker = self.db.add_analyst_tool_tracker(
+                self.name, collection_name, datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+            )
 
         # Wait a moment for WebSocket to establish, then emit initial progress
         time.sleep(0.5)  # Give WebSocket time to connect
+        already_done = len(all_papers) - len(papers)
         try:
             from .__main__ import emit_progress
 
-            emit_progress(0, len(papers), collection_name, analyst_name=self.name)
+            emit_progress(already_done, len(all_papers), collection_name, analyst_name=self.name)
             time.sleep(0.1)
-            emit_progress(0, len(papers), collection_name, analyst_name=self.name)  # Emit twice to ensure delivery
+            emit_progress(
+                already_done, len(all_papers), collection_name, analyst_name=self.name
+            )  # Emit twice to ensure delivery
         except Exception:  # nosec
             pass
 
@@ -755,8 +1014,8 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         logger.info(f"Starting parallel extraction for {len(papers)} papers...")
 
         # Track progress with a counter
-        completed_count = [0]  # Using list to allow modification in nested function
-        total_papers = len(papers)
+        completed_count = [already_done]  # Start from already-done count
+        total_papers = len(all_papers)
 
         async def extract_from_paper(paper):
             """Extract data from a single paper"""
@@ -765,7 +1024,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             logger.debug(f"*** Extracting from Paper: {short_paper_id}")
 
             # Run async extract_data with the specified mode
-            result = await extract_data(tool, paper["cleaned_text"], mode=mode)
+            result = await extract_data(tool, paper["cleaned_text"], collection_message=collection_message, mode=mode)
 
             # Update tracker immediately after extraction
             self.db.update_analyst_tool_tracker(tracker, paper_id, result)
@@ -830,7 +1089,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                 failed_collections.append(short_paper_id)
 
         self.db.convert_analyst_tool_tracker(self.name, collection_name)
-        logger.info("Data collection complete, returning results.")
+        logger.info("Data extraction complete, returning results.")
 
         # Add extraction summary with warnings about failures
         total_papers = len(extraction_results)
@@ -863,7 +1122,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                 "function": {
                     "strict": True,
                     "name": "save_metadata_as_collection",
-                    "description": "Save results from get_paper_metadata() as a data collection. "
+                    "description": "Save results from get_paper_metadata() as a data extraction. "
                     "REQUIRED when require_file_output=True and you used metadata instead of extraction. "
                     "This generates the CSV file that allows you to complete the goal.",
                     "parameters": {
@@ -947,7 +1206,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                         "answer": {
                             "type": "string",
                             "description": "Your complete answer to the research question. Be specific and comprehensive. "
-                            "If you created data collections, summarize key findings here—don't just say 'see attached file.' "
+                            "If you created data extractions, summarize key findings here—don't just say 'see attached file.' "
                             "The user should understand your findings from reading this answer even without opening files.",
                         },
                         "evidence": {
@@ -956,13 +1215,13 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
                             "REQUIRED for each data point: (1) The exact source quote from the paper, (2) Where you found it (page, table, figure). "
                             "For small datasets (<20 items), include the full list here. "
                             "For large datasets, provide summary statistics and key examples. DO NOT just reference data you don't show—"
-                            "either display it here OR attach it as a data collection file. Example: 'Paper abc123: 150 participants "
+                            "either display it here OR attach it as a data extraction file. Example: 'Paper abc123: 150 participants "
                             '(Table 1, p.4: "A total of 150 subjects were enrolled").\'',
                         },
                         "data_collection_names": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "OPTIONAL: List of data collection names to attach as CSV files. Use this when: (1) You have >20 data points, "
+                            "description": "OPTIONAL: List of data extraction names to attach as CSV files. Use this when: (1) You have >20 data points, "
                             "(2) User requested downloadable data, (3) require_file_output=True. When provided, the system automatically "
                             "injects file contents into evidence and generates download buttons. Example: ['SampleSizeExtraction'] if you "
                             "created that collection earlier.",
@@ -982,12 +1241,12 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         if self.require_file_output and (not data_collection_names or len(data_collection_names) == 0):
             self.answer_attempts += 1
             return (
-                "Answer not valid. You are REQUIRED to provide data collection files for this analysis. "
-                "Please create a data collection using create_data_collection_request, then reference it "
+                "Answer not valid. You are REQUIRED to provide data extraction files for this analysis. "
+                "Please perform a data extraction using extract_structured_data, then reference it "
                 "using the data_collection_names parameter. Do not attempt to complete without attaching files."
             )
 
-        # Check for failed collections in data collections BEFORE proceeding
+        # Check for failed extractions in data extractions BEFORE proceeding
         failed_collection_warnings = []
         if data_collection_names:
             for collection_name in data_collection_names:
@@ -1027,7 +1286,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
         # Handle data_collection_names if provided
         if data_collection_names:
             download_links = []
-            injected_evidence = evidence + "\n\n## Attached Data Collections\n\n"
+            injected_evidence = evidence + "\n\n## Attached Data Extractions\n\n"
 
             for collection_name in data_collection_names:
                 try:
@@ -1075,7 +1334,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             # Add download links to answer
             answer = (
                 answer
-                + "\n\n**Data collections attached**: "
+                + "\n\n**Data extractions attached**: "
                 + ", ".join(data_collection_names)
                 + "\n\n"
                 + "\n".join(download_links)
@@ -1106,7 +1365,7 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             "Goal not achieved. Here are some thoughts on why: "
             + thoughts
             + "\n\n"
-            + "Consider refining your data collection request with this in mind, and trying again."
+            + "Consider refining your data extraction request with this in mind, and trying again."
         )
 
     def answer_followup_question_schema(self):
@@ -1152,108 +1411,228 @@ IMPORTANT FOR LARGE DATASETS: If the user requests large datasets or file output
             messages = [{"role": "system", "content": self.system_message}, {"role": "user", "content": user_message}]
             for message in messages:
                 self.db.add_analyst_context(self.name, message)
-        while not self.answer:
-            messages = self.db.get_analyst_context(self.name)
-            arguments = {
-                "messages": messages,
-                "model": get_config().default_model,
-                "reasoning_effort": "medium",
-                "tools": self.tools,
-                "parallel_tool_calls": False,
-            }
 
-            try:
-                chat_response = client.chat.completions.create(**arguments)
-            except Exception as e:
-                error_str = str(e)
-                # Check for context length errors - various providers use different messages
-                if (
-                    "maximum context length" in error_str.lower()
-                    or "context_length" in error_str.lower()
-                    or "too long" in error_str.lower()
-                ):
-                    self.answer = (
-                        f"⚠️ CONTEXT LIMIT EXCEEDED: The analyst '{self.name}' hit the context window limit. "
-                        f"The conversation grew too large ({len(messages)} messages) to continue processing. "
-                        f"Consider breaking this task into smaller sub-tasks or being more specific with the goal "
-                        f"to reduce the amount of data the analyst needs to process."
-                    )
-                    self.evidence = f"Error details: {error_str}\n\nNumber of messages in context: {len(messages)}"
-                    # Store the failure reason in metadata
-                    self.db.add_analyst_metadata(
-                        self.name,
-                        {
-                            "goal_achieved": False,
-                            "failure_reason": "context_limit_exceeded",
-                            "error": error_str,
-                            "message_count": len(messages),
-                            "answer": self.answer,
-                            "evidence": self.evidence,
-                        },
-                    )
-                    return  # Exit the loop
-                else:
-                    # Re-raise non-context BadRequestErrors
-                    raise
+        # Track whether the goal was achieved successfully (vs failed due to error/limits)
+        goal_succeeded = True
+        failure_reason_meta = None
 
-            new_history = use_tools(chat_response, arguments, function_dict=self.tool_callables)
-            for call in new_history:
-                self.db.add_analyst_context(self.name, call)
-                messages.append(call)
-            last_three_messages_exist_and_are_identical = (
-                len(messages) > 3 and messages[-1]["content"] == messages[-2]["content"] == messages[-3]["content"]
-            )
-            last_three_messages_no_tools = (
-                messages[-1].get("tool_calls", None) is None
-                and messages[-2].get("tool_calls", None) is None
-                and messages[-3].get("tool_calls", None) is None
-            )
-            if (
-                (self.answer_attempts > self.attempts and not self.answer)
-                or len(messages) > 100
-                or last_three_messages_exist_and_are_identical
-                or last_three_messages_no_tools
-            ):
-                self.answer = (
-                    "The analyst has not been able to answer the question in the allotted attempts. "
-                    "Refine the goal and make sure it is specific and longer to help the next analyst "
-                    "succeed where this one failed. You should remind it that when it creates its "
-                    "data collection requests it should include details on how to avoid those pitfalls."
-                )
-                reasons = [
-                    message["content"]
-                    for message in messages
-                    if message["role"] == "tool"
-                    and message["name"] == "complete_goal_by_answering_question_with_evidence"
-                ]
-                self.evidence = (
-                    ("Here are the reasons the analyst failed to reach its goal after ")
-                    + str(self.attempts)
-                    + " attempts:"
-                    + "\n\n"
-                    + "\n\n".join(reasons)
-                )
-            last_two_messages_no_tools = (
-                messages[-1].get("tool_calls", None) is None and messages[-2].get("tool_calls", None) is None
-            )
-            if last_two_messages_no_tools:
-                messages += [
-                    {
-                        "role": "system",
-                        "content": "Make sure to use tool calls to attempt to collect data or complete your goal, do not just talk to yourself.",
-                    }
-                ]
-            # Check if the last message content is "null" AND has no tool calls - remind the analyst to use the answer tool
-            last_message = messages[-1] if messages else {}
-            last_message_content = last_message.get("content", "")
-            last_message_has_no_tools = last_message.get("tool_calls", None) is None
-            if (last_message_content == "null" or last_message_content is None) and last_message_has_no_tools:
-                reminder_message = {
-                    "role": "system",
-                    "content": "You returned an empty or null response. You must use the complete_goal_by_answering_question_with_evidence tool to submit your findings. Do not return null - call the tool with your answer and evidence.",
+        try:
+            while not self.answer:
+                messages = self.db.get_analyst_context(self.name)
+                arguments = {
+                    "messages": messages,
+                    "model": get_config().default_model,
+                    "reasoning_effort": "medium",
+                    "tools": self.tools,
+                    "parallel_tool_calls": False,
                 }
-                messages.append(reminder_message)
-                self.db.add_analyst_context(self.name, reminder_message)
-        self.db.add_analyst_metadata(
-            self.name, {"goal_achieved": True, "answer": self.answer, "evidence": self.evidence}
-        )
+
+                # Check for orphaned tool_use at end of context (interrupted during tool execution)
+                # If found, skip LLM call and re-execute the tools directly
+                last_msg = messages[-1] if messages else None
+                resuming_interrupted_tool = False
+
+                if last_msg and last_msg.get("role") == "assistant" and last_msg.get("tool_calls"):
+                    # This is an assistant message with tool_calls - check if there's a tool_result after
+                    # Since this is the last message, there's no tool_result - it was interrupted
+                    logger.info("Detected interrupted tool call, resuming tool execution...")
+                    resuming_interrupted_tool = True
+                    # Create a fake chat_response from the saved message to pass to use_tools
+                    chat_response = {
+                        "content": last_msg.get("content"),
+                        "tool_calls": last_msg.get("tool_calls"),
+                        "thinking": last_msg.get("thinking"),
+                    }
+
+                if not resuming_interrupted_tool:
+                    try:
+                        chat_response = client.chat.completions.create(**arguments)
+                    except Exception as e:
+                        error_str = str(e)
+                        # Check for context length errors - various providers use different messages
+                        if (
+                            "maximum context length" in error_str.lower()
+                            or "context_length" in error_str.lower()
+                            or "too long" in error_str.lower()
+                        ):
+                            self.answer = (
+                                f"⚠️ CONTEXT LIMIT EXCEEDED: The analyst '{self.name}' hit the context window limit. "
+                                f"The conversation grew too large ({len(messages)} messages) to continue processing. "
+                                f"Consider breaking this task into smaller sub-tasks or being more specific with the goal "
+                                f"to reduce the amount of data the analyst needs to process."
+                            )
+                            self.evidence = (
+                                f"Error details: {error_str}\n\nNumber of messages in context: {len(messages)}"
+                            )
+                            # Store the failure reason in metadata
+                            goal_succeeded = False
+                            failure_reason_meta = "context_limit_exceeded"
+                            return  # Exit the loop
+                        else:
+                            # Re-raise non-context BadRequestErrors
+                            raise
+
+                    # PHASE 1: Save the assistant message IMMEDIATELY (before executing tools)
+                    # This ensures that if the process is interrupted during a long-running tool,
+                    # the tool call request is preserved in context for resume
+                    assistant_message = use_tools(
+                        chat_response, arguments, function_dict=self.tool_callables, pre_tool_call=True
+                    )
+                    for msg in assistant_message:
+                        self.db.add_analyst_context(self.name, msg)
+                        messages.append(msg)
+
+                # PHASE 2: Execute the tools and get results
+                new_history = use_tools(chat_response, arguments, function_dict=self.tool_callables)
+                # new_history contains [assistant_msg, tool_results...], skip the assistant msg (already saved or loaded)
+                for call in new_history[1:]:
+                    self.db.add_analyst_context(self.name, call)
+                    messages.append(call)
+                last_three_messages_exist_and_are_identical = (
+                    len(messages) > 3 and messages[-1]["content"] == messages[-2]["content"] == messages[-3]["content"]
+                )
+                # Relaxed check: Fail only if 5 consecutive messages have no tools (chatty model protection)
+                last_five_messages_no_tools = False
+                if len(messages) >= 5:
+                    # Check last 5 messages for tool calls
+                    last_five_messages_no_tools = all(m.get("tool_calls", None) is None for m in messages[-5:])
+
+                # Check for specific failure conditions and provide accurate reasons
+                failure_reason = ""
+
+                if self.answer_attempts > self.attempts and not self.answer:
+                    failure_reason = "attempts_exceeded"
+                elif len(messages) > 100:
+                    failure_reason = "message_limit_exceeded"
+                elif last_three_messages_exist_and_are_identical:
+                    failure_reason = "identical_messages_loop"
+                elif last_five_messages_no_tools:
+                    failure_reason = "no_tool_use_loop"
+
+                if failure_reason:
+                    goal_succeeded = False
+                    failure_reason_meta = failure_reason
+                    if failure_reason == "attempts_exceeded":
+                        self.answer = (
+                            "The analyst has not been able to answer the question in the allotted attempts. "
+                            "Refine the goal and make sure it is specific and longer to help the next analyst "
+                            "succeed where this one failed. You should remind it that when it creates its "
+                            "data extraction requests it should include details on how to avoid those pitfalls."
+                        )
+                        reasons = [
+                            message["content"]
+                            for message in messages
+                            if message["role"] == "tool"
+                            and message.get("name", "") == "complete_goal_by_answering_question_with_evidence"
+                        ]
+                        self.evidence = (
+                            ("Here are the reasons the analyst failed to reach its goal after ")
+                            + str(self.attempts)
+                            + " attempts:"
+                            + "\n\n"
+                            + "\n\n".join(reasons)
+                        )
+                    elif failure_reason == "no_tool_use_loop":
+                        self.answer = (
+                            "The analyst failed because it got stuck in a loop of talking without using tools. "
+                            "It repeatedly ignored instructions to use tools for data extraction."
+                        )
+                        self.evidence = (
+                            "Failure: Analyst stuck in 'no-tool' loop.\n"
+                            f"Last 5 messages had no tool calls. Context size: {len(messages)} messages.\n"
+                            "Likely cause: Model refused to execute tool calls despite prompts."
+                        )
+                    elif failure_reason == "identical_messages_loop":
+                        self.answer = (
+                            "The analyst failed because it got stuck outputting identical messages repeatedly."
+                        )
+                        self.evidence = "Failure: Identical message loop detected."
+                    else:
+                        self.answer = (
+                            "The analyst failed because the conversation became too long without a resolution."
+                        )
+                        self.evidence = f"Failure: Message limit exceeded ({len(messages)} messages)."
+
+                # Capture the last message BEFORE any system message appends
+                last_message = messages[-1] if messages else {}
+                last_message_content = last_message.get("content", "") or ""
+                last_message_has_no_tools = last_message.get("tool_calls", None) is None
+                last_message_is_assistant = last_message.get("role", "") == "assistant"
+
+                last_two_messages_no_tools = (
+                    messages[-1].get("tool_calls", None) is None and messages[-2].get("tool_calls", None) is None
+                )
+                if last_two_messages_no_tools:
+                    messages += [
+                        {
+                            "role": "system",
+                            "content": "Make sure to use tool calls to attempt to collect data or complete your goal, do not just talk to yourself.",
+                        }
+                    ]
+                # Check if the last message content is "null" AND has no tool calls - remind the analyst to use the answer tool
+                if (
+                    last_message_content == "null" or last_message_content is None or last_message_content == ""
+                ) and last_message_has_no_tools:
+                    reminder_message = {
+                        "role": "system",
+                        "content": "You returned an empty or null response. You must use the complete_goal_by_answering_question_with_evidence tool to submit your findings. Do not return null - call the tool with your answer and evidence.",
+                    }
+                    messages.append(reminder_message)
+                    self.db.add_analyst_context(self.name, reminder_message)
+                # NEW: Check if model wrote a substantive answer as text but forgot to use the completion tool
+                elif last_message_is_assistant and last_message_has_no_tools and len(last_message_content) > 200:
+                    # Model likely thinks it answered but forgot to use the tool
+                    reminder_message = {
+                        "role": "system",
+                        "content": (
+                            "You provided a detailed text response, but you did NOT call the "
+                            "complete_goal_by_answering_question_with_evidence tool. "
+                            "Your response will NOT be seen by the user unless you use that tool. "
+                            "Take your response above and submit it using "
+                            "complete_goal_by_answering_question_with_evidence(answer=..., evidence=..., data_collection_names=[...]). "
+                            "Do NOT repeat the analysis - just call the tool with your existing findings."
+                        ),
+                    }
+                    messages.append(reminder_message)
+                    self.db.add_analyst_context(self.name, reminder_message)
+
+                # NEW: Detect when model writes tool call syntax as TEXT instead of executing tools
+                # This is a Gemini-specific issue where it outputs "[Calling function..." as text
+                fake_tool_call_patterns = [
+                    r"\[Calling function",
+                    r"function extract_structured_data",
+                    r"function get_paper_metadata",
+                    r"function complete_goal",
+                    r"I will now call",
+                    r"Let me call the",
+                    r"Calling the .* tool",
+                ]
+                fake_tool_call_detected = (
+                    any(re.search(pattern, last_message_content, re.IGNORECASE) for pattern in fake_tool_call_patterns)
+                    if last_message_is_assistant and last_message_has_no_tools
+                    else False
+                )
+
+                if fake_tool_call_detected:
+                    reminder_message = {
+                        "role": "system",
+                        "content": (
+                            "⚠️ CRITICAL ERROR: You wrote tool call syntax as TEXT instead of actually executing the tool. "
+                            "Writing '[Calling function...]' or 'I will call...' does NOTHING. "
+                            "You MUST actually invoke the tool by making a proper function call. "
+                            "DO NOT describe what you will do - just DO IT by calling the tool directly. "
+                            "Make the actual tool call NOW."
+                        ),
+                    }
+                    messages.append(reminder_message)
+                    self.db.add_analyst_context(self.name, reminder_message)
+        finally:
+            # Always update metadata, even if an exception occurred
+            metadata = {
+                "goal_achieved": goal_succeeded,
+                "answer": self.answer,
+                "evidence": self.evidence,
+            }
+            if failure_reason_meta:
+                metadata["failure_reason"] = failure_reason_meta
+            self.db.add_analyst_metadata(self.name, metadata)

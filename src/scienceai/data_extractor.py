@@ -835,7 +835,13 @@ def verify_computation(derivation, expected_value):
 
 
 async def reflect_on_data_extraction(
-    extraction_dict, corpus, retries=3, limit_corpus=True, justification=None, return_problem_fields=False
+    extraction_dict,
+    corpus,
+    retries=3,
+    limit_corpus=True,
+    justification=None,
+    return_problem_fields=False,
+    collection_message="",
 ):
     """
     Validates data extraction results against source corpus with support for both direct quotes
@@ -848,6 +854,7 @@ async def reflect_on_data_extraction(
         limit_corpus: Whether to include full corpus in reflection prompt
         justification: Optional justification from extractor for borderline cases
         return_problem_fields: If True, returns (error_msg, [field_names]) tuple instead of just error_msg
+        collection_message: Purpose/use context - determines justification standard for derivations
     """
 
     def replace_numbers_with_words(text):
@@ -1015,8 +1022,21 @@ async def reflect_on_data_extraction(
                                 [field_base],
                             )
 
-    system_message = """You are a careful data analyst validating information extraction results.
+    system_message = f"""You are a careful data analyst validating information extraction results.
 Your task is to verify that all extracted DATA VALUES are justified by the source material.
+
+COLLECTION MESSAGE (Purpose/Justification Standard):
+{collection_message}
+This tells you HOW the data will be used, which determines the JUSTIFICATION STANDARD required:
+
+HIGH-RIGOR (meta-analysis, pooling):
+- Use this context to judge whether derivations have COMPLETE documentation
+- ✅ VALID: Derivation with full computation chain AND all source quotes
+- ❌ INVALID: Derivation with missing steps or incomplete source quotes
+
+STANDARD-RIGOR (summary, overview):
+- Derivations with reasonable documentation are acceptable
+- Inference chains can be more compact
 
 CRITICAL INSTRUCTION:
 You must IGNORE metadata fields such as 'source_location', 'successfully_extracted', and 'data_discrepancy_notes'
@@ -1155,7 +1175,9 @@ by the source material alone.""",
     return make_return("Data extraction validation failed to complete")
 
 
-async def extract_data(tool, corpus, retries=4, mode=ExtractionMode.FOCUSED, inappropriate_exit_threshold=2):
+async def extract_data(
+    tool, corpus, retries=4, mode=ExtractionMode.FOCUSED, inappropriate_exit_threshold=2, collection_message=""
+):
     """
     Extract data from a corpus using the provided tool.
 
@@ -1169,12 +1191,28 @@ async def extract_data(tool, corpus, retries=4, mode=ExtractionMode.FOCUSED, ina
               - RIGID: Strict mode (all fields required in schema)
         inappropriate_exit_threshold: Number of consecutive 'totally_inappropriate_extraction'
                                      signals before early exit (only in FOCUSED/RIGID modes)
+        collection_message: Purpose/use context - determines justification standard for derivations
 
     Returns:
         dict: Extracted data or {"failed_collection": reason}
     """
 
-    system_message = """You are a careful data analyst. Dutifully find the data in the provided research paper.
+    system_message = f"""You are a careful data analyst. Dutifully find the data in the provided research paper.
+
+COLLECTION MESSAGE (Purpose/Justification Standard):
+{collection_message}
+This tells you HOW the data will be used, which determines the JUSTIFICATION STANDARD required:
+
+HIGH-RIGOR (meta-analysis, pooling):
+- Derivations ARE acceptable but must have COMPLETE documentation
+- ✅ GOOD: "Total N = 45" derived from "Group A: 23 patients" + "Group B: 22 patients" with full computation chain
+- ❌ BAD: "Total N = 45" with only one source quote or missing computation
+- Every step must be traceable to verbatim quotes
+
+STANDARD-RIGOR (summary, overview):
+- Derivations acceptable with reasonable documentation
+- ✅ GOOD: "Total N = 45" with operation and at least one supporting quote
+- Inference chains can be more compact
 
 IMPORTANT INSTRUCTIONS FOR DATA EXTRACTION:
 
@@ -1185,19 +1223,19 @@ IMPORTANT INSTRUCTIONS FOR DATA EXTRACTION:
 
 2. DERIVATION STRUCTURE (when calculation is needed):
    A derivation field must be a properly structured object with these required components:
-   {
+   {{
      "operation": one of ["sum", "subtraction", "division", "multiplication", "lookup", "average", "custom"],
      "operation_description": "Human-readable explanation of what was calculated",
      "sources": [
-       {
+       {{
          "quote": "Exact quote from paper",
          "location": "Page/section where found",
          "extracted_value": numeric_value_from_this_quote
-       },
+       }},
        // ... more source objects as needed
      ],
      "computation": "The actual formula, e.g., '13 + 10 = 23'"
-   }
+   }}
 
    IMPORTANT FOR DERIVATIONS:
    - For multi-step inferences, include quotes from MULTIPLE sections of the paper
@@ -1302,7 +1340,10 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
                         use_field_tracking = mode == ExtractionMode.EXPLORATORY and is_last_retry
 
                         check_result = await reflect_on_data_extraction(
-                            output_dictionary, corpus, return_problem_fields=use_field_tracking
+                            output_dictionary,
+                            corpus,
+                            return_problem_fields=use_field_tracking,
+                            collection_message=collection_message,
                         )
 
                         # Handle return format based on mode
@@ -1336,7 +1377,10 @@ DO NOT provide derivation as a string - it must be a structured object as shown 
                                 if chat_response.choices[0].message.content:
                                     justification = chat_response.choices[0].message.content
                                     check = await reflect_on_data_extraction(
-                                        output_dictionary, corpus, justification=justification
+                                        output_dictionary,
+                                        corpus,
+                                        justification=justification,
+                                        collection_message=collection_message,
                                     )
                                     if check is not None:
                                         # EXPLORATORY mode: remove problem fields and return partial data

@@ -11,3 +11,9 @@
 - Make ONE tool call, wait for the result, then decide your next action based on that result
 
 This is MANDATORY. Each tool call must complete before you can make the next one.
+
+## File References
+
+**CRITICAL**: When referencing files you have created or saved, use only the **file name** (e.g., `results_summary.csv`), not full paths or sandbox URLs like `sandbox:/mnt/data/filename.zip`.
+
+The chat rendering system automatically detects file names and displays them with a preview and download button. Raw URLs clutter the response and provide no additional benefit.

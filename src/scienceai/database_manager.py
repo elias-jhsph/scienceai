@@ -261,26 +261,45 @@ class DatabaseManager:
                     added["Title"] = dict_data["metadata"]["title"][0]
                 if dict_data["metadata"].get("created") and dict_data["metadata"]["created"].get("date-time"):
                     added["Date"] = dict_data["metadata"]["created"]["date-time"][:10]
-                if dict_data["metadata"].get("author"):
-                    added["Authors"] = (
-                        dict_data["metadata"]["author"][0]["given"] + " " + dict_data["metadata"]["author"][0]["family"]
-                    )
+                try:
+                    author = dict_data["metadata"]["author"][0]
+                    given = author.get("given", "")
+                    family = author.get("family", author.get("name", "Unknown"))
+                    added["Authors"] = f"{given} {family}".strip()
+                except (KeyError, IndexError, TypeError) as e:
+                    logger.warning(f"Could not extract author for paper {paper_id}: {e}")
                 papers[paper_id].update(added)
             session.write()
         return True
 
+    def _clear_paper_error_status(self, paper_id):
+        """Clear error and status keys from a paper before reprocessing."""
+        if DDB.at("papers", key=paper_id).exists():
+            with DDB.at("papers").session() as (session, papers):
+                if paper_id in papers:
+                    papers[paper_id].pop("error", None)
+                    papers[paper_id].pop("status", None)
+                    session.write()
+
     async def process_paper(self, paper_id, semaphore):
         """Processes the paper asynchronously with a semaphore"""
+        import traceback
+
         async with semaphore:
             pdf_path = self.get_paper_pdf(paper_id)
             if not DDB.at(paper_id).exists():
+                # Clear any previous error/status before reprocessing
+                self._clear_paper_error_status(paper_id)
+
                 logger.debug(f"Processing paper {paper_id}...")
                 try:
                     processed_paper = await self.processor(pdf_path)
                     self.store_paper_json(paper_id, processed_paper)
                     logger.debug(f"Finished paper {paper_id}")
                 except Exception as e:
-                    logger.error(f"Failed to process paper {paper_id}: {e}")
+                    # Log full traceback for better debugging
+                    full_traceback = traceback.format_exc()
+                    logger.error(f"Failed to process paper {paper_id}: {e}\n{full_traceback}")
                     self.update_paper(paper_id, {"status": "failed", "error": str(e)})
 
     async def process_all_papers(self):
@@ -884,3 +903,93 @@ class DatabaseManager:
         shutil.copytree(self.project_path, os.path.join(self.storage_path, new_save))
         if existing_save:
             shutil.rmtree(existing_save)
+
+    def lock_project(self, timeout=5):
+        """
+        Attempt to acquire write locks on all critical database files.
+
+        This is used before force-terminating threads to ensure no writes are in progress.
+        If we can acquire locks on all critical files, it means no other process/thread
+        is currently writing to them, and it's safe to force-terminate.
+
+        Args:
+            timeout: Maximum seconds to wait for each lock (default 5)
+
+        Returns:
+            True if all locks acquired successfully, False otherwise
+        """
+        import contextlib
+        import threading
+
+        critical_files = ["chat", "Analysts", "papers", "update_time"]
+        acquired_sessions = []
+        lock_failed = threading.Event()
+
+        def try_acquire_lock(file_key):
+            try:
+                if DDB.at(file_key).exists():
+                    # Open a session which acquires the lock
+                    session_ctx = DDB.at(file_key).session()
+                    session, _data = session_ctx.__enter__()
+                    acquired_sessions.append((session_ctx, session))
+                    logger.debug(f"Lock acquired on {file_key}")
+            except Exception as e:
+                logger.warning(f"Failed to acquire lock on {file_key}: {e}")
+                lock_failed.set()
+
+        # Try to acquire all locks with timeout
+        threads = []
+        for file_key in critical_files:
+            t = threading.Thread(target=try_acquire_lock, args=(file_key,), daemon=True)
+            t.start()
+            threads.append(t)
+
+        # Wait for all threads with timeout
+        for t in threads:
+            t.join(timeout=timeout)
+            if t.is_alive():
+                logger.warning("Timeout waiting for lock")
+                lock_failed.set()
+
+        # Release all acquired sessions (we don't write, just checking they're available)
+        for session_ctx, _session in acquired_sessions:
+            with contextlib.suppress(Exception):
+                session_ctx.__exit__(None, None, None)
+
+        if lock_failed.is_set():
+            return False
+
+        logger.info("All database locks acquired - safe to terminate")
+        return True
+
+    def get_project_setting(self, key: str, default=None):
+        """
+        Get a project-level setting value.
+
+        Args:
+            key: The setting key (e.g., 'n_parallel_calls')
+            default: Default value if setting doesn't exist
+
+        Returns:
+            The setting value, or default if not found
+        """
+        if not DDB.at("settings").exists():
+            return default
+        settings = DDB.at("settings").read()
+        return settings.get(key, default)
+
+    @log_update
+    def set_project_setting(self, key: str, value):
+        """
+        Set a project-level setting value.
+
+        Args:
+            key: The setting key (e.g., 'n_parallel_calls')
+            value: The value to store
+        """
+        if not DDB.at("settings").exists():
+            DDB.at("settings").create({})
+        with DDB.at("settings").session() as (session, settings):
+            settings[key] = value
+            session.write()
+        return True

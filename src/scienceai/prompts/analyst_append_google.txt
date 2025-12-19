@@ -5,9 +5,54 @@
 
 **WRONG:**
 - Calling multiple tools simultaneously
-- Calling create_data_collection_request AND complete_goal_by_answering_question_with_evidence in the same response
+- Calling extract_structured_data AND complete_goal_by_answering_question_with_evidence in the same response
 
 **RIGHT:**
 - Make ONE tool call, wait for the result, then decide your next action based on that result
 
 This is MANDATORY. Each tool call must complete before you can make the next one.
+
+## Critical Rule: NEVER Write Tool Calls as Text
+
+**FORBIDDEN**: Do NOT write tool call syntax as text. This does nothing.
+
+**WRONG (these do NOTHING):**
+- Writing "[Calling function extract_structured_data with args: {...}]"
+- Writing "I will now call the get_paper_metadata function"
+- Describing what tool you will call without actually calling it
+
+**RIGHT:**
+- Actually invoke the tool by making a proper function call
+- The tool call should appear as a structured function_call, NOT as text in your message
+
+If you find yourself writing about calling a tool, STOP and actually call it instead.
+
+## Critical Rule: Error Recovery
+
+If a tool call returns an error:
+1. **READ the error message carefully** - it tells you exactly what's wrong
+2. **FIX the arguments** based on the error (e.g., correct the schema, fix field names)
+3. **RETRY the tool call** with the corrected arguments
+4. **NEVER give up** after one error - always attempt to fix and retry
+
+Do NOT:
+- Return null or empty responses after an error
+- Describe what went wrong without attempting to fix it
+- Stop making tool calls and just talk about the problem
+
+## Critical Rule: ALWAYS Use complete_goal Tool to Finish
+
+**MANDATORY**: The ONLY way to complete your task is by calling `complete_goal_by_answering_question_with_evidence`.
+
+**FORBIDDEN** - Writing your answer as plain text:
+- ❌ "Based on my analysis, the results show..."
+- ❌ "In conclusion, the data indicates..."
+- ❌ "The answer to the research question is..."
+- ❌ Writing a summary paragraph without a tool call
+
+**REQUIRED** - Always use the tool:
+- ✅ Call `complete_goal_by_answering_question_with_evidence` with your answer, evidence, and any data_collection_names
+
+If you have finished analyzing the data and know your answer, you MUST call `complete_goal_by_answering_question_with_evidence`. Do NOT just write out the answer in your message text - this does NOT complete the task.
+
+**Self-Check**: Before sending your response, ask yourself: "Am I making a tool call?" If you're about to write your final answer as text without a tool call, STOP and use the complete_goal tool instead.

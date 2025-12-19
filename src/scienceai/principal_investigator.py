@@ -83,12 +83,12 @@ def _load_pi_system_prompt() -> str:
 # System message is now loaded dynamically in PrincipalInvestigator.__init__
 
 
-# PI Module
 class PrincipalInvestigator:
     def __init__(self, dbr: DatabaseManager):
         self.db = dbr
         self._lock = threading.Lock()
-        self.n_parallel_calls = 1
+        # Load persistent setting, default to 1 if not set
+        self.n_parallel_calls = dbr.get_project_setting("n_parallel_calls", default=1)
         self.analysts = []
         analysts_db = dbr.get_all_analysts()
         for analyst_dict in analysts_db:
@@ -99,6 +99,7 @@ class PrincipalInvestigator:
             "get_analyst_data_link": self.get_analyst_data_link,
             "view_image": self.view_image,
             "validate_analytic_bundle": self.validate_analytic_bundle,
+            "mark_analyst_result_analyzed": self.mark_analyst_result_analyzed,
         }
         self.tools = [
             self.delegate_research_schema(),
@@ -107,6 +108,7 @@ class PrincipalInvestigator:
             self.run_python_code(None, return_tool=True),
             self.view_image(None, return_tool=True),
             validate_bundle_tool_schema(),
+            self.mark_analyst_result_analyzed(None, None, return_tool=True),
         ]
         self.tool_callables["run_python_code"] = self.run_python_code
         self.system_message = _load_pi_system_prompt()
@@ -203,7 +205,7 @@ class PrincipalInvestigator:
             "type": "function",
             "function": {
                 "name": "delegate_research",
-                "description": "Delegate data collection from research papers to a specialized Analyst Agent. "
+                "description": "Delegate data extraction from research papers to a specialized Analyst Agent. "
                 "CRITICAL: Each delegation must focus on ONE outcome type only. "
                 "For multiple outcomes (e.g., nonunion + time to union + infections), create SEPARATE delegate_research calls. "
                 "WRONG: One delegation for 'nonunion, time to union, and infection data'. "
@@ -222,7 +224,7 @@ class PrincipalInvestigator:
                         },
                         "question": {
                             "type": "string",
-                            "description": "The research question or data collection goal. Be specific about WHAT to collect, "
+                            "description": "The research question or data extraction goal. Be specific about WHAT to collect, "
                             "not HOW to format it. **If you already know which specific papers to analyze** "
                             "(e.g., from previous analyst results or your own analysis), include their paper IDs "
                             "or titles directly in the question (e.g., 'For papers [abc123def4, xyz789ghi0], collect "
@@ -235,14 +237,66 @@ class PrincipalInvestigator:
                         "require_file_output": {
                             "type": "boolean",
                             "description": "Set to true when you need downloadable CSV files with structured data (typically "
-                            "for 10+ papers or complex multi-field data collection). Set to false for quick queries "
-                            "or summary analyses. Default: false. When true, analyst MUST attach data collection files.",
+                            "for 10+ papers or complex multi-field data extraction). Set to false for quick queries "
+                            "or summary analyses. Default: false. When true, analyst MUST attach data extraction files.",
                         },
                     },
                     "required": ["name", "question"],
                 },
             },
         }
+
+    def _get_analyst_collections(self, analyst_name: str) -> list:
+        """
+        Get collection names for an analyst.
+
+        Returns a list of collection names (without timestamp suffixes).
+        """
+        try:
+            analysts = self.db.get_all_analysts()
+            for analyst in analysts:
+                if analyst.get("name") == analyst_name:
+                    tools = analyst.get("tools", [])
+                    # tool_name format: CollectionName_YYYY-MM-DD_HH_MM_SS (last 20 chars = _timestamp)
+                    # Actually: tool_name is just the collection_name stored directly
+                    return [tool.get("tool_name", "") for tool in tools if tool.get("tool_name")]
+            return []
+        except Exception as e:
+            logger.warning(f"Could not get collections for analyst {analyst_name}: {e}")
+            return []
+
+    def _build_loading_instructions(self, analyst_name: str, collections: list) -> str:
+        """
+        Build clear loading instructions with pandas code for all collections.
+
+        Args:
+            analyst_name: Name of the analyst (could include 'copy N' suffix)
+            collections: List of collection names
+
+        Returns:
+            Formatted instructions string with code examples
+        """
+        if not collections:
+            return ""
+
+        lines = [
+            "\n\n---",
+            "**📊 HOW TO LOAD THIS DATA (using pandas):**\n",
+            "```python",
+            "import pandas as pd",
+            "",
+        ]
+
+        for collection in collections:
+            lines.append(f"# Load '{collection}' collection")
+            lines.append(f"filename = load_analyst_data('{analyst_name}', '{collection}')")
+            lines.append(f"df_{collection.replace(' ', '_').replace('-', '_').lower()} = pd.read_csv(filename)")
+            lines.append("")
+
+        lines.append("```")
+        lines.append("---\n")
+
+        return "\n".join(lines)
 
     def delegate_research(self, name, question, require_file_output=False, n_parallel_calls=None):
         # Use instance variable if not explicitly provided (top-level call)
@@ -295,13 +349,44 @@ class PrincipalInvestigator:
                         logger.error(f"Parallel delegation error: {e}")
                         results.append(f"Error in parallel execution: {e}")
 
+            # Build combined loading instructions for all parallel copies
+            all_loading_instructions = []
+            for i in range(1, n_parallel_calls + 1):
+                copy_name = f"{name} copy {i}"
+                collections = self._get_analyst_collections(copy_name)
+                if collections:
+                    all_loading_instructions.append(f"**{copy_name}:**")
+                    all_loading_instructions.append("```python")
+                    all_loading_instructions.append("import pandas as pd")
+                    all_loading_instructions.append("")
+                    for collection in collections:
+                        all_loading_instructions.append(f"# Load '{collection}'")
+                        all_loading_instructions.append(f"filename = load_analyst_data('{copy_name}', '{collection}')")
+                        safe_name = collection.replace(" ", "_").replace("-", "_").lower()
+                        all_loading_instructions.append(f"df_{safe_name} = pd.read_csv(filename)")
+                        all_loading_instructions.append("")
+                    all_loading_instructions.append("```")
+                    all_loading_instructions.append("")
+
+            loading_block = ""
+            if all_loading_instructions:
+                loading_block = (
+                    "\n\n---\n"
+                    "**📊 HOW TO LOAD DATA FROM ALL ANALYST COPIES (using pandas):**\n\n"
+                    + "\n".join(all_loading_instructions)
+                    + "---\n"
+                )
+
             warning = (
                 "\n\n### ⚠️ Multi-Analyst Validation\n"
                 "These results were generated by independent analyst instances running in parallel. "
                 "Please carefully scrutinize the evidence provided by each replicate for inconsistencies, "
                 "hallucinations, or divergent interpretations of the data."
             )
-            return f"{header}\n\n" + "\n\n---\n\n".join(results) + warning
+
+            # Add loading instructions at TOP and BOTTOM
+            combined_results = "\n\n---\n\n".join(results)
+            return f"{header}{loading_block}\n\n{combined_results}{loading_block}{warning}"
 
         new_analyst = None
         if question is None:
@@ -322,8 +407,13 @@ class PrincipalInvestigator:
                         if analyst.answer is None:
                             new_analyst = analyst
                         else:
+                            # Build loading instructions for existing analyst
+                            collections = self._get_analyst_collections(analyst.name)
+                            loading_instructions = self._build_loading_instructions(analyst.name, collections)
+
                             return (
-                                "Response from "
+                                loading_instructions
+                                + "Response from "
                                 + analyst.name
                                 + ":\n"
                                 + analyst.answer
@@ -331,14 +421,21 @@ class PrincipalInvestigator:
                                 + analyst.name
                                 + ":\n"
                                 + analyst.evidence
+                                + loading_instructions
                             )
             if not new_analyst:
                 new_analyst = Analyst(self.db, name=name, goal=question, require_file_output=require_file_output)
                 self.analysts.append(new_analyst)
 
         new_analyst.pursue_goal()
+
+        # Build loading instructions for this analyst
+        collections = self._get_analyst_collections(name)
+        loading_instructions = self._build_loading_instructions(name, collections)
+
         return (
-            "Response from "
+            loading_instructions
+            + "Response from "
             + name
             + ":\n"
             + new_analyst.answer
@@ -346,6 +443,7 @@ class PrincipalInvestigator:
             + name
             + ":\n"
             + new_analyst.evidence
+            + loading_instructions
         )
 
     def get_analyst_data_link(self, analyst_name, data_collection_name, return_tool=False):
@@ -354,7 +452,7 @@ class PrincipalInvestigator:
                 "type": "function",
                 "function": {
                     "name": "get_analyst_data_link",
-                    "description": "Generate a download link for a data collection file previously created by an Analyst.",
+                    "description": "Generate a download link for a data extraction file previously created by an Analyst.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -362,7 +460,7 @@ class PrincipalInvestigator:
                                 "type": "string",
                                 "description": "Name of the analyst who created the collection",
                             },
-                            "data_collection_name": {"type": "string", "description": "Name of the data collection"},
+                            "data_collection_name": {"type": "string", "description": "Name of the data extraction"},
                         },
                         "additionalProperties": False,
                         "required": ["analyst_name", "data_collection_name"],
@@ -384,11 +482,12 @@ class PrincipalInvestigator:
                     "name": "run_python_code",
                     "description": "Executes Python code in a STATELESS environment. "
                     "CRITICAL: Each call starts completely fresh - variables, imports, and data do NOT persist between calls. "
-                    "ALWAYS start with: import pandas as pd; import numpy as np; df = pd.read_csv('/path/to/file.csv'). "
+                    "ALWAYS start with: import pandas as pd; import numpy as np. "
+                    "To load analyst data: filename = load_analyst_data('Analyst Name', 'collection_name'); df = pd.read_csv(filename). "
+                    "The load_analyst_data() helper is pre-defined - do NOT import it. "
                     "Use this for math, statistics, plotting, and creating files. "
                     "IMPORTANT: Your code runs in a dedicated workspace directory. Save files using RELATIVE paths only "
                     "(e.g., 'output.csv', 'plot.png'). Do NOT use 'pi_generated/' as a prefix - you are ALREADY in that directory. "
-                    "You can create subdirectories if needed, just don't name them 'pi_generated'. "
                     "Files created will be automatically detected and made available for download. "
                     "Standard output and errors are captured and returned.",
                     "parameters": {
@@ -430,6 +529,27 @@ class PrincipalInvestigator:
 
         # Helper to load analyst data
         def load_analyst_data(analyst_name, collection_name):
+            """
+            Load CSV data collected by an analyst into the current workspace.
+
+            This function retrieves data that was extracted by one of your analyst
+            delegations and copies it to your working directory for analysis.
+
+            Args:
+                analyst_name: The name of the analyst who collected the data
+                             (e.g., 'Outcome Scout Analyst', 'Sample Size Analyst copy 1')
+                collection_name: The name of the data collection created by the analyst
+                                (e.g., 'relevant_text', 'data_availability', 'extraction_data')
+
+            Returns:
+                str: The local filename of the CSV file (e.g., 'extraction_data.csv'),
+                     which can then be loaded with pd.read_csv(filename).
+                     Returns None if the data could not be found.
+
+            Example:
+                filename = load_analyst_data('Outcome Scout Analyst', 'data_availability')
+                df = pd.read_csv(filename)
+            """
             try:
                 # Use existing DB logic to get the CSV path
                 src_path = self.db.convert_analyst_tool_tracker(analyst_name, collection_name)
@@ -659,6 +779,137 @@ class PrincipalInvestigator:
         # validate_bundle now returns a string directly (agent-based)
         return validate_bundle(resolved_path)
 
+    def mark_analyst_result_analyzed(
+        self,
+        analyst_name: str,
+        investigation_summary: str,
+        normalization_applied: str = "",
+        copies_reconciled: list | None = None,
+        return_tool: bool = False,
+    ):
+        """
+        Mark analyst results as analyzed and trigger auto-compaction.
+
+        This tool should be called AFTER:
+        1. Loading analyst data with run_python_code
+        2. Investigating the data for quality/consistency
+        3. Normalizing data (outcome direction, group ordering, units)
+        4. Reconciling any parallel copies (if applicable)
+
+        Args:
+            analyst_name: Base name of the analyst (e.g., "Outcome Scout Analyst")
+            investigation_summary: What was found and what was done with the results
+            normalization_applied: Description of normalizations (e.g., "Inverted Paper X outcomes")
+            copies_reconciled: List of copy names if parallel analysts were used
+
+        Returns:
+            Confirmation message; also triggers auto-compaction of related messages
+        """
+        if return_tool:
+            return {
+                "type": "function",
+                "function": {
+                    "name": "mark_analyst_result_analyzed",
+                    "description": "Mark analyst results as analyzed after investigation. "
+                    "Call ONCE per analyst delegation AFTER: (1) loading data with run_python_code, "
+                    "(2) investigating data quality, (3) normalizing data, (4) reconciling parallel copies. "
+                    "For parallel copies, use the BASE analyst name (without 'copy N') - all copies are handled together. "
+                    "Triggers auto-compaction to free context. Do NOT call multiple times for the same analyst.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "analyst_name": {
+                                "type": "string",
+                                "description": "Base analyst name. For parallel copies, use the base name without 'copy N' suffix.",
+                            },
+                            "investigation_summary": {
+                                "type": "string",
+                                "description": "What you found and how you used the results. This becomes the compressed record.",
+                            },
+                            "normalization_applied": {
+                                "type": "string",
+                                "description": "Data normalizations applied: outcome direction fixes, group swaps, unit conversions. "
+                                "Leave empty if none needed.",
+                            },
+                            "copies_reconciled": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of copy analyst names if parallel analysts exist "
+                                "(e.g., ['Analyst copy 1', 'Analyst copy 2']).",
+                            },
+                        },
+                        "required": ["analyst_name", "investigation_summary"],
+                        "additionalProperties": False,
+                    },
+                },
+            }
+
+        if copies_reconciled is None:
+            copies_reconciled = []
+        elif isinstance(copies_reconciled, str):
+            # Handle case where model passes string instead of list
+            import ast
+
+            try:
+                copies_reconciled = ast.literal_eval(copies_reconciled)
+                if not isinstance(copies_reconciled, list):
+                    copies_reconciled = [copies_reconciled]
+            except (ValueError, SyntaxError):
+                copies_reconciled = [copies_reconciled] if copies_reconciled else []
+
+        # Auto-detect copies if not provided
+        all_analyst_names = [analyst_name]
+        if not copies_reconciled:
+            # Check if parallel copies exist
+            with self._lock:
+                for analyst in self.analysts:
+                    if analyst.name.startswith(f"{analyst_name} copy "):
+                        copies_reconciled.append(analyst.name)
+        all_analyst_names.extend(copies_reconciled)
+
+        # Check if already analyzed - prevents duplicate calls
+        messages = self.db.get_database_chat()
+        for msg in messages:
+            if msg.get("analyzed") and msg.get("analysis_notes", {}).get("analyst_name") == analyst_name:
+                return (
+                    f"❌ **ERROR**: Analyst '{analyst_name}' has ALREADY been marked as analyzed. "
+                    "Do NOT call this tool again for the same analyst. "
+                    "The delegation was already compacted and investigation notes were recorded."
+                )
+
+        # Find and compact the relevant messages in chat history
+        from .backend import compact_analyst_interaction
+
+        analysis_notes = {
+            "analyst_name": analyst_name,
+            "investigation_summary": investigation_summary,
+            "normalization_applied": normalization_applied,
+            "copies_reconciled": copies_reconciled,
+            "all_analyst_names": all_analyst_names,
+        }
+
+        compacted = compact_analyst_interaction(self.db, analyst_name, analysis_notes)
+
+        # Build result message
+        result_parts = [f"✅ **Analyst results marked as analyzed**: {analyst_name}"]
+
+        if copies_reconciled:
+            result_parts.append(f"\n**Copies reconciled**: {', '.join(copies_reconciled)}")
+
+        if normalization_applied:
+            result_parts.append(f"\n**Normalizations applied**: {normalization_applied}")
+
+        if compacted:
+            result_parts.append("\n\n🗜️ Delegation and response messages have been compacted to free context space.")
+        else:
+            result_parts.append(
+                "\n\n⚠️ Could not locate delegation messages to compact (they may already be compressed)."
+            )
+
+        result_parts.append(f"\n\n**Investigation summary recorded**:\n{investigation_summary}")
+
+        return "".join(result_parts)
+
     def tool_callback(self, response, function_name=None):
         self.messages.append(response)
         self.db.update_last_chat("Processed")
@@ -714,6 +965,27 @@ class PrincipalInvestigator:
         while called_tools or no_final_content:
             no_final_content = True
             loop_iteration += 1
+
+            # Check for pause request at the start of each iteration
+            from .backend import clear_pause_request, is_pause_requested
+
+            if is_pause_requested():
+                # Mark all pending messages as processed
+                messages = self.db.get_database_chat()
+                for msg in messages:
+                    if msg.get("status") == "Pending":
+                        msg["status"] = "Processed"
+                self.db.set_all_chat_messages(messages)
+
+                # Emit pause complete event to frontend (no chat message - silent pause)
+                from .__main__ import emit_pause_complete
+
+                emit_pause_complete()
+
+                clear_pause_request()
+                logger.info("Processing paused by user request")
+                return  # Exit processing loop
+
             called_tools = False
             # Get chat history, filtering out internal messages (like compression requests)
             chat_history = [m for m in self.db.get_database_chat() if not m.get("internal")]

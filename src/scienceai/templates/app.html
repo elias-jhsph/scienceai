@@ -145,7 +145,7 @@
                                     </div>
                                 </div>
                                 <div class="progress-info">
-                                    <div class="progress-label" id="progress-label">Data Collection</div>
+                                    <div class="progress-label" id="progress-label">Data Extraction</div>
                                     <div class="progress-description"></div>
                                 </div>
                             </div>
@@ -187,6 +187,12 @@
         </button>&nbsp
         <button id="analysis-button" class="menu-toggle" onclick="window.location.href = '/download_analysis'">
             <span data-text="Extracted Data">📊</span>
+        </button>&nbsp
+        <button id="compress-button" class="menu-toggle" onclick="showCompactModal()">
+            <span data-text="Compact">🗜️</span>
+        </button>&nbsp
+        <button id="pause-button" class="menu-toggle" onclick="showPauseModal()">
+            <span data-text="Pause">⏸️</span>
         </button>&nbsp
         <button id="close-button" class="menu-toggle" hx-get="/close_project" hx-trigger="click" hx-swap="innerHTML"
             hx-target="#last-checkpoint-close">
@@ -364,6 +370,58 @@
                 <button onclick="closeModal('reset-confirm-modal')">Cancel</button>
                 <button onclick="executeResetConversation()" class="danger">Reset
                     Everything</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compact Conversation Confirm Modal -->
+    <div id="compact-confirm-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('compact-confirm-modal')">&times;</span>
+            <h2>🗜️ Compact Conversation</h2>
+            <p>This will summarize the <strong>first 50%</strong> of tool call outputs to free up context space.</p>
+            <ul>
+                <li>Older tool outputs will be replaced with AI-generated summaries</li>
+                <li>Your original papers and extracted data remain intact</li>
+                <li>This helps continue long conversations that approach context limits</li>
+            </ul>
+            <p style="color: #d9534f;"><strong>⚠️ This cannot be undone. Consider saving a checkpoint first.</strong>
+            </p>
+            <div style="margin-top: 20px; text-align: right;">
+                <button onclick="closeModal('compact-confirm-modal')">Cancel</button>
+                <button onclick="executeCompaction()" class="primary">Compact Now</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pause Processing Confirm Modal -->
+    <div id="pause-confirm-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('pause-confirm-modal')">&times;</span>
+            <h2>⏸️ Pause Processing</h2>
+            <p>This will pause the conversation at the <strong>next safe opportunity</strong>.</p>
+            <ul>
+                <li>The current tool call or operation will complete first</li>
+                <li>No new LLM calls will be made after pausing</li>
+                <li>You can resume by sending a new message</li>
+            </ul>
+            <p style="color: var(--text-muted);">Use this when you want to interrupt a long-running operation.</p>
+            <div style="margin-top: 20px; text-align: right;">
+                <button onclick="closeModal('pause-confirm-modal')">Cancel</button>
+                <button onclick="executePause()" class="primary">Pause Now</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pause Pending Modal -->
+    <div id="pause-pending-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cancelPause()">&times;</span>
+            <h2>⏳ Pause Requested</h2>
+            <p>Waiting for current operation to complete...</p>
+            <p style="color: var(--text-muted);">The conversation will pause after the current tool call finishes.</p>
+            <div style="margin-top: 20px; text-align: right;">
+                <button onclick="cancelPause()" class="secondary">Cancel Pause</button>
             </div>
         </div>
     </div>
@@ -568,6 +626,101 @@
                 console.error('Error:', error);
                 closeModal('reset-confirm-modal');
                 alert('Error resetting conversation');
+            }
+        }
+
+        // Compaction Modal and trigger
+        function showCompactModal() {
+            openModal('compact-confirm-modal');
+        }
+
+        async function executeCompaction() {
+            closeModal('compact-confirm-modal');
+
+            const compressBtn = document.getElementById('compress-button');
+            const originalHTML = compressBtn.innerHTML;
+            compressBtn.innerHTML = '<span>⏳</span>';
+            compressBtn.disabled = true;
+
+            try {
+                const response = await fetch('/compress_context', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    compressBtn.innerHTML = '<span data-text="Done!">✅</span>';
+                    setTimeout(() => {
+                        compressBtn.innerHTML = originalHTML;
+                        compressBtn.disabled = false;
+                    }, 3000);
+                } else if (data.already_running) {
+                    alert('Compression is already in progress. Please wait.');
+                    compressBtn.innerHTML = originalHTML;
+                    compressBtn.disabled = false;
+                } else {
+                    alert('Compression failed: ' + (data.error || 'Unknown error'));
+                    compressBtn.innerHTML = originalHTML;
+                    compressBtn.disabled = false;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error triggering compaction');
+                compressBtn.innerHTML = originalHTML;
+                compressBtn.disabled = false;
+            }
+        }
+
+        // Pause Processing Modal and handlers
+        function showPauseModal() {
+            openModal('pause-confirm-modal');
+        }
+
+        async function executePause() {
+            closeModal('pause-confirm-modal');
+
+            const pauseBtn = document.getElementById('pause-button');
+            const originalHTML = pauseBtn.innerHTML;
+            pauseBtn.innerHTML = '<span>⏳</span>';
+            pauseBtn.disabled = true;
+
+            try {
+                const response = await fetch('/pause_processing', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    // Show pending modal
+                    openModal('pause-pending-modal');
+                    pauseBtn.innerHTML = '<span data-text="Pending">⏸️</span>';
+                } else {
+                    alert('Pause failed: ' + (data.error || 'Unknown error'));
+                    pauseBtn.innerHTML = originalHTML;
+                    pauseBtn.disabled = false;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error requesting pause');
+                pauseBtn.innerHTML = originalHTML;
+                pauseBtn.disabled = false;
+            }
+        }
+
+        async function cancelPause() {
+            closeModal('pause-pending-modal');
+
+            const pauseBtn = document.getElementById('pause-button');
+
+            try {
+                const response = await fetch('/cancel_pause', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    pauseBtn.innerHTML = '<span data-text="Pause">⏸️</span>';
+                    pauseBtn.disabled = false;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                // Reset button anyway
+                pauseBtn.innerHTML = '<span data-text="Pause">⏸️</span>';
+                pauseBtn.disabled = false;
             }
         }
     </script>

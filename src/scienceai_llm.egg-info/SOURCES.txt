@@ -23,7 +23,6 @@ src/scienceai/process_paper.py
 src/scienceai/py.typed
 src/scienceai/reasoning.py
 src/scienceai/scienceai-config.example.json
-src/scienceai/test.json
 src/scienceai/prompts/analyst_append_anthropic.txt
 src/scienceai/prompts/analyst_append_google.txt
 src/scienceai/prompts/analyst_append_openai.txt
@@ -56,13 +55,16 @@ src/scienceai_llm.egg-info/dependency_links.txt
 src/scienceai_llm.egg-info/entry_points.txt
 src/scienceai_llm.egg-info/requires.txt
 src/scienceai_llm.egg-info/top_level.txt
+tests/test_analyst.py
 tests/test_client.py
+tests/test_data_extractor.py
 tests/test_data_types.py
 tests/test_database_manager.py
 tests/test_error_handling_verification.py
 tests/test_ingestion_verification.py
 tests/test_interface_manual.py
 tests/test_llm.py
+tests/test_llm_providers.py
 tests/test_load_data_verification.py
 tests/test_schema_generation.py
 tests/test_token_clamping_temp.py

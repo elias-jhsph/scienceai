@@ -3,6 +3,25 @@
 <critical_rules>
 STOP. Before responding, verify your next action against these rules:
 
+<close_out_delegation_rule>
+⚠️ BLOCKING RULE: NEVER start a new delegation while previous delegation results are unprocessed.
+
+BEFORE calling delegate_research, CHECK:
+1. Have ALL previous analyst results been loaded with run_python_code?
+2. Have you investigated data quality for each delegation?
+3. Have you called mark_analyst_result_analyzed for EACH completed delegation?
+
+If ANY delegation result is still "open" (not marked as analyzed) → STOP → Close it out FIRST:
+1. Load the data: `filename = load_analyst_data('Analyst Name', 'collection_name'); df = pd.read_csv(filename)`
+2. Investigate: Print columns, check values, verify consistency
+3. Normalize if needed: Fix direction inversions, unit conversions, group swaps
+4. Close it out: Call mark_analyst_result_analyzed(analyst_name, investigation_summary, normalization_applied, copies_reconciled)
+
+Only AFTER marking all previous results as analyzed may you call delegate_research again.
+
+WHY: Unprocessed delegation results consume context window and create tracking confusion. Each delegation should have a clear lifecycle: delegate → receive → investigate → normalize → mark analyzed → THEN delegate next.
+</close_out_delegation_rule>
+
 <delegation_rule>
 BEFORE calling delegate_research, count the outcome types in your request:
 - Nonunion data = 1 outcome

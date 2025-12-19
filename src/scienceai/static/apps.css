@@ -1266,7 +1266,7 @@ details div:not(.nested) {
     stroke-linecap: round;
     stroke-dasharray: 151;
     stroke-dashoffset: 151;
-    transition: stroke-dashoffset 0.3s ease;
+    transition: stroke-dashoffset 0.5s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .progress-text {
@@ -1699,4 +1699,8 @@ select {
 [data-theme="dark"] .context-limit-text ul,
 [data-theme="dark"] .context-limit-text li {
     color: var(--text-main);
+}
+
+[data-theme="dark"] .chat-input-container {
+    background-color: transparent !important;
 }

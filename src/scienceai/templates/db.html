@@ -2,7 +2,7 @@
     <h2>Analyst Replicates: &nbsp;<div class="parallel-calls-control" title="Auto Analyst Replicates">
             <select id="parallel-calls-select" onchange="updateParallelCalls(this.value)"
                 style="padding: 2px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); font-size: 0.9em;">
-                <option value="1" selected>1×</option>
+                <option value="1">1×</option>
                 <option value="2">2×</option>
                 <option value="3">3×</option>
             </select>
@@ -30,6 +30,23 @@
                 console.error('Error:', error);
             });
     }
+
+    // Load the persisted parallel calls setting immediately (template loaded dynamically)
+    (function loadParallelCallsSetting() {
+        fetch('/get_parallel_calls')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.count) {
+                    const select = document.getElementById('parallel-calls-select');
+                    if (select) {
+                        select.value = data.count.toString();
+                    }
+                }
+            })
+            .catch((error) => {
+                console.error('Error loading parallel calls setting:', error);
+            });
+    })();
 </script>
 <div id="data-viewer">
     {{ html_snippet | safe }}

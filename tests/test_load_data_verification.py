@@ -41,6 +41,9 @@ class MockDB:
     def create_pi_arbitrary_csv(self, name, content):
         pass
 
+    def get_project_setting(self, key, default=None):
+        return default
+
     def convert_analyst_tool_tracker(self, analyst_name, collection_name):
         # Mock returning the dummy CSV path
         if analyst_name == "Test Analyst" and collection_name == "test_collection":

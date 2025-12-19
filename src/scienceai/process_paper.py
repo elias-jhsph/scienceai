@@ -955,8 +955,10 @@ async def gather_metadata(pdf_path, pages):
 
     if found_doi and crossref_data:
         metadata = crossref_data["message"]
-        if "given" not in metadata["author"][0]:
-            metadata["author"][0] = {"given": "", "family": metadata["author"][0]["name"]}
+        # Check if author field exists and is a non-empty list before accessing
+        if metadata.get("author") and len(metadata["author"]) > 0:
+            if "given" not in metadata["author"][0]:
+                metadata["author"][0] = {"given": "", "family": metadata["author"][0].get("name", "Unknown")}
 
         dois = []
         if "reference" in metadata:

@@ -440,14 +440,21 @@ Call report_validation_result when done."""
             # Build proper message to append
             msg_to_append = {"role": "assistant", "content": assistant_message.content or ""}
             if assistant_message.tool_calls:
-                msg_to_append["tool_calls"] = [
-                    {
+                tool_calls_list = []
+                for tc in assistant_message.tool_calls:
+                    tc_entry = {
                         "id": tc.id,
                         "type": "function",
                         "function": {"name": tc.function.name, "arguments": tc.function.arguments},
                     }
-                    for tc in assistant_message.tool_calls
-                ]
+                    # Preserve thought_signature if present (required for Gemini 3 Pro with thinking)
+                    if hasattr(tc, "thought_signature") and tc.thought_signature:
+                        tc_entry["thought_signature"] = tc.thought_signature
+                    tool_calls_list.append(tc_entry)
+                msg_to_append["tool_calls"] = tool_calls_list
+            # Preserve thinking block if present
+            if hasattr(assistant_message, "thinking") and assistant_message.thinking:
+                msg_to_append["thinking"] = assistant_message.thinking
             messages.append(msg_to_append)
 
             if not assistant_message.tool_calls:

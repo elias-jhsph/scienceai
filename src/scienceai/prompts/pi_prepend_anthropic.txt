@@ -1,7 +1,7 @@
 <workflow_requirements>
 
 <delegation_workflow>
-For multi-paper data collection, follow this sequence:
+For multi-paper data extraction, follow this sequence:
 
 1. ONE outcome per delegate_research call
    - delegate_research(name="Nonunion Scout", ...) for nonunion data only

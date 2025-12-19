@@ -12,6 +12,7 @@ Configuration:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import traceback
@@ -74,16 +75,76 @@ class LLMClientWrapper:
                 self._is_async = is_async
 
             def create(self, **kwargs: Any) -> Any:
-                """Create a chat completion (sync)."""
-                provider = get_provider()
-                response = provider.chat_completion(**kwargs)
-                return _wrap_response(response)
+                """Create a chat completion (sync) with interruptible polling."""
+                # Check before starting
+                if STOP_EVENT and STOP_EVENT.is_set():
+                    raise SystemExit("Operation suppressed by STOP_EVENT")
+
+                async def run_interruptible():
+                    provider = get_provider()
+                    # Use async implementation under the hood
+                    task = asyncio.create_task(provider.chat_completion_async(**kwargs))
+
+                    while not task.done():
+                        if STOP_EVENT and STOP_EVENT.is_set():
+                            task.cancel()
+                            with contextlib.suppress(asyncio.CancelledError):
+                                await task
+                            raise SystemExit("Operation suppressed by STOP_EVENT")
+
+                        try:
+                            # Wait for task or timeout
+                            await asyncio.wait_for(asyncio.shield(task), timeout=0.1)
+                            return await task
+                        except TimeoutError:
+                            continue
+
+                    return await task
+
+                # Prepare coroutine object
+                coro = run_interruptible()
+                try:
+                    # Run the async wrapper
+                    response = asyncio.run(coro)
+                    return _wrap_response(response)
+                except RuntimeError as e:
+                    # Fallback if we are already in an event loop
+                    if "asyncio.run() cannot be called from a running event loop" in str(e):
+                        # Close the unused coroutine to prevent RuntimeWarning
+                        coro.close()
+
+                        provider = get_provider()
+                        response = provider.chat_completion(**kwargs)
+                        return _wrap_response(response)
+                    raise e
+                except SystemExit:
+                    raise
+                except Exception as e:
+                    raise e
 
             async def acreate(self, **kwargs: Any) -> Any:
                 """Create a chat completion (async)."""
+                if STOP_EVENT and STOP_EVENT.is_set():
+                    raise SystemExit("Operation suppressed by STOP_EVENT")
+
                 provider = get_provider()
-                response = await provider.chat_completion_async(**kwargs)
-                return _wrap_response(response)
+                # Create task to allow polling
+                task = asyncio.create_task(provider.chat_completion_async(**kwargs))
+
+                while not task.done():
+                    if STOP_EVENT and STOP_EVENT.is_set():
+                        task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await task
+                        raise SystemExit("Operation suppressed by STOP_EVENT")
+
+                    try:
+                        await asyncio.wait_for(asyncio.shield(task), timeout=0.1)
+                        return _wrap_response(await task)
+                    except TimeoutError:
+                        continue
+
+                return _wrap_response(await task)
 
 
 class AsyncLLMClientWrapper(LLMClientWrapper):
@@ -107,9 +168,27 @@ class AsyncLLMClientWrapper(LLMClientWrapper):
 
             async def create(self, **kwargs: Any) -> Any:
                 """Create a chat completion (async)."""
+                if STOP_EVENT and STOP_EVENT.is_set():
+                    raise SystemExit("Operation suppressed by STOP_EVENT")
+
                 provider = get_provider()
-                response = await provider.chat_completion_async(**kwargs)
-                return _wrap_response(response)
+                # Create task to allow polling
+                task = asyncio.create_task(provider.chat_completion_async(**kwargs))
+
+                while not task.done():
+                    if STOP_EVENT and STOP_EVENT.is_set():
+                        task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await task
+                        raise SystemExit("Operation suppressed by STOP_EVENT")
+
+                    try:
+                        await asyncio.wait_for(asyncio.shield(task), timeout=0.1)
+                        return _wrap_response(await task)
+                    except TimeoutError:
+                        continue
+
+                return _wrap_response(await task)
 
 
 class _WrappedResponse:
@@ -162,6 +241,8 @@ class _ToolCallWrapper:
         self.id = tool_call.get("id", "")
         self.type = tool_call.get("type", "function")
         self.function = self._Function(tool_call.get("function", {}))
+        # Preserve thought_signature if present (required for Gemini 3 Pro with thinking)
+        self.thought_signature = tool_call.get("thought_signature")
 
     class _Function:
         """Wrapper for function details."""
@@ -262,28 +343,32 @@ async def use_tools(
     if tool_calls:
         for tool_call in tool_calls:
             if isinstance(tool_call, dict):
-                tool_calls_list.append(
-                    {
-                        "function": {
-                            "strict": True,
-                            "arguments": tool_call["function"]["arguments"],
-                            "name": tool_call["function"]["name"],
-                        },
-                        "id": tool_call["id"],
-                        "type": "function",
-                    }
-                )
+                tc_entry = {
+                    "function": {
+                        "strict": True,
+                        "arguments": tool_call["function"]["arguments"],
+                        "name": tool_call["function"]["name"],
+                    },
+                    "id": tool_call["id"],
+                    "type": "function",
+                }
+                # Preserve thought_signature if present
+                if tool_call.get("thought_signature"):
+                    tc_entry["thought_signature"] = tool_call["thought_signature"]
+                tool_calls_list.append(tc_entry)
             else:
-                tool_calls_list.append(
-                    {
-                        "function": {
-                            "arguments": tool_call.function.arguments,
-                            "name": tool_call.function.name,
-                        },
-                        "id": tool_call.id,
-                        "type": "function",
-                    }
-                )
+                tc_entry = {
+                    "function": {
+                        "arguments": tool_call.function.arguments,
+                        "name": tool_call.function.name,
+                    },
+                    "id": tool_call.id,
+                    "type": "function",
+                }
+                # Preserve thought_signature if present (from _ToolCallWrapper)
+                if hasattr(tool_call, "thought_signature") and tool_call.thought_signature:
+                    tc_entry["thought_signature"] = tool_call.thought_signature
+                tool_calls_list.append(tc_entry)
 
     # Build assistant message with or without tool calls
     if call_functions:
@@ -351,6 +436,9 @@ async def use_tool(
     Returns:
         Tuple of (results, errors) message lists.
     """
+    if STOP_EVENT and STOP_EVENT.is_set():
+        raise SystemExit("Operation suppressed by STOP_EVENT")
+
     if function_dict is None:
         function_dict = {}
 
@@ -448,28 +536,32 @@ def use_tools_sync(
     if tool_calls:
         for tool_call in tool_calls:
             if isinstance(tool_call, dict):
-                tool_calls_list.append(
-                    {
-                        "function": {
-                            "strict": True,
-                            "arguments": tool_call["function"]["arguments"],
-                            "name": tool_call["function"]["name"],
-                        },
-                        "id": tool_call["id"],
-                        "type": "function",
-                    }
-                )
+                tc_entry = {
+                    "function": {
+                        "strict": True,
+                        "arguments": tool_call["function"]["arguments"],
+                        "name": tool_call["function"]["name"],
+                    },
+                    "id": tool_call["id"],
+                    "type": "function",
+                }
+                # Preserve thought_signature if present
+                if tool_call.get("thought_signature"):
+                    tc_entry["thought_signature"] = tool_call["thought_signature"]
+                tool_calls_list.append(tc_entry)
             else:
-                tool_calls_list.append(
-                    {
-                        "function": {
-                            "arguments": tool_call.function.arguments,
-                            "name": tool_call.function.name,
-                        },
-                        "id": tool_call.id,
-                        "type": "function",
-                    }
-                )
+                tc_entry = {
+                    "function": {
+                        "arguments": tool_call.function.arguments,
+                        "name": tool_call.function.name,
+                    },
+                    "id": tool_call.id,
+                    "type": "function",
+                }
+                # Preserve thought_signature if present (from _ToolCallWrapper)
+                if hasattr(tool_call, "thought_signature") and tool_call.thought_signature:
+                    tc_entry["thought_signature"] = tool_call.thought_signature
+                tool_calls_list.append(tc_entry)
 
     if call_functions:
         assistant_msg: MessageDict = {"content": content, "role": "assistant"}
@@ -477,6 +569,11 @@ def use_tools_sync(
             assistant_msg["tool_calls"] = tool_calls_list
         if thinking:
             assistant_msg["thinking"] = thinking
+            logger.info(
+                f"use_tools_sync: Including thinking in assistant message (signature: {thinking.get('signature', 'N/A')[:30]}...)"
+            )
+        else:
+            logger.debug("use_tools_sync: No thinking block in response")
         new_history: list[MessageDict] = [assistant_msg]
 
     if pre_tool_call:
@@ -529,6 +626,9 @@ def use_tool_sync(
     Returns:
         Tuple of (results, errors) message lists.
     """
+    if STOP_EVENT and STOP_EVENT.is_set():
+        raise SystemExit("Operation suppressed by STOP_EVENT")
+
     if function_dict is None:
         function_dict = {}
 

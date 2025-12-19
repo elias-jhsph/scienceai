@@ -1,18 +1,23 @@
 {% if last_save %}
-    <p>Last save checkpoint: {{last_save}}</p>
-    <br>
-    {% if ready %}
-        <button onclick="window.location.href='/close_project?confirm=T'">Close</button>
-    {% else %}
-        {% if option %}
-            <p>Would you like to save the current progress?</p>
-            <button onclick="window.location.href='/save'">Save</button>
-        {% endif %}
-            <p>Processing is still ongoing and closing the project now may require you to revert a previous checkpoint. Are you sure you want to close the project?</p>
-            <button onclick="window.location.href='/close_project?confirm=T'">Close</button>
-    {% endif %}
+<p>Last save checkpoint: {{last_save}}</p>
+<br>
+{% if ready %}
+<button onclick="window.location.href='/close_project?confirm=T'">Close</button>
 {% else %}
-    <p>This project has not reached a save checkpoint yet and will save automatically when it does.</p>
-    <p>This doesn't necessarily mean that processing won't continue near where you left off after closing the project at this point.</p>
-    <button onclick="window.location.href='/close_project?confirm=T'">Close</button>
+{% if option %}
+<p>Would you like to save the current progress?</p>
+<button onclick="window.location.href='/save'">Save</button>
+<p>Or close without saving:</p>
+<button onclick="window.location.href='/close_project?confirm=T'">Close</button>
+{% else %}
+<p>Processing is still ongoing so the previous checkpoint is not saved. Are you sure you want to close the project (Will
+    need to open it again to continue processing so it can reach a new checkpoint before exporting a save file)?</p>
+<button onclick="window.location.href='/close_project?confirm=T'">Close</button>
+{% endif %}
+{% endif %}
+{% else %}
+<p>This project has not reached a save checkpoint yet and will save automatically when it does.</p>
+<p>This doesn't necessarily mean that processing won't continue near where you left off after closing the project at
+    this point.</p>
+<button onclick="window.location.href='/close_project?confirm=T'">Close</button>
 {% endif %}

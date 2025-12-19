@@ -1,8 +1,29 @@
+import json
 import os
 import traceback
 
 # Module-level flag to prevent double-starting compression
 _compression_running = False
+
+# Module-level flag for pause requests
+_pause_requested = False
+
+
+def is_pause_requested():
+    """Check if a pause has been requested."""
+    return _pause_requested
+
+
+def set_pause_requested(value: bool):
+    """Set the pause request flag."""
+    global _pause_requested
+    _pause_requested = value
+
+
+def clear_pause_request():
+    """Clear the pause request flag (called after pause completes)."""
+    global _pause_requested
+    _pause_requested = False
 
 
 async def compress_conversation_context(dm, skip_user_message=False):
@@ -193,7 +214,7 @@ async def compress_conversation_context(dm, skip_user_message=False):
                 if analyst_names:
                     metadata_parts.append(f"**Analyst(s):** {', '.join(analyst_names)}")
                 if collection_names:
-                    metadata_parts.append(f"**Data Collection(s):** {', '.join(collection_names)}")
+                    metadata_parts.append(f"**Data Extraction(s):** {', '.join(collection_names)}")
 
             elif is_python_call:
                 # For run_python_code: Extract from load_analyst_data('Analyst Name', 'Collection Name')
@@ -207,7 +228,7 @@ async def compress_conversation_context(dm, skip_user_message=False):
                     if analysts_from_python:
                         metadata_parts.append(f"**Used Python to access data from:** {', '.join(analysts_from_python)}")
                     if collections_from_python:
-                        metadata_parts.append(f"**Data Collection(s) accessed:** {', '.join(collections_from_python)}")
+                        metadata_parts.append(f"**Data Extraction(s) accessed:** {', '.join(collections_from_python)}")
 
                 # Extract file names from quoted strings ending in common extensions
                 # Use non-capturing group (?:...) so findall returns strings, not tuples
@@ -235,6 +256,8 @@ async def compress_conversation_context(dm, skip_user_message=False):
             )
 
             # Replace the message in place
+            # NOTE: Role stays "assistant" in DB for proper display
+            # On-the-fly conversion to "user" happens in llm_providers.py when thinking is enabled
             messages[idx] = {
                 "content": compressed_content,
                 "role": "assistant",
@@ -326,6 +349,200 @@ async def compress_conversation_context(dm, skip_user_message=False):
     dm.update_last_chat("Processed")
 
     print(f"Context compression complete. Compressed {len(indices_to_compress)} messages.")
+
+
+def compact_analyst_interaction(dm, analyst_name: str, analysis_notes: dict) -> bool:
+    """
+    Compact a specific analyst delegation and response pair.
+
+    This performs targeted compaction using the PI's investigation notes,
+    rather than the general LLM-based summarization.
+
+    Args:
+        dm: DatabaseManager instance
+        analyst_name: Name of the analyst whose interaction to compact
+        analysis_notes: Dict containing:
+            - investigation_summary: PI's summary of what was found/done
+            - normalization_applied: What normalizations were applied
+            - copies_reconciled: List of copy analyst names
+            - all_analyst_names: All analyst names including copies
+
+    Returns:
+        True if messages were compacted, False otherwise
+    """
+    import re
+    from datetime import datetime
+
+    import dictdatabase as DDB
+
+    messages = dm.get_database_chat()
+    all_analyst_names = analysis_notes.get("all_analyst_names", [analyst_name])
+
+    # Build pattern to match delegate_research calls for these analysts
+    # Look for tool calls that contain the analyst name
+    indices_to_compact = []
+
+    for idx, msg in enumerate(messages):
+        # Skip already compressed messages
+        if msg.get("compressed") or msg.get("analyzed"):
+            continue
+
+        # Check for assistant message with delegate_research tool call
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            for tool_call in msg.get("tool_calls", []):
+                func = tool_call.get("function", {})
+                if func.get("name") == "delegate_research":
+                    try:
+                        args = json.loads(func.get("arguments", "{}"))
+                        called_name = args.get("name", "")
+                        # Check if this matches any of our analyst names
+                        if called_name in all_analyst_names:
+                            indices_to_compact.append(idx)
+                            # Also find the corresponding tool response(s)
+                            tool_call_id = tool_call.get("id")
+                            if tool_call_id:
+                                # Look for matching tool response
+                                for resp_idx in range(idx + 1, len(messages)):
+                                    resp_msg = messages[resp_idx]
+                                    if resp_msg.get("role") == "tool" and resp_msg.get("tool_call_id") == tool_call_id:
+                                        indices_to_compact.append(resp_idx)
+                                        break
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+
+        # Also check for tool responses that mention "Response from [analyst_name]:"
+        if msg.get("role") == "tool" and not msg.get("compressed"):
+            content = msg.get("content", "")
+            for name in all_analyst_names:
+                if f"Response from {name}:" in content:
+                    if idx not in indices_to_compact:
+                        indices_to_compact.append(idx)
+                    break
+
+    if not indices_to_compact:
+        return False
+
+    # Remove duplicates and sort
+    indices_to_compact = sorted(set(indices_to_compact))
+
+    # Build the compressed message content
+    investigation_summary = analysis_notes.get("investigation_summary", "Investigation complete.")
+    normalization_applied = analysis_notes.get("normalization_applied", "")
+    copies_reconciled = analysis_notes.get("copies_reconciled", [])
+    # Defensive handling: ensure copies_reconciled is a list, not a string
+    if isinstance(copies_reconciled, str):
+        import ast
+
+        try:
+            copies_reconciled = ast.literal_eval(copies_reconciled)
+            if not isinstance(copies_reconciled, list):
+                copies_reconciled = [copies_reconciled]
+        except (ValueError, SyntaxError):
+            copies_reconciled = [copies_reconciled] if copies_reconciled else []
+
+    # Calculate original size for reporting
+    original_size = sum(len(messages[idx].get("content", "") or "") for idx in indices_to_compact)
+
+    # Build metadata section
+    metadata_parts = [f"**Analyst**: {analyst_name}"]
+    if copies_reconciled:
+        metadata_parts.append(f"**Copies reconciled**: {', '.join(copies_reconciled)}")
+    if normalization_applied:
+        metadata_parts.append(f"**Normalizations**: {normalization_applied}")
+
+    # Extract collection names from the original content
+    collection_names = []
+    for idx in indices_to_compact:
+        content = messages[idx].get("content", "") or ""
+        # Match viewCSV patterns
+        csv_matches = re.findall(r"viewCSV\(['\"]download/[^'\"]*?/([^/'\"]+)\.csv['\"]\)", content)
+        for csv_name in csv_matches:
+            # Remove timestamp suffix
+            clean_name = re.sub(r"_\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2}$", "", csv_name)
+            if clean_name not in collection_names:
+                collection_names.append(clean_name)
+
+    if collection_names:
+        metadata_parts.append(f"**Data collections**: {', '.join(collection_names)}")
+
+    metadata_section = "\n".join(metadata_parts)
+
+    # Build data access reference section showing which copy owns which collection
+    data_access_lines = []
+    all_analyst_names = analysis_notes.get("all_analyst_names", [analyst_name])
+
+    for copy_name in all_analyst_names:
+        try:
+            analyst_meta = dm.get_analyst_metadata(copy_name)
+            copy_collections = []
+            for tool in analyst_meta.get("tools", []):
+                tool_name = tool.get("tool_name", "")
+                # Remove timestamp suffix to get clean collection name
+                clean_name = re.sub(r"_\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2}$", "", tool_name)
+                if clean_name:
+                    copy_collections.append(clean_name)
+
+            if copy_collections:
+                data_access_lines.append(f"**{copy_name}**: {', '.join(copy_collections)}")
+                for coll in copy_collections:
+                    data_access_lines.append(f"  → `pd.read_csv(load_analyst_data('{copy_name}', '{coll}'))`")
+        except (ValueError, KeyError):
+            # Analyst not found or no tools - skip silently
+            pass
+
+    data_access_section = ""
+    if data_access_lines:
+        data_access_section = (
+            "**Data Access Reference** (use in `run_python_code` to access data or to make corrections/normalization that may be discovered later):\n"
+            + "\n".join(data_access_lines)
+            + "\n\n"
+        )
+
+    compressed_content = (
+        f"[📊 Analyzed Delegation Result]\n\n"
+        f"{metadata_section}\n\n"
+        f"---\n\n"
+        f"**Investigation Summary**:\n{investigation_summary}\n\n"
+        f"---\n\n"
+        f"{data_access_section}"
+        f"*This delegation was analyzed and compacted. Original content was {original_size} characters.*"
+    )
+
+    # Instead of replacing the first message in-place (which can break thinking block structure),
+    # we:
+    # 1. Insert a new compressed message at the position of the first message
+    # 2. Mark ALL original messages for removal (including the first)
+    first_idx = indices_to_compact[0]
+
+    new_compressed_message = {
+        "content": compressed_content,
+        "role": "assistant",
+        "status": "Processed",
+        "time": datetime.now().strftime("%B %d, %Y %I:%M:%S %p %Z"),
+        "compressed": True,
+        "analyzed": True,
+        "analysis_notes": analysis_notes,
+    }
+
+    # Mark ALL messages in indices_to_compact for removal
+    for idx in indices_to_compact:
+        messages[idx]["_remove"] = True
+
+    # Filter out removed messages
+    messages = [m for m in messages if not m.get("_remove")]
+
+    # Insert the new compressed message at the position where the first removed message was
+    # Since we removed messages, we need to calculate the new position
+    # The new position is first_idx minus the number of removed messages before it (which is 0)
+    messages.insert(first_idx, new_compressed_message)
+
+    # Save the updated messages
+    with DDB.at("chat").session() as (session, chat):
+        chat["messages"] = messages
+        session.write()
+
+    print(f"Compacted analyst interaction for {analyst_name}: {len(indices_to_compact)} messages -> 1 message")
+    return True
 
 
 def run_backend(folder, project_path, storage_path, message_queue, stop_event, ingest=True, error_queue=None):
@@ -569,7 +786,7 @@ def run_backend(folder, project_path, storage_path, message_queue, stop_event, i
                             except Exception as e:
                                 print(f"Reset: Failed to clear pi_generated: {e}")
 
-                        # Clear analyst tool tracker directory where data collection request tracker exports are stored
+                        # Clear analyst tool tracker directory where data extraction request tracker exports are stored
 
                         # Clear chat messages but keep first 2 (intro messages)
                         dm.revert_chat_from_index(2)
@@ -586,7 +803,9 @@ def run_backend(folder, project_path, storage_path, message_queue, stop_event, i
                             if count > 3:
                                 count = 3
                             pi.n_parallel_calls = count
-                            print(f"Updated parallel calls to {count}")
+                            # Persist the setting to the database for restarts
+                            dm.set_project_setting("n_parallel_calls", count)
+                            print(f"Updated parallel calls to {count} (persisted)")
                         except ValueError:
                             print(f"Invalid parallel calls count: {updates}")
                         continue
@@ -599,6 +818,9 @@ def run_backend(folder, project_path, storage_path, message_queue, stop_event, i
                     if end - start > 10 and sys.platform == "darwin":
                         subprocess.Popen(["/usr/bin/say", "New message from ScienceAI"])  # nosec B603
                     dm.save_database()
+        except asyncio.CancelledError:
+            # Expected when shutdown cancels tasks - exit gracefully
+            print("Backend async tasks cancelled during shutdown")
         except Exception as e:
             print("Backend error")
             traceback.print_exc()
@@ -606,4 +828,18 @@ def run_backend(folder, project_path, storage_path, message_queue, stop_event, i
                 error_queue.put(e)
             raise e
 
-    asyncio.run(run_backend_async())
+    async def run_with_cleanup():
+        """Wrapper that ensures all tasks are cancelled on shutdown."""
+        try:
+            await run_backend_async()
+        finally:
+            # Cancel all remaining tasks to prevent "activity after close"
+            tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+            if tasks:
+                print(f"Cancelling {len(tasks)} pending async tasks...")
+                for task in tasks:
+                    task.cancel()
+                # Wait for all tasks to complete their cancellation
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+    asyncio.run(run_with_cleanup())

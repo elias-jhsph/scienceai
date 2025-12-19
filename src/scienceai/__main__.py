@@ -121,7 +121,12 @@ def emit_context(tokens_used, tokens_limit=None, can_compress=True):
         from .llm_providers import get_context_limit
 
         tokens_limit = get_context_limit()
-    percentage = min(100, round((tokens_used / tokens_limit) * 100, 1))
+
+    # Guard against division by zero (can happen during provider switch or cold start)
+    if not tokens_limit or tokens_limit <= 0:
+        percentage = 0
+    else:
+        percentage = min(100, round((tokens_used / tokens_limit) * 100, 1))
     message_data = {
         "type": "context",
         "tokens_used": tokens_used,
@@ -142,6 +147,20 @@ def emit_context(tokens_used, tokens_limit=None, can_compress=True):
                 context_connections.remove(ws)
 
 
+def emit_pause_complete():
+    """Emit pause complete event to all connected WebSocket clients"""
+    global context_connections
+    message_data = {"type": "pause_complete"}
+    message = json.dumps(message_data)
+
+    with context_lock:
+        for ws in context_connections[:]:
+            try:
+                ws.send(message)
+            except Exception:
+                context_connections.remove(ws)
+
+
 def calculate_and_emit_context_from_messages(messages):
     """Calculate token count from chat messages and emit context usage. Returns percentage."""
     try:
@@ -149,6 +168,11 @@ def calculate_and_emit_context_from_messages(messages):
 
         provider = get_provider()
         total_tokens = provider.count_tokens(messages)
+
+        # Skip emission if token counting failed (returns None)
+        if total_tokens is None:
+            logger.debug("Token counting returned None, skipping context emission")
+            return None  # Return None to indicate no update
 
         # Check if compression is possible
         can_compress = can_compress_context(messages)
@@ -159,11 +183,11 @@ def calculate_and_emit_context_from_messages(messages):
         limit = get_context_limit()
         if limit and limit > 0:
             return min(100, round((total_tokens / limit) * 100, 1))
-        return 0
+        return None  # Return None if limit is invalid
     except Exception as e:
         logger.warning(f"Context calculation failed: {e}")
         # Don't let context tracking break the main flow
-        return 0
+        return None
 
 
 def can_compress_context(messages):
@@ -211,10 +235,48 @@ def close():
     global message_queue
     global database
     global original_save
+
+    logger.info("close() called")
+
     if thread:
+        logger.info(f"Thread exists (alive={thread.is_alive()}), sending TERMINATE...")
         message_queue.put({"TERMINATE": True})
         stop_event.set()
-        thread.join()
+        logger.info("Waiting for graceful shutdown (10s timeout)...")
+        thread.join(timeout=10)  # Increased from 3 to 10 seconds for graceful shutdown
+
+        if thread.is_alive():
+            # Thread didn't terminate gracefully
+            # Try raising SystemExit in the thread - this allows context managers to cleanup
+            import ctypes
+
+            logger.info("Thread still alive after 10s, raising SystemExit in backend thread...")
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(thread.ident), ctypes.py_object(SystemExit))
+            thread.join(timeout=5)  # Give it time to handle the exception
+
+        if thread.is_alive():
+            # SystemExit didn't work - wait for DB locks to confirm no writes in progress
+            logger.warning("Thread still alive after SystemExit, checking DB locks...")
+            if database and database.lock_project(timeout=10):
+                # All DB locks acquired - no writes in progress, thread just stuck on HTTP
+                logger.info("DB locks acquired, thread is stuck but DB is safe. Detaching thread...")
+            else:
+                # Couldn't get locks - wait a bit more
+                logger.warning("Couldn't acquire all DB locks, waiting longer...")
+            thread.join(timeout=100)
+
+            if thread.is_alive():
+                # Can't stop the thread - just detach it and let it die on its own
+                logger.error(
+                    "ScienceAI Project Thread is still alive after all attempts to stop it. Killing entire process because we can't stop it, restarting ScienceAI."
+                )
+                os._exit(1)
+                # The thread will eventually finish when HTTP calls complete
+        else:
+            logger.info("Thread terminated successfully")
+    else:
+        logger.info("No thread to close (thread was None)")
+
     thread = None
     stop_event = None
     message_queue = None
@@ -224,6 +286,8 @@ def close():
     if os.path.exists(io_dir):
         for file in os.listdir(io_dir):
             os.remove(os.path.join(io_dir, file))
+
+    logger.info("close() completed")
 
 
 def sanitize_for_id(value):
@@ -245,12 +309,24 @@ def convert_markdown(messages):
         try:
             content = message["content"]
 
+            # PASS 0: Pre-escape bare < and > that are clearly NOT HTML tags
+            # This prevents the tag regex from matching huge spans like "< 0.0001 ... text ... >"
+            # Escape < followed by space, digit, or = (math comparisons like "p < 0.0001")
+            content = re.sub(r"<(?=[\s\d=])", "&lt;", content)
+            # Escape > preceded by space or digit (math comparisons like "x > 5")
+            content = re.sub(r"(?<=[\s\d])>", "&gt;", content)
+
             # PASS 1: Escape any < or > that are NOT part of valid HTML tags
             def escape_if_invalid(match):
                 """Escape the tag if it's not a common HTML tag."""
                 tag = match.group(0)
+                # Check if it's a common HTML tag
                 if COMMON_HTML_TAG_PATTERN.match(tag):
                     return tag  # Keep valid HTML tags as-is
+                # Also check if it contains our file link classes (pi-file-link, pi-file-name, etc.)
+                # This ensures HTML generated by replace_pi_generated_file_links is preserved
+                if re.search(r"class=['\"]pi-file-(link|name|buttons)", tag, re.IGNORECASE):
+                    return tag  # Keep our file link HTML as-is
                 else:
                     return tag.replace("<", "&lt;").replace(">", "&gt;")  # Escape invalid tags
 
@@ -276,7 +352,16 @@ def convert_markdown(messages):
             content = re.sub(r"<[^>]+>", store_html, content)
 
             # Now process markdown (valid HTML is protected, invalid tags are already escaped)
-            content = markdown2.markdown(content)
+            # Enable extras for proper list handling and code blocks
+            content = markdown2.markdown(
+                content,
+                extras=[
+                    "fenced-code-blocks",  # Support ```code``` blocks
+                    "tables",  # Support markdown tables
+                    "cuddled-lists",  # Allow lists without blank line before them
+                    # NOTE: Do NOT use "break-on-newline" - it breaks nested list parsing
+                ],
+            )
 
             # Restore HTML blocks
             for i, html_block in enumerate(html_blocks):
@@ -462,40 +547,40 @@ def replace_pi_generated_file_links(messages, project_path):
             if ext in [".csv"]:
                 # CSV: view + download buttons
                 replacement = (
-                    f'<span class="pi-file-link">'
-                    f'<span class="pi-file-name">{filename}</span>'
-                    f'<span class="pi-file-buttons">'
-                    f'<button class="icon-button" onclick="viewCSV(\'download/{full_path}\')">👁️</button>'
-                    f'<a href="/download/{full_path}?attached=T" class="icon-button">📥</a>'
+                    f"<span class='pi-file-link'>"
+                    f"<span class='pi-file-name'>{filename}</span>"
+                    f"<span class='pi-file-buttons'>"
+                    f"<button class='icon-button' onclick='viewCSV(\"download/{full_path}\")'>👁️</button>"
+                    f"<a href='/download/{full_path}?attached=T' class='icon-button'>📥</a>"
                     f"</span></span>"
                 )
             elif ext in [".json"]:
                 # JSON: view + download buttons
                 replacement = (
-                    f'<span class="pi-file-link">'
-                    f'<span class="pi-file-name">{filename}</span>'
-                    f'<span class="pi-file-buttons">'
-                    f'<button class="icon-button" onclick="viewJSON(\'download/{full_path}\')">👁️</button>'
-                    f'<a href="/download/{full_path}?attached=T" class="icon-button">📥</a>'
+                    f"<span class='pi-file-link'>"
+                    f"<span class='pi-file-name'>{filename}</span>"
+                    f"<span class='pi-file-buttons'>"
+                    f"<button class='icon-button' onclick='viewJSON(\"download/{full_path}\")'>👁️</button>"
+                    f"<a href='/download/{full_path}?attached=T' class='icon-button'>📥</a>"
                     f"</span></span>"
                 )
             elif ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
                 # Images: view inline + download
                 replacement = (
-                    f'<span class="pi-file-link">'
-                    f'<span class="pi-file-name">{filename}</span>'
-                    f'<span class="pi-file-buttons">'
-                    f'<a href="/download/{full_path}" target="_blank" class="icon-button">👁️</a>'
-                    f'<a href="/download/{full_path}?attached=T" class="icon-button">📥</a>'
+                    f"<span class='pi-file-link'>"
+                    f"<span class='pi-file-name'>{filename}</span>"
+                    f"<span class='pi-file-buttons'>"
+                    f"<a href='/download/{full_path}' target='_blank' class='icon-button'>👁️</a>"
+                    f"<a href='/download/{full_path}?attached=T' class='icon-button'>📥</a>"
                     f"</span></span>"
                 )
             else:
                 # Other files: just download
                 replacement = (
-                    f'<span class="pi-file-link">'
-                    f'<span class="pi-file-name">{filename}</span>'
-                    f'<span class="pi-file-buttons">'
-                    f'<a href="/download/{full_path}?attached=T" class="icon-button">📥</a>'
+                    f"<span class='pi-file-link'>"
+                    f"<span class='pi-file-name'>{filename}</span>"
+                    f"<span class='pi-file-buttons'>"
+                    f"<a href='/download/{full_path}?attached=T' class='icon-button'>📥</a>"
                     f"</span></span>"
                 )
 
@@ -740,6 +825,11 @@ def download(filepath):
     filepath = urllib.parse.unquote(filepath)
     if filepath[0] != "/" and not sys.platform.startswith("win"):
         filepath = "/" + filepath
+
+    # Check if the file exists before attempting to copy
+    if not os.path.isfile(filepath):
+        return abort(404, description=f"File not found: {os.path.basename(filepath)}")
+
     target = os.path.join(path_to_app, "io", os.path.basename(filepath))
     shutil.copyfile(filepath, target)
 
@@ -872,6 +962,37 @@ def compress_context():
     return jsonify({"success": True, "message": "Compression started"})
 
 
+@app.route("/pause_processing", methods=["POST"])
+def pause_processing():
+    """
+    Request a pause of the PI's message processing loop.
+    The loop will be paused at the next safe point (after current tool call completes).
+    """
+    from flask import jsonify
+
+    from .backend import set_pause_requested
+
+    if not database or not message_queue:
+        return jsonify({"success": False, "error": "No project loaded"}), 400
+
+    set_pause_requested(True)
+    return jsonify({"success": True, "message": "Pause requested"})
+
+
+@app.route("/cancel_pause", methods=["POST"])
+def cancel_pause():
+    """Cancel a pending pause request."""
+    from flask import jsonify
+
+    from .backend import set_pause_requested
+
+    if not database or not message_queue:
+        return jsonify({"success": False, "error": "No project loaded"}), 400
+
+    set_pause_requested(False)
+    return jsonify({"success": True, "message": "Pause cancelled"})
+
+
 @app.route("/undo_last_request", methods=["POST"])
 def undo_last_request():
     """
@@ -980,6 +1101,11 @@ def switch_provider_endpoint():
 
     success = switch_provider(provider_name)
     if success:
+        # Reset cached context to prevent stale values from flashing
+        # The new context will be calculated when the discussion WebSocket reconnects
+        global current_context
+        with context_lock:
+            current_context = None
         return jsonify(
             {"success": True, "provider": get_current_provider_name(), "message": f"Switched to {provider_name}"}
         )
@@ -999,6 +1125,18 @@ def set_parallel_calls():
 
     message_queue.put({"SET_PARALLEL_CALLS": True, "count": count})
     return jsonify({"success": True, "message": f"Parallel calls set to {count}"})
+
+
+@app.route("/get_parallel_calls", methods=["GET"])
+def get_parallel_calls():
+    """Get the current parallel calls setting for the project."""
+    from flask import jsonify
+
+    if not database:
+        return jsonify({"success": False, "error": "No project loaded"}), 400
+
+    count = database.get_project_setting("n_parallel_calls", default=1)
+    return jsonify({"success": True, "count": count})
 
 
 @app.route("/get_provider_status", methods=["GET"])

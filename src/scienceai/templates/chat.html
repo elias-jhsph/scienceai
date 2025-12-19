@@ -4,7 +4,7 @@
         {% set last_user_idx = namespace(value=-1) %}
         {% set first_user_idx = namespace(value=-1) %}
         {# Check if context percentage is at or above 100% #}
-        {% if context_percentage is defined and context_percentage >= 100 %}
+        {% if context_percentage is defined and context_percentage is not none and context_percentage >= 100 %}
         {% set context_limit_hit.value = true %}
         {% endif %}
         {# Find the first and last user message indices #}
@@ -203,7 +203,7 @@
             }
         })();
 
-        {% if context_percentage is defined %}
+        {% if context_percentage is defined and context_percentage is not none %}
         // Update context indicator with server-calculated percentage
         if (typeof updateContext === 'function') {
             updateContext({{ context_percentage }});

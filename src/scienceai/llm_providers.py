@@ -31,6 +31,119 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+# Connection error retry constants
+MAX_RETRIES = 3
+RETRY_BACKOFF_BASE = 1.0  # seconds
+
+
+def is_retryable_error(exception: Exception) -> bool:
+    """Check if an exception is a retryable connection error."""
+    # Check for common connection error types
+    retryable_types = (
+        ConnectionError,
+        TimeoutError,
+    )
+    if isinstance(exception, retryable_types):
+        return True
+
+    # Check for httpx connection errors (used by Anthropic SDK)
+    if type(exception).__name__ in ("ConnectError", "ReadTimeout", "ConnectTimeout", "RemoteProtocolError"):
+        return True
+
+    # Check for requests connection errors (used for REST calls)
+    if type(exception).__module__.startswith("requests.exceptions"):
+        return True
+
+    # Check for API overload/rate limit errors that should be retried
+    exception_str = str(exception).lower()
+    if "overloaded" in exception_str or "rate limit" in exception_str or "529" in exception_str:
+        return True
+
+    return False
+
+
+async def retry_async_call(coro_func, *args, max_retries: int = MAX_RETRIES, **kwargs):
+    """
+    Execute an async coroutine function with retry logic for connection errors.
+
+    Args:
+        coro_func: Async function to call (NOT a coroutine - the function itself)
+        *args: Arguments to pass to the function
+        max_retries: Maximum number of retry attempts
+        **kwargs: Keyword arguments to pass to the function
+
+    Returns:
+        Result of the successful call
+
+    Raises:
+        The last exception if all retries fail
+    """
+    last_exception = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            return await coro_func(*args, **kwargs)
+        except Exception as e:
+            last_exception = e
+
+            if not is_retryable_error(e):
+                raise
+
+            if attempt < max_retries:
+                wait_time = RETRY_BACKOFF_BASE * (2**attempt)
+                logger.warning(
+                    f"Retryable error on attempt {attempt + 1}/{max_retries + 1}: {type(e).__name__}: {e}. "
+                    f"Retrying in {wait_time:.1f}s..."
+                )
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error(f"All {max_retries + 1} attempts failed. Last error: {e}")
+
+    raise last_exception  # type: ignore
+
+
+def retry_sync_call(func, *args, max_retries: int = MAX_RETRIES, **kwargs):
+    """
+    Execute a sync function with retry logic for connection errors.
+
+    Args:
+        func: Sync function to call
+        *args: Arguments to pass to the function
+        max_retries: Maximum number of retry attempts
+        **kwargs: Keyword arguments to pass to the function
+
+    Returns:
+        Result of the successful call
+
+    Raises:
+        The last exception if all retries fail
+    """
+    import time
+
+    last_exception = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            last_exception = e
+
+            if not is_retryable_error(e):
+                raise
+
+            if attempt < max_retries:
+                wait_time = RETRY_BACKOFF_BASE * (2**attempt)
+                logger.warning(
+                    f"Retryable error on attempt {attempt + 1}/{max_retries + 1}: {type(e).__name__}: {e}. "
+                    f"Retrying in {wait_time:.1f}s..."
+                )
+                time.sleep(wait_time)
+            else:
+                logger.error(f"All {max_retries + 1} attempts failed. Last error: {e}")
+
+    raise last_exception  # type: ignore
+
+
 class Provider(Enum):
     """Supported LLM providers."""
 
@@ -130,7 +243,7 @@ class LLMConfig:
             Provider.OPENAI: "gpt-4o",
             Provider.ANTHROPIC: "claude-sonnet-4-5",
             Provider.ANTHROPIC_VERTEX: "claude-sonnet-4-5",
-            Provider.GOOGLE: "gemini-3-pro-image-preview",
+            Provider.GOOGLE: "gemini-3-pro-preview",
         }
         return defaults.get(self.provider, "gpt-4o")
 
@@ -208,19 +321,45 @@ class ChatMessage:
 
         # Handle assistant with tool calls -> Anthropic uses content blocks
         if self.tool_calls:
-            content_blocks = []
+            thinking_blocks = []
+            other_blocks = []
+
+            # Add thinking from separate field first (if present)
             if self.thinking and self.thinking.get("signature"):
-                content_blocks.append(
+                thinking_blocks.append(
                     {
                         "type": "thinking",
                         "thinking": self.thinking.get("thinking", ""),
                         "signature": self.thinking.get("signature"),
                     }
                 )
+                logger.debug(f"to_anthropic_format: Added thinking block (has {len(self.tool_calls)} tool_calls)")
+            else:
+                logger.debug(f"to_anthropic_format: NO thinking for assistant w/tool_calls. thinking={self.thinking}")
+
+            # Handle content - it can be a string OR a list of blocks
             if self.content:
-                content_blocks.append({"type": "text", "text": self.content})  # type: ignore
+                if isinstance(self.content, list):
+                    # Content is a list of blocks - need to separate thinking from other blocks
+                    for item in self.content:
+                        if isinstance(item, dict):
+                            if item.get("type") in ("thinking", "redacted_thinking"):
+                                thinking_blocks.append(item)
+                            elif item.get("type") == "text":
+                                other_blocks.append({"type": "text", "text": item.get("text", "")})
+                            else:
+                                # Pass through other block types (but not tool_use - we add those separately)
+                                if item.get("type") != "tool_use":
+                                    other_blocks.append(item)
+                        elif isinstance(item, str):
+                            other_blocks.append({"type": "text", "text": item})
+                else:
+                    # Content is a simple string
+                    other_blocks.append({"type": "text", "text": self.content})
+
+            # Add tool calls
             for tc in self.tool_calls:
-                content_blocks.append(
+                other_blocks.append(
                     {
                         "type": "tool_use",
                         "id": tc.get("id", ""),
@@ -228,22 +367,37 @@ class ChatMessage:
                         "input": json.loads(tc.get("function", {}).get("arguments", "{}")),
                     }
                 )
-            msg["content"] = content_blocks
+
+            # CRITICAL: Thinking blocks MUST come first per Anthropic API requirements
+            msg["content"] = thinking_blocks + other_blocks
             return msg
 
-        # Handle image content
+        # Handle image content or already-list content (e.g., from DB storage)
         if isinstance(self.content, list):
-            content_blocks = []
+            thinking_blocks = []
+            other_blocks = []
+
+            # If we have thinking in the separate field, add it first
+            if self.thinking and self.thinking.get("signature"):
+                thinking_blocks.append(
+                    {
+                        "type": "thinking",
+                        "thinking": self.thinking.get("thinking", ""),
+                        "signature": self.thinking.get("signature"),
+                    }
+                )
+
+            # Process items, separating thinking from other blocks
             for item in self.content:
                 if item.get("type") == "text":
-                    content_blocks.append({"type": "text", "text": item["text"]})
+                    other_blocks.append({"type": "text", "text": item["text"]})
                 elif item.get("type") == "image_url":
                     url = item["image_url"]["url"]
                     if url.startswith("data:"):
                         # Parse data URL
                         media_type = url.split(";")[0].split(":")[1]
                         base64_data = url.split(",")[1]
-                        content_blocks.append(
+                        other_blocks.append(
                             {
                                 "type": "image",
                                 "source": {"type": "base64", "media_type": media_type, "data": base64_data},  # type: ignore
@@ -251,9 +405,19 @@ class ChatMessage:
                         )
                     else:
                         # URL-based image - Anthropic requires base64
-                        # For now, skip URL-based images (would need to fetch and convert)
-                        content_blocks.append({"type": "text", "text": f"[Image URL: {url}]"})
-            msg["content"] = content_blocks
+                        other_blocks.append({"type": "text", "text": f"[Image URL: {url}]"})
+                elif item.get("type") in ("thinking", "redacted_thinking"):
+                    # Collect thinking blocks - they MUST come first
+                    thinking_blocks.append(item)
+                elif item.get("type") == "tool_use":
+                    # Tool use blocks must come after thinking and text
+                    other_blocks.append(item)
+                else:
+                    # Pass through any other block types
+                    other_blocks.append(item)
+
+            # CRITICAL: Thinking blocks MUST be first per Anthropic API requirements
+            msg["content"] = thinking_blocks + other_blocks
         else:
             if self.thinking and self.thinking.get("signature"):
                 content_blocks = [
@@ -298,15 +462,40 @@ class ChatMessage:
         if self.tool_calls:
             if self.content:
                 parts.append({"text": self.content})  # type: ignore
-            for tc in self.tool_calls:
-                parts.append(
-                    {
-                        "functionCall": {
-                            "name": tc.get("function", {}).get("name", ""),
-                            "args": json.loads(tc.get("function", {}).get("arguments", "{}")),
-                        }
+            for i, tc in enumerate(self.tool_calls):
+                function_call_part = {
+                    "functionCall": {
+                        "name": tc.get("function", {}).get("name", ""),
+                        "args": json.loads(tc.get("function", {}).get("arguments", "{}")),
                     }
-                )
+                }
+                # Include thought_signature if present (required for Gemini 3 Pro with thinking)
+                # The signature is only on the first function call in parallel calls
+                # Signatures are stored as base64 strings and need to be decoded back to bytes
+                import base64
+
+                sig_value = tc.get("thought_signature")
+                if not sig_value and i == 0 and self.thinking:
+                    sig_value = self.thinking.get("signature")
+
+                if sig_value and sig_value != "skip_thought_signature_validator":
+                    # Decode base64 string back to bytes for API
+                    try:
+                        function_call_part["thought_signature"] = base64.b64decode(sig_value)  # type: ignore[assignment]
+                    except Exception:
+                        # If decoding fails, use as-is (might already be the skip value)
+                        function_call_part["thought_signature"] = sig_value  # type: ignore[assignment]
+                elif sig_value == "skip_thought_signature_validator":
+                    function_call_part["thought_signature"] = sig_value  # type: ignore[assignment]
+                else:
+                    # For historical messages without signatures, use the validator skip
+                    # This is a last resort per Gemini docs but necessary for backward compatibility
+                    function_call_part["thought_signature"] = "skip_thought_signature_validator"  # type: ignore[assignment]
+                    logger.warning(
+                        f"No thought_signature for function call '{tc.get('function', {}).get('name', 'unknown')}' - "
+                        "using skip_thought_signature_validator fallback (may impact model performance)"
+                    )
+                parts.append(function_call_part)
             return {"role": role, "parts": parts}
 
         # Handle image content
@@ -680,10 +869,16 @@ class AnthropicProvider(LLMProvider):
             "or add it to ~/Documents/ScienceAI/scienceai-keys.json"
         )
 
-    def _convert_messages(self, messages: list[dict[str, Any]]) -> tuple[str | None, list[dict[str, Any]]]:
-        """Convert messages to Anthropic format, extracting system message."""
+    def _convert_messages(self, messages: list[dict[str, Any]]) -> tuple[str | None, list[dict[str, Any]], set[int]]:
+        """Convert messages to Anthropic format, extracting system message.
+
+        Returns:
+            Tuple of (system_message, converted_messages, compressed_indices)
+            where compressed_indices are the indices in converted_messages that are compressed.
+        """
         system_message = None
-        converted = []
+        converted: list[dict[str, Any]] = []
+        compressed_indices: set[int] = set()
 
         for msg in messages:
             chat_msg = ChatMessage(
@@ -700,9 +895,270 @@ class AnthropicProvider(LLMProvider):
             else:
                 converted_msg = chat_msg.to_anthropic_format()
                 if converted_msg:  # Skip empty messages
+                    # Track if this is a compressed message
+                    if msg.get("compressed"):
+                        compressed_indices.add(len(converted))
                     converted.append(converted_msg)
 
-        return system_message, converted
+        return system_message, converted, compressed_indices
+
+    def _strip_thinking_except_last(self, messages: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int, int]:
+        """Strip thinking blocks from all messages except the last one that has thinking.
+
+        This is used for context optimization - when context is above 50%, we strip
+        thinking from older messages to reduce token count while keeping the most recent.
+
+        Args:
+            messages: List of messages in Anthropic format (already converted)
+
+        Returns:
+            Tuple of (stripped_messages, last_thinking_msg_idx, stripped_count)
+            - stripped_messages: Deep copy with thinking stripped from all but last
+            - last_thinking_msg_idx: Index of the message that kept thinking (-1 if none)
+            - stripped_count: Number of messages that had thinking stripped
+        """
+        import copy
+
+        result = copy.deepcopy(messages)
+
+        # Find the last message with thinking
+        last_thinking_msg_idx = -1
+        for i in range(len(result) - 1, -1, -1):
+            msg = result[i]
+            content = msg.get("content")
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"):
+                        last_thinking_msg_idx = i
+                        break
+                if last_thinking_msg_idx != -1:
+                    break
+
+        # Strip thinking from all messages except the last one that has it
+        stripped_count = 0
+        for i, msg in enumerate(result):
+            if i == last_thinking_msg_idx:
+                continue
+            content = msg.get("content")
+            if isinstance(content, list):
+                original_len = len(content)
+                msg["content"] = [
+                    block
+                    for block in content
+                    if not (isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))
+                ]
+                if len(msg["content"]) < original_len:
+                    stripped_count += 1
+
+        return result, last_thinking_msg_idx, stripped_count
+
+    def _prepare_messages_for_thinking(
+        self,
+        converted_messages: list[dict[str, Any]],
+        context_limit: int = 0,
+        system_message: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Prepare converted messages for thinking-enabled API calls.
+
+        This method handles all transformations required for thinking mode:
+        1. Bootstrap: Convert assistant messages without thinking-first to user role
+        2. Context optimization: Strip thinking from older messages when above 50% context
+        3. Final safety check: Ensure no assistant messages have thinking in wrong position
+
+        Args:
+            converted_messages: Messages already converted to Anthropic format
+            context_limit: Context window limit for optimization (0 = skip optimization)
+            system_message: System prompt (for token counting during optimization)
+
+        Returns:
+            Transformed messages ready for thinking-enabled API call
+        """
+        import copy
+
+        messages = copy.deepcopy(converted_messages)  # Don't mutate original
+
+        # STEP 1: BOOTSTRAP - Convert trailing assistant messages without thinking to user role
+        # We scan backwards from the end and convert assistant messages until we find one with thinking.
+        # This "bootstraps" thinking behavior by ensuring the last assistant message(s) have thinking.
+        # If the last assistant message already has thinking, n=0 and nothing is converted.
+        converted_count = 0
+        stripped_tool_use_ids: set[str] = set()
+
+        # Find indices of assistant messages to convert (from end backwards until one has thinking)
+        indices_to_convert: list[int] = []
+        for i in range(len(messages) - 1, -1, -1):
+            msg = messages[i]
+            if msg.get("role") == "assistant":
+                content = msg.get("content", "")
+                has_thinking_first = False
+                if isinstance(content, list) and len(content) > 0:
+                    first_block = content[0]
+                    if isinstance(first_block, dict) and first_block.get("type") in ("thinking", "redacted_thinking"):
+                        has_thinking_first = True
+
+                if has_thinking_first:
+                    # Found an assistant message with thinking - stop here
+                    break
+                else:
+                    # This assistant message doesn't have thinking - mark for conversion
+                    indices_to_convert.append(i)
+
+        # Convert the marked messages
+        for i in indices_to_convert:
+            msg = messages[i]
+            content = msg.get("content", "")
+            messages[i]["role"] = "user"
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_use":
+                        stripped_tool_use_ids.add(block.get("id", ""))
+                messages[i]["content"] = [
+                    block for block in content if not (isinstance(block, dict) and block.get("type") == "tool_use")
+                ]
+            converted_count += 1
+
+        # Strip orphaned tool_result blocks
+        if stripped_tool_use_ids:
+            for msg in messages:
+                content = msg.get("content")
+                if isinstance(content, list):
+                    msg["content"] = [
+                        block
+                        for block in content
+                        if not (
+                            isinstance(block, dict)
+                            and block.get("type") == "tool_result"
+                            and block.get("tool_use_id") in stripped_tool_use_ids
+                        )
+                    ]
+
+        # Merge consecutive user messages
+        if converted_count > 0:
+            merged_messages: list[dict[str, Any]] = []
+            for msg in messages:
+                if merged_messages and merged_messages[-1].get("role") == "user" and msg.get("role") == "user":
+                    prev_content = merged_messages[-1].get("content", "")
+                    curr_content = msg.get("content", "")
+                    if isinstance(prev_content, str) and isinstance(curr_content, str):
+                        merged_messages[-1]["content"] = prev_content + "\n\n---\n\n" + curr_content
+                    elif isinstance(prev_content, list) and isinstance(curr_content, list):
+                        merged_messages[-1]["content"] = prev_content + curr_content
+                    elif isinstance(prev_content, str) and isinstance(curr_content, list):
+                        merged_messages[-1]["content"] = [{"type": "text", "text": prev_content}, *curr_content]
+                    elif isinstance(prev_content, list) and isinstance(curr_content, str):
+                        merged_messages[-1]["content"] = [*prev_content, {"type": "text", "text": curr_content}]
+                else:
+                    merged_messages.append(msg)
+            messages = merged_messages
+            logger.info(f"THINKING BOOTSTRAP: Converted {converted_count} assistant message(s) to 'user' role.")
+
+        # STEP 2: CONTEXT OPTIMIZATION - Strip thinking from older messages when above 50%
+        if messages and context_limit > 0:
+            try:
+                messages_for_counting = []
+                if system_message:
+                    messages_for_counting.append({"role": "system", "content": system_message})
+                messages_for_counting.extend(messages)
+
+                token_count = self.count_tokens(messages_for_counting, raw=True)
+                context_usage = token_count / context_limit
+
+                if context_usage > 0.5:
+                    # Use shared helper to strip thinking
+                    messages, last_thinking_msg_idx, stripped_count = self._strip_thinking_except_last(messages)
+
+                    if stripped_count > 0:
+                        logger.info(
+                            f"CONTEXT OPTIMIZATION: Stripped thinking from {stripped_count} messages "
+                            f"(context at {context_usage:.1%}, kept idx {last_thinking_msg_idx})."
+                        )
+
+                        # After stripping, assistant messages that lost thinking need conversion to user
+                        # (because they may now have text/tool_use first instead of thinking)
+                        post_converted = 0
+                        post_stripped_ids: set[str] = set()
+                        for i in range(len(messages)):
+                            if i == last_thinking_msg_idx:
+                                continue
+                            msg = messages[i]
+                            if msg.get("role") == "assistant":
+                                content = msg.get("content")
+                                if isinstance(content, list):
+                                    # Check if first block is not thinking (was stripped or never had it)
+                                    first_is_thinking = (
+                                        len(content) > 0
+                                        and isinstance(content[0], dict)
+                                        and content[0].get("type") in ("thinking", "redacted_thinking")
+                                    )
+                                    if not first_is_thinking:
+                                        messages[i]["role"] = "user"
+                                        for block in content:
+                                            if isinstance(block, dict) and block.get("type") == "tool_use":
+                                                post_stripped_ids.add(block.get("id", ""))
+                                        messages[i]["content"] = [
+                                            block
+                                            for block in content
+                                            if not (isinstance(block, dict) and block.get("type") == "tool_use")
+                                        ]
+                                        post_converted += 1
+
+                        # Strip orphaned tool_results
+                        if post_stripped_ids:
+                            for msg in messages:
+                                content = msg.get("content")
+                                if isinstance(content, list):
+                                    msg["content"] = [
+                                        block
+                                        for block in content
+                                        if not (
+                                            isinstance(block, dict)
+                                            and block.get("type") == "tool_result"
+                                            and block.get("tool_use_id") in post_stripped_ids
+                                        )
+                                    ]
+
+                        # Merge consecutive user messages
+                        if post_converted > 0:
+                            merged: list[dict[str, Any]] = []
+                            for msg in messages:
+                                if merged and merged[-1].get("role") == "user" and msg.get("role") == "user":
+                                    prev = merged[-1].get("content", "")
+                                    curr = msg.get("content", "")
+                                    if isinstance(prev, list) and isinstance(curr, list):
+                                        merged[-1]["content"] = prev + curr
+                                    elif isinstance(prev, str) and isinstance(curr, str):
+                                        merged[-1]["content"] = prev + "\n\n---\n\n" + curr
+                                    elif isinstance(prev, str) and isinstance(curr, list):
+                                        merged[-1]["content"] = [{"type": "text", "text": prev}, *curr]
+                                    elif isinstance(prev, list) and isinstance(curr, str):
+                                        merged[-1]["content"] = [*prev, {"type": "text", "text": curr}]
+                                else:
+                                    merged.append(msg)
+                            messages = merged
+                            logger.info(f"CONTEXT OPT POST-FIX: Converted {post_converted} more assistant message(s).")
+
+            except Exception as e:
+                logger.warning(f"Context optimization failed: {e}")
+
+        # STEP 3: FINAL SAFETY CHECK - Ensure no problematic assistant messages remain
+        problem_msgs = []
+        for i, msg in enumerate(messages):
+            if msg.get("role") == "assistant":
+                content = msg.get("content")
+                if isinstance(content, list) and len(content) > 0:
+                    first_type = content[0].get("type") if isinstance(content[0], dict) else None
+                    has_thinking = any(
+                        isinstance(b, dict) and b.get("type") in ("thinking", "redacted_thinking") for b in content
+                    )
+                    if has_thinking and first_type not in ("thinking", "redacted_thinking"):
+                        problem_msgs.append(f"idx={i}, first={first_type}")
+
+        if problem_msgs:
+            logger.warning(
+                f"THINKING SAFETY: Found {len(problem_msgs)} problematic messages after prep: {problem_msgs[:5]}"
+            )
+
+        return messages
 
     def _convert_tools(self, tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
         """Convert tools to Anthropic format."""
@@ -775,7 +1231,7 @@ class AnthropicProvider(LLMProvider):
     ) -> ChatResponse:
         """Chat completion using Anthropic API (Direct or Vertex)."""
         resolved_model = self.resolve_model(model)
-        system_message, converted_messages = self._convert_messages(messages)
+        system_message, converted_messages, _compressed_indices = self._convert_messages(messages)
 
         request_args: dict[str, Any] = {
             "model": resolved_model,
@@ -825,38 +1281,14 @@ class AnthropicProvider(LLMProvider):
             else:
                 request_args["thinking"] = {"type": "enabled", "budget_tokens": requested_budget}
 
-            # SAFETY CHECK: If thinking is enabled, check if history is valid.
-            # Anthropic requires that if thinking is enabled, the previous assistant message (if it exists and has tool calls)
-            # must start with a thinking block.
-            # Since we might have stripped it in the past (or didn't save it), we must detect this.
-            if converted_messages:
-                # Find the last assistant message
-                last_assistant_idx = -1
-                for i in range(len(converted_messages) - 1, -1, -1):
-                    if converted_messages[i]["role"] == "assistant":
-                        last_assistant_idx = i
-                        break
-
-                # Check condition: if we are continuing a tool conversation sequence
-                if last_assistant_idx != -1:
-                    last_msg = converted_messages[last_assistant_idx]
-                    content = last_msg.get("content", "")
-                    # has_thinking = False
-
-                    if isinstance(content, list) and len(content) > 0:
-                        # Check all blocks
-                        for block in content:
-                            if isinstance(block, dict) and (
-                                block.get("type") == "thinking" or block.get("type") == "redacted_thinking"
-                            ):
-                                # has_thinking = True
-                                break
-
-                    # We previously had a check here (`if is_tool_result_seq and not has_thinking`)
-                    # which disabled thinking if the previous tool call didn't have it.
-                    # We are removing this as it was deemed "overly dismissive".
-                    # If Anthropic allows enabling thinking mid-stream after a non-thinking tool call,
-                    # we should allow it. If it errors, we will handle that separately.
+            # Use shared helper for all thinking-related transformations
+            converted_messages = self._prepare_messages_for_thinking(
+                converted_messages,
+                context_limit=self.config.context_limit,
+                system_message=system_message,
+            )
+            # Update request_args with the transformed messages
+            request_args["messages"] = converted_messages
 
             # SAFETY CHECK: Anthropic does not support 'thinking' with forced tool use.
             # If tool_choice is explicit (anything other than 'auto'), we explicitly disable thinking.
@@ -891,7 +1323,38 @@ class AnthropicProvider(LLMProvider):
                     # We should probably replace with a dummy text or something, but usually stripping thinking is fine if tool calls exist.
                     msg["content"] = new_content
 
-        response = self.client.messages.create(**request_args)
+        # DEBUG: Log whether thinking is enabled
+        if "thinking" in request_args:
+            logger.info(f"[SYNC API] Making request with thinking ENABLED: {request_args['thinking']}")
+
+            # DIAGNOSTIC: Scan for problematic assistant messages
+            problem_msgs = []
+            for i, msg in enumerate(converted_messages):
+                if msg.get("role") == "assistant":
+                    content = msg.get("content")
+                    if isinstance(content, list) and len(content) > 0:
+                        first_type = (
+                            content[0].get("type") if isinstance(content[0], dict) else type(content[0]).__name__
+                        )
+                        has_thinking = any(
+                            isinstance(b, dict) and b.get("type") in ("thinking", "redacted_thinking") for b in content
+                        )
+                        if has_thinking and first_type not in ("thinking", "redacted_thinking"):
+                            problem_msgs.append(f"idx={i}, first={first_type}")
+            if problem_msgs:
+                logger.warning(
+                    f"[SYNC API] DIAGNOSTIC: Found {len(problem_msgs)} problematic assistant messages: {problem_msgs[:5]}"
+                )
+            else:
+                logger.info("[SYNC API] DIAGNOSTIC: All assistant messages pass thinking-first check")
+            # Enable interleaved thinking for proper thinking between tool calls
+            # This beta header ensures Claude produces thinking blocks consistently during tool-use loops
+            # Must use client.beta.messages.create() to pass beta headers
+            request_args["betas"] = ["interleaved-thinking-2025-05-14"]
+            response = retry_sync_call(self.client.beta.messages.create, **request_args)
+        else:
+            logger.info("[SYNC API] Making request with thinking DISABLED")
+            response = retry_sync_call(self.client.messages.create, **request_args)
 
         # Convert response to unified format
         content = None
@@ -916,6 +1379,14 @@ class AnthropicProvider(LLMProvider):
                     }
                 )
 
+        if thinking:
+            logger.info(
+                f"[SYNC API] Captured thinking block with signature: {thinking.get('signature', 'N/A')[:50]}..."
+            )
+        else:
+            content_types = [block.type for block in response.content]
+            logger.warning(f"[SYNC API] NO thinking block in response! Content types: {content_types}")
+
         return ChatResponse(
             content=content,
             tool_calls=tool_calls,
@@ -924,8 +1395,33 @@ class AnthropicProvider(LLMProvider):
             thinking=thinking,
         )
 
-    def count_tokens(self, messages: list[dict[str, Any]]) -> int:
-        """Count tokens using Anthropic API (Beta for Direct, REST for Vertex)."""
+    def count_tokens(self, messages: list[dict[str, Any]], raw: bool = False) -> int:
+        """Count tokens using Anthropic API (Beta for Direct, REST for Vertex).
+
+        Args:
+            messages: List of message dicts to count tokens for
+            raw: If True, return raw token count. If False (default), return count
+                 assuming thinking blocks will be stripped when >50% context usage
+                 (which matches what chat_completion will actually send).
+        """
+        # CONTEXT OPTIMIZATION: When raw=False, check if we're above 50% context
+        # If so, return the count assuming thinking blocks will be stripped (matching chat_completion behavior)
+        if not raw and self.config.context_limit > 0:
+            # First get the raw count using recursive call
+            raw_count = self.count_tokens(messages, raw=True)
+            context_usage = raw_count / self.config.context_limit
+
+            if context_usage > 0.5:
+                # Use shared helper to strip thinking
+                optimized_messages, _last_thinking_msg_idx, stripped_count = self._strip_thinking_except_last(messages)
+
+                # Return the optimized count
+                optimized_count = self.count_tokens(optimized_messages, raw=True)
+                logger.debug(
+                    f"count_tokens: Context at {context_usage:.1%}, returning optimized count "
+                    f"({optimized_count} vs raw {raw_count}, stripped {stripped_count})"
+                )
+                return optimized_count
 
         resolved_model = self.resolve_model(None)
 
@@ -974,7 +1470,7 @@ class AnthropicProvider(LLMProvider):
                 # We need to minimally process messages to ensure they match expected format
                 # The _convert_messages method tailored for SDK might need slight adjustment or raw usage
                 # But for simple counting, let's use the converted messages from _convert_messages (list of dicts)
-                _, converted_messages = self._convert_messages(messages)
+                _, converted_messages, _ = self._convert_messages(messages)
 
                 # SANITIZATION: Vertex countTokens is strict about tool_use -> tool_result pairing.
                 # If a tool_use is dangling (interrupted or followed by text), it fails with 400.
@@ -1041,6 +1537,14 @@ class AnthropicProvider(LLMProvider):
 
                     i += 1
 
+                # Use shared helper for thinking message transformations (mirrors chat_completion exactly)
+                # Note: We don't pass context_limit here to avoid recursive token counting
+                sanitized_messages = self._prepare_messages_for_thinking(
+                    sanitized_messages,
+                    context_limit=0,  # Skip context optimization in token counting to avoid recursion
+                    system_message=None,
+                )
+
                 data = {
                     "model": "claude-3-5-sonnet-v2@20241022",
                     "messages": sanitized_messages,
@@ -1061,7 +1565,7 @@ class AnthropicProvider(LLMProvider):
         else:
             # Direct Anthropic API Token Counting
             try:
-                system_message, converted_messages = self._convert_messages(messages)
+                system_message, converted_messages, _ = self._convert_messages(messages)
                 request_args = {
                     "model": resolved_model,
                     "messages": converted_messages,
@@ -1075,9 +1579,8 @@ class AnthropicProvider(LLMProvider):
             except Exception as e:
                 logger.warning(f"Anthropic beta token counting failed: {e}")
 
-        # Final Fallback to simple estimation if API fails
-        char_count = sum(len(str(m.get("content", ""))) for m in messages)
-        return char_count // 4
+        # Return None when token counting fails - caller should skip context emission
+        return None  # type: ignore
 
     async def chat_completion_async(
         self,
@@ -1093,12 +1596,12 @@ class AnthropicProvider(LLMProvider):
     ) -> ChatResponse:
         """Make an asynchronous chat completion request to Anthropic."""
         resolved_model = self.resolve_model(model)
-        system_message, converted_messages = self._convert_messages(messages)
+        system_message, converted_messages, _compressed_indices = self._convert_messages(messages)
 
         request_args: dict[str, Any] = {
             "model": resolved_model,
             "messages": converted_messages,
-            "max_tokens": max_tokens or 8192,
+            "max_tokens": max_tokens or 20000,
         }
 
         if system_message:
@@ -1140,6 +1643,15 @@ class AnthropicProvider(LLMProvider):
             else:
                 request_args["thinking"] = {"type": "enabled", "budget_tokens": requested_budget}
 
+            # Use shared helper for all thinking-related transformations
+            converted_messages = self._prepare_messages_for_thinking(
+                converted_messages,
+                context_limit=self.config.context_limit,
+                system_message=system_message,
+            )
+            # Update request_args with the transformed messages
+            request_args["messages"] = converted_messages
+
             # SAFETY CHECK: Anthropic does not support 'thinking' with forced tool use.
             # If tool_choice is explicit (anything other than 'auto'), we explicitly disable thinking.
             tool_choice_arg = request_args.get("tool_choice")
@@ -1165,14 +1677,25 @@ class AnthropicProvider(LLMProvider):
                     ]
                     msg["content"] = new_content
 
-        response = await self.async_client.messages.create(**request_args)
+        # Enable interleaved thinking for proper thinking between tool calls
+        # Must use client.beta.messages.create() to pass beta headers
+        if "thinking" in request_args:
+            request_args["betas"] = ["interleaved-thinking-2025-05-14"]
+            response = await retry_async_call(self.async_client.beta.messages.create, **request_args)
+        else:
+            response = await retry_async_call(self.async_client.messages.create, **request_args)
 
         content: str | None = None
         tool_calls: list[dict[str, Any]] | None = None
+        thinking = None
 
         for block in response.content:
             if block.type == "text":
                 content = block.text
+            elif block.type == "thinking":
+                thinking = {"thinking": block.thinking, "signature": block.signature}
+            elif block.type == "redacted_thinking":
+                thinking = {"thinking": "[Redacted by Anthropic]", "signature": block.data}
             elif block.type == "tool_use":
                 if tool_calls is None:
                     tool_calls = []
@@ -1184,11 +1707,15 @@ class AnthropicProvider(LLMProvider):
                     }
                 )
 
+        if thinking:
+            logger.info(f"Captured thinking block (async) with signature: {thinking.get('signature', 'N/A')[:50]}...")
+
         return ChatResponse(
             content=content,
             tool_calls=tool_calls,
             finish_reason=response.stop_reason or "end_turn",
             raw_response=response,
+            thinking=thinking,
         )
 
 
@@ -1215,28 +1742,36 @@ class GoogleProvider(LLMProvider):
             self.client = genai.Client(api_key=api_key)
 
     def _init_vertex_client(self, gcp_config: dict):
-        """Initialize Vertex AI client with service account."""
-        import vertexai
+        """Initialize Vertex AI client with service account using google.genai SDK.
+
+        This uses the unified google.genai SDK with vertexai=True, which provides
+        full ThinkingConfig support for Vertex AI (same as the API key path).
+        """
+        from google import genai
         from google.auth import load_credentials_from_file
+        from google.genai.types import HttpOptions
 
         sa_path = gcp_config["service_account_path"]
         project_id = gcp_config["project_id"]
-        # Force global region as requested
+        # Force global region as used by Vertex AI for Gemini
         region = "global"
 
         # Load credentials from service account file
         credentials, _ = load_credentials_from_file(sa_path, scopes=["https://www.googleapis.com/auth/cloud-platform"])
         self.credentials = credentials
-
-        # Initialize Vertex AI
-        vertexai.init(project=project_id, location=region, credentials=credentials)
-
-        # Import the generative model from Vertex
-        from vertexai.generative_models import GenerativeModel
-
-        self.vertex_model_class = GenerativeModel
         self.project_id = project_id
         self.region = region
+
+        # Create google.genai Client with Vertex AI enabled
+        # This uses the same SDK as the API key path but with service account auth
+        self.client = genai.Client(
+            credentials=credentials,
+            vertexai=True,
+            project=project_id,
+            location=region,
+            http_options=HttpOptions(api_version="v1"),
+        )
+        logger.info(f"Initialized google.genai client for Vertex AI (project: {project_id}, region: {region})")
 
     def _get_api_key(self) -> str:
         """Get Google API key from environment or config file."""
@@ -1276,6 +1811,7 @@ class GoogleProvider(LLMProvider):
                 name=msg.get("name"),
                 tool_call_id=msg.get("tool_call_id"),
                 tool_calls=msg.get("tool_calls"),
+                thinking=msg.get("thinking"),  # Pass thinking for thought_signature access
             )
 
             if chat_msg.role == "system":
@@ -1407,30 +1943,19 @@ class GoogleProvider(LLMProvider):
                 **kwargs,
             )
 
-        if self._use_vertex:
-            return self._chat_completion_vertex(
-                messages,
-                model,
-                tools,
-                tool_choice,
-                temperature,
-                max_tokens,
-                reasoning_effort,
-                parallel_tool_calls,
-                **kwargs,
-            )
-        else:
-            return self._chat_completion_api(
-                messages,
-                model,
-                tools,
-                tool_choice,
-                temperature,
-                max_tokens,
-                reasoning_effort,
-                parallel_tool_calls,
-                **kwargs,
-            )
+        # Both Vertex and API key paths now use the same google.genai Client
+        # so we use the unified _chat_completion_api method for both
+        return self._chat_completion_api(
+            messages,
+            model,
+            tools,
+            tool_choice,
+            temperature,
+            max_tokens,
+            reasoning_effort,
+            parallel_tool_calls,
+            **kwargs,
+        )
 
     def _chat_completion_api(
         self,
@@ -1464,6 +1989,41 @@ class GoogleProvider(LLMProvider):
             logger.debug(
                 f"Google AI API: Passing {len(converted_tools[0]['function_declarations'])} tools to model {resolved_model}"
             )
+
+            # Handle tool_choice to control function calling behavior
+            # - tool_choice={"type": "function", "function": {"name": "X"}} -> ANY + allowed_function_names
+            # - tool_choice="required" or "any" -> ANY (force function call)
+            # - tool_choice="none" -> NONE
+            # - tool_choice="auto" or None -> AUTO
+            if tool_choice:
+                calling_mode = "AUTO"
+                allowed_functions = None
+
+                if isinstance(tool_choice, dict):
+                    if tool_choice.get("type") == "function":
+                        # Force a specific function to be called
+                        func_name = tool_choice.get("function", {}).get("name")
+                        if func_name:
+                            calling_mode = "ANY"
+                            allowed_functions = [func_name]
+                            logger.info(f"Google AI API: tool_choice forces function '{func_name}' - using ANY mode")
+                elif isinstance(tool_choice, str):
+                    if tool_choice.lower() in ("required", "any"):
+                        calling_mode = "ANY"
+                        logger.info(f"Google AI API: tool_choice='{tool_choice}' - using ANY mode")
+                    elif tool_choice.lower() == "none":
+                        calling_mode = "NONE"
+                        logger.info("Google AI API: tool_choice='none' - using NONE mode")
+
+                # Build ToolConfig using proper types from google.genai
+                if calling_mode != "AUTO":
+                    fc_config = types.FunctionCallingConfig(mode=calling_mode)
+                    if allowed_functions:
+                        fc_config = types.FunctionCallingConfig(
+                            mode=calling_mode, allowed_function_names=allowed_functions
+                        )
+                    generation_config.tool_config = types.ToolConfig(function_calling_config=fc_config)
+                    logger.debug(f"  ToolConfig mode: {calling_mode}, allowed: {allowed_functions}")
         else:
             logger.debug(f"Google AI API: No tools passed to model {resolved_model}")
 
@@ -1473,40 +2033,120 @@ class GoogleProvider(LLMProvider):
 
         # Handle reasoning/thinking mode
         if reasoning_effort:
-            # Gemini 2.0 Flash Thinking uses special thinking config
+            # Gemini 2.0+ Flash Thinking uses special thinking config
             effort_map = {"low": 1024, "medium": 8192, "high": 24576}
             budget = effort_map.get(reasoning_effort, 8192)
-            generation_config.thinking_config = types.ThinkingConfig(thinking_budget=budget)
+            # Enable include_thoughts to get the thinking content in the response
+            generation_config.thinking_config = types.ThinkingConfig(
+                thinking_budget=budget,
+                include_thoughts=True,
+            )
 
-        # Build the request
-        response = self.client.models.generate_content(
-            model=resolved_model,
-            contents=converted_messages,  # type: ignore
-            config=generation_config,
-        )
+        # Disable automatic function calling - we handle function execution manually
+        # This prevents the SDK's AFC loop from interfering with our control flow
+        generation_config.automatic_function_calling = types.AutomaticFunctionCallingConfig(disable=True)
+
+        # Build and execute the request with retry for empty responses
+        max_empty_retries = 1
+        response = None
+
+        for attempt in range(max_empty_retries + 1):
+            response = self.client.models.generate_content(
+                model=resolved_model,
+                contents=converted_messages,  # type: ignore
+                config=generation_config,
+            )
+
+            # Check if response has usable content
+            has_content = (
+                response.candidates and response.candidates[0].content and response.candidates[0].content.parts
+            )
+
+            if has_content:
+                break  # Got valid response
+
+            if attempt < max_empty_retries:
+                # Log and retry
+                block_reason = None
+                finish_reason_raw = None
+                if hasattr(response, "prompt_feedback") and response.prompt_feedback:
+                    block_reason = getattr(response.prompt_feedback, "block_reason", None)
+                if response.candidates and response.candidates[0]:
+                    finish_reason_raw = getattr(response.candidates[0], "finish_reason", None)
+                logger.warning(
+                    f"Google AI: Empty response (finish_reason={finish_reason_raw}, block_reason={block_reason}), "
+                    f"retrying ({attempt + 1}/{max_empty_retries})..."
+                )
+                import time
+
+                time.sleep(0.5)  # Brief backoff before retry
 
         # Convert response to unified format
         content: str | None = None
         tool_calls: list[dict[str, Any]] | None = None
+        thinking_content: str | None = None
+        thought_signature: str | None = None
 
-        if response.candidates and response.candidates[0].content:
+        if response and response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
             for part in response.candidates[0].content.parts:  # type: ignore
-                if hasattr(part, "text") and part.text:
+                # Check for thought parts first (Gemini marks thinking with 'thought' boolean)
+                if hasattr(part, "thought") and part.thought:
+                    # This is a thinking/thought part
+                    if hasattr(part, "text") and part.text:
+                        thinking_content = part.text
+                        logger.debug(f"Google AI: Extracted thinking content ({len(part.text)} chars)")
+                elif hasattr(part, "text") and part.text:
                     content = part.text
+                    # Check for thought_signature on text parts (for non-function call responses)
+                    if hasattr(part, "thought_signature") and part.thought_signature:
+                        # Signature is bytes, encode to base64 for JSON serialization
+                        import base64
+
+                        sig = part.thought_signature
+                        thought_signature = base64.b64encode(sig).decode("utf-8") if isinstance(sig, bytes) else sig
+                        logger.debug("Google AI: Extracted thought_signature from text part")
                 elif hasattr(part, "function_call") and part.function_call:
                     if tool_calls is None:
                         tool_calls = []
                     fc = part.function_call
-                    tool_calls.append(
-                        {
-                            "id": f"call_{len(tool_calls)}",  # Gemini doesn't provide IDs
-                            "type": "function",
-                            "function": {"name": fc.name, "arguments": json.dumps(dict(fc.args))},  # type: ignore
-                        }
-                    )
+                    tool_call_entry = {
+                        "id": f"call_{len(tool_calls)}",  # Gemini doesn't provide IDs
+                        "type": "function",
+                        "function": {"name": fc.name, "arguments": json.dumps(dict(fc.args))},  # type: ignore
+                    }
+                    # Extract thought_signature from function call part if present
+                    # Only the first function call in parallel calls will have the signature
+                    if hasattr(part, "thought_signature") and part.thought_signature:
+                        # Signature is bytes, encode to base64 for JSON serialization
+                        import base64
+
+                        sig = part.thought_signature
+                        sig_encoded = base64.b64encode(sig).decode("utf-8") if isinstance(sig, bytes) else sig
+                        tool_call_entry["thought_signature"] = sig_encoded
+                        thought_signature = sig_encoded  # Also store in thinking dict
+                        logger.debug("Google AI: Extracted thought_signature from function_call part")
+                    tool_calls.append(tool_call_entry)
+
+        # Log if we still have an empty response after retries
+        if (
+            not response
+            or not response.candidates
+            or not response.candidates[0].content
+            or not response.candidates[0].content.parts
+        ):
+            block_reason = None
+            if response and hasattr(response, "prompt_feedback") and response.prompt_feedback:
+                block_reason = getattr(response.prompt_feedback, "block_reason", None)
+            if response and response.candidates and response.candidates[0]:
+                finish_reason_raw = getattr(response.candidates[0], "finish_reason", None)
+                logger.warning(
+                    f"Google AI: Response still empty after retry (finish_reason={finish_reason_raw}, block_reason={block_reason})"
+                )
+            else:
+                logger.warning(f"Google AI: No candidates after retry (block_reason={block_reason})")
 
         finish_reason = "stop"
-        if response.candidates:
+        if response and response.candidates:
             finish_reason = (
                 str(response.candidates[0].finish_reason) if response.candidates[0].finish_reason else "stop"
             )
@@ -1516,11 +2156,21 @@ class GoogleProvider(LLMProvider):
             logger.info(f"Google AI: Limiting {len(tool_calls)} tool calls to 1 (parallel_tool_calls=False)")
             tool_calls = [tool_calls[0]]
 
+        # Build thinking dict if we captured thinking content or signature
+        thinking: dict[str, str] | None = None
+        if thinking_content or thought_signature:
+            thinking = {}
+            if thinking_content:
+                thinking["thinking"] = thinking_content
+            if thought_signature:
+                thinking["signature"] = thought_signature  # Store signature for replay
+
         return ChatResponse(
             content=content,
             tool_calls=tool_calls,
             finish_reason=finish_reason,
             raw_response=response,
+            thinking=thinking,
         )
 
     def _chat_completion_vertex(
@@ -1547,6 +2197,15 @@ class GoogleProvider(LLMProvider):
             config_params["temperature"] = temperature
         if max_tokens is not None:
             config_params["max_output_tokens"] = max_tokens
+
+        # Handle reasoning/thinking mode for Vertex AI
+        # Note: Vertex SDK doesn't have direct ThinkingConfig, but thinking is enabled
+        # automatically for supported models. We configure the model to return thoughts.
+        if reasoning_effort:
+            # For Vertex AI, thinking is primarily controlled at the model level
+            # The thinking budget could be set if Vertex SDK supported it directly
+            # For now, we just enable thinking extraction in the response
+            logger.info(f"Vertex AI: Thinking mode enabled with reasoning_effort={reasoning_effort}")
 
         generation_config = GenerationConfig(**config_params) if config_params else None  # type: ignore
 
@@ -1620,7 +2279,9 @@ class GoogleProvider(LLMProvider):
             logger.info(f"Vertex AI: No tools passed to model {resolved_model}")
 
         # Create model instance
-        vertex_model = self.vertex_model_class(resolved_model, system_instruction=system_instruction)
+        from vertexai.generative_models import GenerativeModel
+
+        vertex_model = GenerativeModel(resolved_model, system_instruction=system_instruction)
 
         logger.info(f"Vertex AI: Making generate_content call with {len(converted_messages)} messages")
 
@@ -1646,14 +2307,23 @@ class GoogleProvider(LLMProvider):
                         logger.debug(f"  Part {i}: HAS text attribute")
                     if hasattr(part, "function_call"):
                         logger.debug(f"  Part {i}: HAS function_call attribute")
+                    if hasattr(part, "thought"):
+                        logger.debug(f"  Part {i}: HAS thought attribute = {part.thought}")
 
         # Convert response (Vertex AI response format is similar)
         content: str | None = None
         tool_calls: list[dict[str, Any]] | None = None
+        thinking_content: str | None = None
 
         if response.candidates and response.candidates[0].content:
             for part in response.candidates[0].content.parts:
-                if hasattr(part, "text") and part.text:
+                # Check for thought parts first (Vertex AI marks thinking with 'thought' boolean)
+                if hasattr(part, "thought") and part.thought:
+                    # This is a thinking/thought part
+                    if hasattr(part, "text") and part.text:
+                        thinking_content = part.text
+                        logger.debug(f"Vertex AI: Extracted thinking content ({len(part.text)} chars)")
+                elif hasattr(part, "text") and part.text:
                     content = part.text
                     logger.info(f"Vertex AI: Got TEXT content (length: {len(content or '')} chars)")
                 elif hasattr(part, "function_call") and part.function_call:
@@ -1781,11 +2451,17 @@ class GoogleProvider(LLMProvider):
             logger.info(f"Vertex AI: Limiting {len(tool_calls)} tool calls to 1 (parallel_tool_calls=False)")
             tool_calls = [tool_calls[0]]
 
+        # Build thinking dict if we captured thinking content
+        thinking: dict[str, str] | None = None
+        if thinking_content:
+            thinking = {"thinking": thinking_content}
+
         return ChatResponse(
             content=content,
             tool_calls=tool_calls,
             finish_reason=finish_reason,
             raw_response=response,
+            thinking=thinking,
         )
 
     async def chat_completion_async(
@@ -1844,33 +2520,14 @@ class GoogleProvider(LLMProvider):
         resolved_model = self.resolve_model(None)
 
         try:
-            if self._use_vertex:
-                from google import genai
-                from google.genai.types import HttpOptions
-
-                # Use _convert_messages to get dicts, which google.genai SDK accepts
-                system_instruction, converted_messages = self._convert_messages(messages)
-
-                client = genai.Client(
-                    credentials=self.credentials,
-                    vertexai=True,
-                    project=self.project_id,
-                    location=self.region,
-                    http_options=HttpOptions(api_version="v1"),
-                )
-
-                response = client.models.count_tokens(model=resolved_model, contents=converted_messages)  # type: ignore
-                return response.total_tokens or 0
-            else:
-                system_instruction, converted_messages = self._convert_messages(messages)
-                # GenAI model instantiation for counting
-                # Note: GenAI SDK structure might vary, but typically it exposes count_tokens on the model/client
-                response = self.client.models.count_tokens(
-                    model=resolved_model,
-                    contents=converted_messages,  # type: ignore
-                    config={"system_instruction": system_instruction} if system_instruction else None,
-                )
-                return response.total_tokens  # type: ignore
+            # Both Vertex and API key paths now use the same google.genai Client (self.client)
+            system_instruction, converted_messages = self._convert_messages(messages)
+            response = self.client.models.count_tokens(
+                model=resolved_model,
+                contents=converted_messages,  # type: ignore
+                config={"system_instruction": system_instruction} if system_instruction else None,
+            )
+            return response.total_tokens or 0  # type: ignore
         except Exception as e:
             logger.warning(f"Google token counting failed: {e}")
             char_count = sum(len(str(m.get("content", ""))) for m in messages)

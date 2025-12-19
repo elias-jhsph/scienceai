@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2025-12-13
+
+### Improved
+- **Terminology Consistency**: Updated UI labels and prompts from "Data Collection" to "Data Extraction" for clearer communication.
+- **Progress Indicator**: Enhanced with two-phase transformation—linear lag (0-50%) then exponential catch-up (50-100%) for smoother, more natural progress bar animation.
+- **Pause Functionality**: Enhanced pause/resume workflow with automatic modal closure and button state reset on completion.
+- **Agent Prompts**: Enhanced Analyst and PI prompts with critical rules about tool call execution, error recovery, delegation workflow, and completion requirements.
+- **Close Dialog**: Improved messaging and formatting for project close confirmation dialog.
+- **Parallel Calls Persistence**: Parallel analyst replicate setting (1×, 2×, 3×) now persists across page loads and sessions.
+- **Gemini Thinking Support**: Added support for preserving `thought_signature` and `thinking` blocks in bundle validator for Gemini 3 Pro with thinking capabilities.
+
+### Fixed
+- **Author Extraction**: Fixed metadata author parsing with improved error handling and fallback logic for missing or malformed author data.
+- **Context Percentage**: Added null checks to prevent errors when `context_percentage` is `None` in chat templates.
+- **Dark Mode**: Fixed chat input container background transparency issue in dark theme.
+- **Database Error Handling**: Added automatic error status clearing before reprocessing papers to prevent stale error states.
+- **Database Locking**: Added `lock_project()` method for safe thread termination by acquiring write locks on critical database files.
+
+### Internal
+- **Code Cleanup**: Removed obsolete test files (`verify_thinking_fix.py`, `verify_thinking_mixed.py`) and cleaned up whitespace/formatting across codebase.
+- **Prompt Cleanup**: Removed minimal `analyst_prepend_openai.txt` file (OpenAI models follow base prompt directly).
+
 ## [0.4.2] - 2025-12-13
 
 ### Added
@@ -90,6 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PDF processing and automatic metadata detection
 - Structured data extraction with JSON schemas
 
+[0.4.3]: https://github.com/elias-jhsph/scienceai/compare/0.4.2...0.4.3
 [0.4.2]: https://github.com/elias-jhsph/scienceai/compare/0.4.1...0.4.2
 [0.4.1]: https://github.com/elias-jhsph/scienceai/compare/0.3.1...0.4.1
 [0.3.1]: https://github.com/elias-jhsph/scienceai/releases/tag/0.3.1
