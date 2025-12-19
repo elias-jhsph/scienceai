@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dark Mode**: Fixed chat input container background transparency issue in dark theme.
 - **Database Error Handling**: Added automatic error status clearing before reprocessing papers to prevent stale error states.
 - **Database Locking**: Added `lock_project()` method for safe thread termination by acquiring write locks on critical database files.
+- **File Path Fix**: Fixed file path handling in PI generated content to ensure correct paths are returned.
 
 ### Internal
 - **Code Cleanup**: Removed obsolete test files (`verify_thinking_fix.py`, `verify_thinking_mixed.py`) and cleaned up whitespace/formatting across codebase.

@@ -16,6 +16,7 @@ import uuid
 import zipfile
 from datetime import datetime
 from multiprocessing import Queue
+from pathlib import Path
 
 import markdown2
 from flask import Flask, abort, after_this_request, render_template
@@ -514,12 +515,13 @@ def replace_pi_generated_file_links(messages, project_path):
     if not pi_files:
         return messages
 
-    # Build a mapping of filenames to full paths
+    # Build a mapping of all full paths to filenames using pathlib.Path no paths to dirs all paths to files but at all depths
+    # this is wrong because it will not include the files in the subdirectories
     file_map = {}
-    for filename in pi_files:
-        full_path = os.path.join(pi_generated_path, filename)
-        if os.path.isfile(full_path):
-            file_map[filename] = full_path
+    for path in Path(pi_generated_path).glob("**/*"):
+        if path.is_file():
+            raw_path = str(path)
+            file_map[raw_path.replace((pi_generated_path + "/").replace("//", "/"), "")] = raw_path
 
     if not file_map:
         return messages
