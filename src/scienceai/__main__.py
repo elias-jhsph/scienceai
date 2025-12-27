@@ -85,6 +85,8 @@ db_folder = os.path.join(os.path.expanduser("~"), "Documents", "ScienceAI")
 if not os.path.exists(db_folder):
     os.makedirs(db_folder)
 path_to_app = os.path.dirname(os.path.abspath(__file__))
+# Ensure io directory exists for temporary file storage/downloads
+os.makedirs(os.path.join(path_to_app, "io"), exist_ok=True)
 path_to_python = sys.executable
 script_to_return_to_menu = "<script>window.location.href = '/menu';</script>"
 
@@ -619,8 +621,13 @@ def load_project(project):
     global message_queue
     global thread
     global original_save
-    for file in os.listdir(os.path.join(path_to_app, "io")):
-        os.remove(os.path.join(path_to_app, "io", file))
+    io_dir = os.path.join(path_to_app, "io")
+    if os.path.exists(io_dir):
+        for file in os.listdir(io_dir):
+            try:
+                os.remove(os.path.join(io_dir, file))
+            except Exception as e:
+                logger.error(f"Error removing file from io: {e}")
     if database:
         close()
         return False

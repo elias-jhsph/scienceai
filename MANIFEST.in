@@ -1,2 +1,9 @@
 include LICENSE
 include README.md
+recursive-include src/scienceai/static *
+recursive-include src/scienceai/templates *
+recursive-include src/scienceai/prompts *
+recursive-include src/scienceai/io *
+include src/scienceai/*.json
+include src/scienceai/*.txt
+include src/scienceai/py.typed

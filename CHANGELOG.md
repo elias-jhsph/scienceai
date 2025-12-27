@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2025-12-27
+
+### Fixed
+- **FileNotFoundError**: Fixed a critical crash where the `io` directory was missing from the installed package and not created at runtime.
+- **Runtime Directory Creation**: Added automatic creation of the `io` directory at startup to ensure robustness across different installation environments.
+
+### Internal
+- **Packaging Consistency**: Updated `MANIFEST.in` and `pyproject.toml` to ensure all static assets, templates, prompts, and the `io` directory are correctly included in the distribution.
+- **Version Tracking**: Added a `.gitkeep` file to the `io` directory to ensure it is tracked by version control.
+
 ## [0.4.3] - 2025-12-13
 
 ### Improved
@@ -114,6 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PDF processing and automatic metadata detection
 - Structured data extraction with JSON schemas
 
+[0.4.4]: https://github.com/elias-jhsph/scienceai/compare/0.4.3...0.4.4
 [0.4.3]: https://github.com/elias-jhsph/scienceai/compare/0.4.2...0.4.3
 [0.4.2]: https://github.com/elias-jhsph/scienceai/compare/0.4.1...0.4.2
 [0.4.1]: https://github.com/elias-jhsph/scienceai/compare/0.3.1...0.4.1
