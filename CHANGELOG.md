@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **FileNotFoundError**: Fixed a critical crash where the `io` directory was missing from the installed package and not created at runtime.
 - **Runtime Directory Creation**: Added automatic creation of the `io` directory at startup to ensure robustness across different installation environments.
+- **Google AI Rate Limiting**: Added automatic retry with exponential backoff for 429/RESOURCE_EXHAUSTED errors, with up to 3 retries and parsed delay times.
+- **Google AI Token Counting**: Fixed `count_tokens` to only use `system_instruction` on Vertex AI path, avoiding API errors on the API key path.
+- **Google AI Schema Compatibility**: Added stripping of unsupported `format` and `default` fields from tool parameter schemas to prevent API errors.
 
 ### Internal
 - **Packaging Consistency**: Updated `MANIFEST.in` and `pyproject.toml` to ensure all static assets, templates, prompts, and the `io` directory are correctly included in the distribution.

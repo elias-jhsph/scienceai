@@ -23,7 +23,6 @@ src/scienceai/process_paper.py
 src/scienceai/py.typed
 src/scienceai/reasoning.py
 src/scienceai/scienceai-config.example.json
-src/scienceai/io/.gitkeep
 src/scienceai/prompts/analyst_append_anthropic.txt
 src/scienceai/prompts/analyst_append_google.txt
 src/scienceai/prompts/analyst_append_openai.txt

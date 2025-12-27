@@ -1737,9 +1737,11 @@ class GoogleProvider(LLMProvider):
             logger.info("Using Google Gemini via API key")
             self._use_vertex = False
             from google import genai
+            from google.genai.types import HttpOptions
 
             api_key = config.api_key or self._get_api_key()
-            self.client = genai.Client(api_key=api_key)
+            # Use v1beta to ensure support for preview models (like gemini-3-pro-preview)
+            self.client = genai.Client(api_key=api_key, http_options=HttpOptions(api_version="v1beta"))
 
     def _init_vertex_client(self, gcp_config: dict):
         """Initialize Vertex AI client with service account using google.genai SDK.
@@ -1894,15 +1896,42 @@ class GoogleProvider(LLMProvider):
         if not tools:
             return None
 
+        def strip_unsupported_fields(schema: dict[str, Any]) -> dict[str, Any]:
+            """Recursively strip fields not supported by Gemini API from JSON schema."""
+            if not isinstance(schema, dict):
+                return schema
+
+            # Fields not supported by Gemini API
+            unsupported_fields = {"additionalProperties", "additional_properties"}
+
+            result = {}
+            for key, value in schema.items():
+                if key in unsupported_fields:
+                    continue  # Skip unsupported fields
+                elif key == "properties" and isinstance(value, dict):
+                    # Recursively process nested property schemas
+                    result[key] = {k: strip_unsupported_fields(v) for k, v in value.items()}
+                elif key == "items" and isinstance(value, dict):
+                    # Handle array item schemas
+                    result[key] = strip_unsupported_fields(value)
+                else:
+                    result[key] = value
+
+            return result
+
         function_declarations = []
         for tool in tools:
             if tool.get("type") == "function":
                 func = tool["function"]
+                # Get parameters and strip unsupported fields
+                params = func.get("parameters", {"type": "object", "properties": {}})
+                clean_params = strip_unsupported_fields(params)
+
                 function_declarations.append(
                     {
                         "name": func["name"],
                         "description": func.get("description", ""),
-                        "parameters": func.get("parameters", {"type": "object", "properties": {}}),
+                        "parameters": clean_params,
                     }
                 )
 
@@ -2046,40 +2075,82 @@ class GoogleProvider(LLMProvider):
         # This prevents the SDK's AFC loop from interfering with our control flow
         generation_config.automatic_function_calling = types.AutomaticFunctionCallingConfig(disable=True)
 
-        # Build and execute the request with retry for empty responses
+        # Build and execute the request with retry for empty responses and rate limits
         max_empty_retries = 1
+        max_rate_limit_retries = 3
         response = None
 
-        for attempt in range(max_empty_retries + 1):
-            response = self.client.models.generate_content(
-                model=resolved_model,
-                contents=converted_messages,  # type: ignore
-                config=generation_config,
-            )
+        for rate_limit_attempt in range(max_rate_limit_retries + 1):
+            try:
+                for attempt in range(max_empty_retries + 1):
+                    response = self.client.models.generate_content(
+                        model=resolved_model,
+                        contents=converted_messages,  # type: ignore
+                        config=generation_config,
+                    )
 
-            # Check if response has usable content
-            has_content = (
-                response.candidates and response.candidates[0].content and response.candidates[0].content.parts
-            )
+                    # Check if response has usable content
+                    has_content = (
+                        response.candidates and response.candidates[0].content and response.candidates[0].content.parts
+                    )
 
-            if has_content:
-                break  # Got valid response
+                    if has_content:
+                        break  # Got valid response
 
-            if attempt < max_empty_retries:
-                # Log and retry
-                block_reason = None
-                finish_reason_raw = None
-                if hasattr(response, "prompt_feedback") and response.prompt_feedback:
-                    block_reason = getattr(response.prompt_feedback, "block_reason", None)
-                if response.candidates and response.candidates[0]:
-                    finish_reason_raw = getattr(response.candidates[0], "finish_reason", None)
-                logger.warning(
-                    f"Google AI: Empty response (finish_reason={finish_reason_raw}, block_reason={block_reason}), "
-                    f"retrying ({attempt + 1}/{max_empty_retries})..."
-                )
-                import time
+                    if attempt < max_empty_retries:
+                        # Log and retry
+                        block_reason = None
+                        finish_reason_raw = None
+                        if hasattr(response, "prompt_feedback") and response.prompt_feedback:
+                            block_reason = getattr(response.prompt_feedback, "block_reason", None)
+                        if response.candidates and response.candidates[0]:
+                            finish_reason_raw = getattr(response.candidates[0], "finish_reason", None)
+                        logger.warning(
+                            f"Google AI: Empty response (finish_reason={finish_reason_raw}, block_reason={block_reason}), "
+                            f"retrying ({attempt + 1}/{max_empty_retries})..."
+                        )
+                        import time
 
-                time.sleep(0.5)  # Brief backoff before retry
+                        time.sleep(0.5)  # Brief backoff before retry
+
+                # If we got here without exception, break out of rate limit retry loop
+                break
+
+            except Exception as e:
+                # Check if this is a rate limit error (429)
+                error_str = str(e)
+                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                    if rate_limit_attempt < max_rate_limit_retries:
+                        # Parse retry delay from error if available, default to 60 seconds
+                        import re
+                        import time
+
+                        wait_time = 60.0  # Default wait time
+                        # Try to parse "Please retry in X.XXXs" or "retryDelay': 'XXs'"
+                        delay_match = re.search(r"retry in (\d+(?:\.\d+)?)", error_str, re.IGNORECASE)
+                        if delay_match:
+                            wait_time = min(float(delay_match.group(1)), 120.0)  # Cap at 2 minutes
+                        else:
+                            delay_match = re.search(r"retryDelay['\"]?\s*[:\"]?\s*['\"]?(\d+)", error_str)
+                            if delay_match:
+                                wait_time = min(float(delay_match.group(1)), 120.0)
+
+                        logger.warning(
+                            f"Google AI: Rate limit hit (429), waiting {wait_time:.1f}s before retry "
+                            f"({rate_limit_attempt + 1}/{max_rate_limit_retries})... "
+                            f"To increase limits: https://ai.google.dev/gemini-api/docs/rate-limits"
+                        )
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        logger.error(
+                            f"Google AI: Rate limit exceeded after {max_rate_limit_retries} retries. "
+                            f"Consider upgrading your API tier: https://ai.google.dev/pricing"
+                        )
+                        raise
+                else:
+                    # Not a rate limit error, re-raise immediately
+                    raise
 
         # Convert response to unified format
         content: str | None = None
@@ -2522,10 +2593,16 @@ class GoogleProvider(LLMProvider):
         try:
             # Both Vertex and API key paths now use the same google.genai Client (self.client)
             system_instruction, converted_messages = self._convert_messages(messages)
+
+            # Build config - system_instruction is only supported on Vertex AI, not API key path
+            config = None
+            if self._use_vertex and system_instruction:
+                config = {"system_instruction": system_instruction}
+
             response = self.client.models.count_tokens(
                 model=resolved_model,
                 contents=converted_messages,  # type: ignore
-                config={"system_instruction": system_instruction} if system_instruction else None,
+                config=config,
             )
             return response.total_tokens or 0  # type: ignore
         except Exception as e:
