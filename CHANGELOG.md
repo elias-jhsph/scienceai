@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.6] - 2025-12-27
+
+### Fixed
+- **RECITATION/Safety Block Handling**: Fixed crashes in PDF processing when the API returns `None` content due to RECITATION or safety blocks. Now gracefully handles empty responses with warnings.
+- **Figure Description Null Safety**: Added null check for figure description API responses to prevent crashes during page processing.
+
+### Improved
+- **Favicon**: Added a 🧪 emoji favicon to the menu page for better browser tab identification.
+
 ## [0.4.5] - 2025-12-27
 
 ### Fixed
@@ -131,6 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PDF processing and automatic metadata detection
 - Structured data extraction with JSON schemas
 
+[0.4.6]: https://github.com/elias-jhsph/scienceai/compare/0.4.5...0.4.6
 [0.4.5]: https://github.com/elias-jhsph/scienceai/compare/0.4.4...0.4.5
 [0.4.4]: https://github.com/elias-jhsph/scienceai/compare/0.4.3...0.4.4
 [0.4.3]: https://github.com/elias-jhsph/scienceai/compare/0.4.2...0.4.3

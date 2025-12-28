@@ -216,7 +216,16 @@ async def process_single_page(
     # Await both initial tasks
     chat_response_body, chat_response_fig = await asyncio.gather(body_task, fig_count_task)
 
-    body_content = chat_response_body.choices[0].message.content.replace("**PAGE_COMPLETE**", "")
+    # Handle None content (can happen with RECITATION/safety blocks)
+    raw_content = chat_response_body.choices[0].message.content
+    if raw_content is None:
+        logger.warning(
+            f"⚠️  Page {i + 1}: API returned None content (likely RECITATION/safety block). "
+            f"finish_reason: {getattr(chat_response_body.choices[0], 'finish_reason', 'unknown')}"
+        )
+        body_content = ""
+    else:
+        body_content = raw_content.replace("**PAGE_COMPLETE**", "")
 
     # LLM-based refusal detection
     async def detect_refusal(content):
@@ -324,7 +333,17 @@ async def process_single_page(
 
         try:
             retry_response = await client.chat.completions.create(**retry_arguments)
-            retry_content = retry_response.choices[0].message.content.replace("**PAGE_COMPLETE**", "")
+            retry_raw_content = retry_response.choices[0].message.content
+
+            # Handle None content in retry (RECITATION/safety block persisted)
+            if retry_raw_content is None:
+                logger.warning(
+                    f"⚠️  Page {i + 1}: Retry also returned None content. "
+                    f"finish_reason: {getattr(retry_response.choices[0], 'finish_reason', 'unknown')}"
+                )
+                raise Exception("Retry also returned None content")
+
+            retry_content = retry_raw_content.replace("**PAGE_COMPLETE**", "")
 
             # Check if retry also resulted in refusal using the same robust detection
             is_retry_refusal = await detect_refusal(retry_content)
@@ -401,7 +420,11 @@ async def process_single_page(
 
         chat_response_desc = await client.chat.completions.create(**arguments_desc)
 
-        page_text += chat_response_desc.choices[0].message.content.replace("**FIGURES_AND_TABLES_COMPLETE**", "")
+        fig_desc_content = chat_response_desc.choices[0].message.content
+        if fig_desc_content is not None:
+            page_text += fig_desc_content.replace("**FIGURES_AND_TABLES_COMPLETE**", "")
+        else:
+            logger.warning(f"⚠️  Page {i + 1}: Figure description returned None content, skipping.")
 
     page_text += "\n\n**End of Page " + str(i + 1) + "**\n\n"
     return i, page_text
