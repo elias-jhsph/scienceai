@@ -6,6 +6,8 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
+📄 **[Project Poster & Abstract (Google Drive)](https://drive.google.com/drive/folders/1uI22sFDT_PtT_t9aUCakoI3IwJ_ZHAcW?usp=sharing)**
+
 **An AI-Powered Research Assistant for Systematic Literature Analysis**
 
 ScienceAI is a Python application that transforms how researchers analyze scientific literature. Unlike a standard LLM chatbot, ScienceAI is specifically designed to handle complex, multi-paper research tasks through an intelligent agent-based architecture that supports both GPT-5.2, Claude, and Gemini models.

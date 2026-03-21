@@ -13,25 +13,25 @@
     "_example_openai_config": {
         "_description": "OpenAI models as of December 2025",
         "provider": "openai",
-        "default_model": "gpt-5.2",
-        "default_reasoning_model": "o4-mini",
+        "default_model": "gpt-5.4",
+        "default_reasoning_model": "gpt-5.4",
         "default_vision_model": "gpt-4o",
         "default_fast_model": "gpt-5-mini"
     },
     "_example_anthropic_config": {
         "_description": "Anthropic Claude models as of December 2025",
         "provider": "anthropic",
-        "default_model": "claude-sonnet-4-5",
-        "default_reasoning_model": "claude-opus-4-5",
-        "default_vision_model": "claude-sonnet-4-5",
+        "default_model": "claude-opus-4-6",
+        "default_reasoning_model": "claude-opus-4-6",
+        "default_vision_model": "claude-opus-4-6",
         "default_fast_model": "claude-haiku-4-5"
     },
     "_example_google_config": {
         "_description": "Google Gemini models as of December 2025",
         "provider": "google",
-        "default_model": "gemini-3-pro",
-        "default_reasoning_model": "gemini-3-pro",
-        "default_vision_model": "gemini-3-pro",
+        "default_model": "gemini-3.1-pro-preview-customtools",
+        "default_reasoning_model": "gemini-3.1-pro-preview-customtools",
+        "default_vision_model": "gemini-3.1-pro-preview-customtools",
         "default_fast_model": "gemini-2.5-flash-lite"
     }
 }

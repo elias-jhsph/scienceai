@@ -433,6 +433,10 @@ class ChatMessage:
             else:
                 msg["content"] = self.content or ""
 
+        # Anthropic 'user' and 'assistant' messages cannot have empty content (empty string or empty list)
+        if not msg.get("content"):
+            msg["content"] = "_"
+
         return msg
 
     def to_google_format(self) -> dict[str, Any]:
@@ -1579,8 +1583,9 @@ class AnthropicProvider(LLMProvider):
             except Exception as e:
                 logger.warning(f"Anthropic beta token counting failed: {e}")
 
-        # Return None when token counting fails - caller should skip context emission
-        return None  # type: ignore
+        # Fallback to estimate when token counting fails
+        char_count = sum(len(str(m.get("content", ""))) for m in messages)
+        return max(1, char_count // 4)
 
     async def chat_completion_async(
         self,
@@ -2598,6 +2603,11 @@ class GoogleProvider(LLMProvider):
             config = None
             if self._use_vertex and system_instruction:
                 config = {"system_instruction": system_instruction}
+
+            if not converted_messages:
+                # Avoid 'contents are required' error from genai SDK if there are no converted user/model messages
+                char_count = sum(len(str(m.get("content", ""))) for m in messages)
+                return max(1, char_count // 4)
 
             response = self.client.models.count_tokens(
                 model=resolved_model,

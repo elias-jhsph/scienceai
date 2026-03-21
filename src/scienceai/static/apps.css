@@ -387,7 +387,7 @@ select:focus {
 }
 
 .resize-section-internal {
-    padding: 3rem;
+    padding: 1rem;
     flex: 1;
     overflow: hidden;
     display: flex;

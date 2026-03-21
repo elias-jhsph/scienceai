@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.7] - 2026-03-21
+
+### Fixed
+- **Empty Anthropic Message Content**: Anthropic's API rejects messages with empty `content`. A `"_"` placeholder is now inserted automatically to prevent API errors.
+- **Anthropic Token Counting Fallback**: When beta token counting fails, the provider now returns a character-based estimate (`char_count // 4`) instead of `None`, preventing callers from silently skipping context emission.
+- **Google Token Counting Empty Messages**: If there are no converted messages to send to the Google `count_tokens` endpoint (which would raise a `"contents are required"` SDK error), the provider now returns a character-based estimate instead.
+
+### Internal
+- **Example Config Model Updates**: Updated `scienceai-config.example.json` with current model names — `gpt-5.4` for OpenAI, `claude-opus-4-6` for Anthropic, and `gemini-3.1-pro-preview-customtools` for Google.
+- **README**: Added link to public Google Drive folder containing the project poster and abstract.
+- **UI Padding**: Reduced `.resize-section-internal` padding from `3rem` to `1rem` for a tighter layout in the resize panel.
+
 ## [0.4.6] - 2025-12-27
 
 ### Fixed
@@ -140,6 +152,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PDF processing and automatic metadata detection
 - Structured data extraction with JSON schemas
 
+[0.4.7]: https://github.com/elias-jhsph/scienceai/compare/0.4.6...0.4.7
 [0.4.6]: https://github.com/elias-jhsph/scienceai/compare/0.4.5...0.4.6
 [0.4.5]: https://github.com/elias-jhsph/scienceai/compare/0.4.4...0.4.5
 [0.4.4]: https://github.com/elias-jhsph/scienceai/compare/0.4.3...0.4.4
