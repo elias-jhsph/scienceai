@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "ScienceAI: An Agentic Harness for Scientific Literature Analysis"
+type: software
+authors:
+  - family-names: "Weston-Farber"
+    given-names: "Elias"
+    email: "elias@eliastechlabs.com"
+    affiliation: "Johns Hopkins Bloomberg School of Public Health"
+  - family-names: "Castillo"
+    given-names: "Renan"
+    affiliation: "Johns Hopkins Bloomberg School of Public Health"
+  - family-names: "Frey"
+    given-names: "Katherine"
+    affiliation: "Johns Hopkins Bloomberg School of Public Health"
+repository-code: "https://github.com/elias-jhsph/scienceai"
+url: "https://eliastechlabs.com"
+license: GPL-3.0
+version: "0.4.7"
+date-released: "2026-03-21"
+keywords:
+  - scientific-literature
+  - systematic-review
+  - meta-analysis
+  - data-extraction
+  - provenance-tracking
+  - multi-agent
+  - llm
+  - agentic-ai
+abstract: >-
+  ScienceAI is an open-source agentic harness for scientific literature
+  analysis. It coordinates frontier language models (GPT, Claude, Gemini)
+  to extract structured data from research papers, perform systematic
+  reviews, and replicate published findings with full provenance tracking.
+  Three frontier models independently reproduced the primary findings of
+  a published meta-analysis (Scolaro et al. 2014) using ScienceAI,
+  demonstrating multi-model convergence in scientific data extraction.

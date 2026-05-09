@@ -1,16 +1,28 @@
 # ScienceAI
 
 [![PyPI version](https://badge.fury.io/py/scienceai-llm.svg)](https://badge.fury.io/py/scienceai-llm)
+[![PyPI downloads](https://img.shields.io/pypi/dm/scienceai-llm.svg)](https://pypi.org/project/scienceai-llm/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://github.com/elias-jhsph/scienceai/actions/workflows/test.yml/badge.svg)](https://github.com/elias-jhsph/scienceai/actions/workflows/test.yml)
+[![Last commit](https://img.shields.io/github/last-commit/elias-jhsph/scienceai)](https://github.com/elias-jhsph/scienceai/commits/main)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
+**An open-source agentic harness for scientific literature analysis.** ScienceAI coordinates frontier models to extract data, replicate findings, and perform systematic reviews with full provenance tracking.
+
+```bash
+pip install scienceai-llm
+```
+
+---
+
+### Key Result: Multi-Model Replication of Published Findings
+
+Three frontier models (GPT-5.2, Claude Opus 4.5, Gemini 3 Pro) **independently reproduced the primary findings** of a published meta-analysis — Scolaro et al. (2014), *smoking and fracture healing* — using ScienceAI as the harness. Given 19 source papers and no access to the original forest plots or study assignments, all three models recovered the primary finding that smoking approximately doubles fracture nonunion risk (OR 2.15–2.37 vs. published OR 2.32).
+
+This was presented at the **Johns Hopkins Bloomberg School of Public Health AI Research Day** (March 2026), where it received the **BSPH AI Research Day Staff Award** alongside Jeff Leek's keynote.
+
 📄 **[Project Poster & Abstract (Google Drive)](https://drive.google.com/drive/folders/1uI22sFDT_PtT_t9aUCakoI3IwJ_ZHAcW?usp=sharing)**
-
-**An AI-Powered Research Assistant for Systematic Literature Analysis**
-
-ScienceAI is a Python application that transforms how researchers analyze scientific literature. Unlike a standard LLM chatbot, ScienceAI is specifically designed to handle complex, multi-paper research tasks through an intelligent agent-based architecture that supports both GPT-5.2, Claude, and Gemini models.
 
 ---
 
@@ -54,7 +66,7 @@ This means you can ask: *"Extract healing times, sample sizes, and intervention 
 
 ## 📦 Installation
 
-**Requirements**: Python 3.11+ and an OpenAI API key
+**Requirements**: Python 3.11+ and an API key for at least one supported provider (OpenAI, Anthropic, or Google)
 
 ```bash
 pip install scienceai-llm
@@ -75,11 +87,9 @@ This starts a local web server. Open your browser to:
 http://localhost:4242
 ```
 
-You will be prompted to enter your OpenAI API key. This key is used to authenticate requests to the OpenAI API. You can find your API key in your OpenAI account settings.
+You will be prompted to enter an API key for your chosen provider. Enter your project name and click **"Start"** to create a new project or load an existing one.
 
-Enter your project name and click **"Start"** to create a new project or load an existing one.
-
-> **Tip**: You can switch between **OpenAI**, **Anthropic (Claude)**, and **Google (Gemini)** models using the "LLM Provider" card in the main menu once started. See [Configuration](#-configuration) for setup details.
+> **Tip**: You can switch between **OpenAI**, **Anthropic (Claude)**, and **Google (Gemini)** models using the "LLM Provider" card in the main menu. See [Configuration](#-configuration) for setup details.
 
 ![Papers Panel - Your Literature Library](images/main_menu.png)
 

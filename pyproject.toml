@@ -1,8 +1,8 @@
 [project]
 name = "scienceai-llm"
-version = "0.4.7"
+version = "0.4.8"
 authors = [{name="Elias Weston-Farber", email="elias@eliastechlabs.com"}]
-description = "An AI powered scientific literature search engine"
+description = "An open-source agentic harness for scientific literature analysis — multi-model data extraction, systematic reviews, and provenance tracking"
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
