@@ -17,7 +17,7 @@ https://github.com/eliaswestonfarber/scienceai
 from scienceai.client import ScienceAI
 from scienceai.database_manager import DatabaseManager, get_projects
 
-__version__ = "0.4.6"
+__version__ = "0.4.9"
 __author__ = "Elias Weston-Farber"
 __email__ = "elias@eliastechlabs.com"
 
