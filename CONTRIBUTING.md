@@ -27,7 +27,7 @@ Please be respectful and constructive in all interactions. We welcome contributo
    ```
 3. **Add the upstream remote**:
    ```bash
-   git remote add upstream https://github.com/elias-jhsph/scienceai.git
+   git remote add upstream https://github.com/eliaswestonfarber/scienceai.git
    ```
 
 ## Development Setup

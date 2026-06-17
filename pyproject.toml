@@ -79,10 +79,10 @@ dev = [
 scienceai = "scienceai.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/elias-jhsph/scienceai"
-Repository = "https://github.com/elias-jhsph/scienceai"
-Documentation = "https://github.com/elias-jhsph/scienceai#readme"
-Issues = "https://github.com/elias-jhsph/scienceai/issues"
+Homepage = "https://github.com/eliaswestonfarber/scienceai"
+Repository = "https://github.com/eliaswestonfarber/scienceai"
+Documentation = "https://github.com/eliaswestonfarber/scienceai#readme"
+Issues = "https://github.com/eliaswestonfarber/scienceai/issues"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]

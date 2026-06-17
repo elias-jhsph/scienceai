@@ -11,7 +11,7 @@ Basic Usage:
     >>> response = client.chat("What are the key findings?")
 
 For more information, see the documentation at:
-https://github.com/elias-jhsph/scienceai
+https://github.com/eliaswestonfarber/scienceai
 """
 
 from scienceai.client import ScienceAI

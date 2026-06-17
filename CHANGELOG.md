@@ -152,11 +152,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PDF processing and automatic metadata detection
 - Structured data extraction with JSON schemas
 
-[0.4.7]: https://github.com/elias-jhsph/scienceai/compare/0.4.6...0.4.7
-[0.4.6]: https://github.com/elias-jhsph/scienceai/compare/0.4.5...0.4.6
-[0.4.5]: https://github.com/elias-jhsph/scienceai/compare/0.4.4...0.4.5
-[0.4.4]: https://github.com/elias-jhsph/scienceai/compare/0.4.3...0.4.4
-[0.4.3]: https://github.com/elias-jhsph/scienceai/compare/0.4.2...0.4.3
-[0.4.2]: https://github.com/elias-jhsph/scienceai/compare/0.4.1...0.4.2
-[0.4.1]: https://github.com/elias-jhsph/scienceai/compare/0.3.1...0.4.1
-[0.3.1]: https://github.com/elias-jhsph/scienceai/releases/tag/0.3.1
+[0.4.7]: https://github.com/eliaswestonfarber/scienceai/compare/0.4.6...0.4.7
+[0.4.6]: https://github.com/eliaswestonfarber/scienceai/compare/0.4.5...0.4.6
+[0.4.5]: https://github.com/eliaswestonfarber/scienceai/compare/0.4.4...0.4.5
+[0.4.4]: https://github.com/eliaswestonfarber/scienceai/compare/0.4.3...0.4.4
+[0.4.3]: https://github.com/eliaswestonfarber/scienceai/compare/0.4.2...0.4.3
+[0.4.2]: https://github.com/eliaswestonfarber/scienceai/compare/0.4.1...0.4.2
+[0.4.1]: https://github.com/eliaswestonfarber/scienceai/compare/0.3.1...0.4.1
+[0.3.1]: https://github.com/eliaswestonfarber/scienceai/releases/tag/0.3.1

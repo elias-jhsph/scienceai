@@ -3,8 +3,8 @@
 [![PyPI version](https://badge.fury.io/py/scienceai-llm.svg)](https://badge.fury.io/py/scienceai-llm)
 [![PyPI downloads](https://img.shields.io/pypi/dm/scienceai-llm.svg)](https://pypi.org/project/scienceai-llm/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://github.com/elias-jhsph/scienceai/actions/workflows/test.yml/badge.svg)](https://github.com/elias-jhsph/scienceai/actions/workflows/test.yml)
-[![Last commit](https://img.shields.io/github/last-commit/elias-jhsph/scienceai)](https://github.com/elias-jhsph/scienceai/commits/main)
+[![Tests](https://github.com/eliaswestonfarber/scienceai/actions/workflows/test.yml/badge.svg)](https://github.com/eliaswestonfarber/scienceai/actions/workflows/test.yml)
+[![Last commit](https://img.shields.io/github/last-commit/eliaswestonfarber/scienceai)](https://github.com/eliaswestonfarber/scienceai/commits/main)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 

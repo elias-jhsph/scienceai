@@ -13,7 +13,7 @@ authors:
   - family-names: "Frey"
     given-names: "Katherine"
     affiliation: "Johns Hopkins Bloomberg School of Public Health"
-repository-code: "https://github.com/elias-jhsph/scienceai"
+repository-code: "https://github.com/eliaswestonfarber/scienceai"
 url: "https://eliastechlabs.com"
 license: GPL-3.0
 version: "0.4.7"
