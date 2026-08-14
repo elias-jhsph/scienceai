@@ -1,5 +1,6 @@
 # ScienceAI
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21938772.svg)](https://doi.org/10.5281/zenodo.21938772)
 [![PyPI version](https://badge.fury.io/py/scienceai-llm.svg)](https://badge.fury.io/py/scienceai-llm)
 [![PyPI downloads](https://img.shields.io/pypi/dm/scienceai-llm.svg)](https://pypi.org/project/scienceai-llm/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
