@@ -20,7 +20,7 @@ pip install scienceai-llm
 
 Three frontier models (GPT-5.2, Claude Opus 4.5, Gemini 3 Pro) **independently reproduced the primary findings** of a published meta-analysis — Scolaro et al. (2014), *smoking and fracture healing* — using ScienceAI as the harness. Given 19 source papers and no access to the original forest plots or study assignments, all three models recovered the primary finding that smoking approximately doubles fracture nonunion risk (OR 2.15–2.37 vs. published OR 2.32).
 
-This was presented at the **Johns Hopkins Bloomberg School of Public Health AI Research Day** (March 2026), where it received the **BSPH AI Research Day Staff Award** alongside Jeff Leek's keynote.
+This was presented as a podium talk and poster session at the **Johns Hopkins Bloomberg School of Public Health AI Research Day** (March 2026), where it received the **BSPH AI Research Day Staff Award** alongside Jeff Leek's keynote.
 
 📄 **[Project Poster & Abstract (Google Drive)](https://drive.google.com/drive/folders/1uI22sFDT_PtT_t9aUCakoI3IwJ_ZHAcW?usp=sharing)**
 
